@@ -9,18 +9,22 @@ from .object_cache import ObjectCache2, supports_live_transform
 class StringCache:
     def __init__(self):
         self.props = None
+        self._props_str = None
 
     def diff(self, new_props):
-        props_str = str(self.props)
+        # Compare against the cached string of the previous props
+        # (str() on a pyluxcore.Properties object is expensive, don't do it twice)
         new_props_str = str(new_props)
 
         if self.props is None:
             # Not initialized yet
             self.props = new_props
+            self._props_str = new_props_str
             return True
 
-        has_changes = props_str != new_props_str
+        has_changes = self._props_str != new_props_str
         self.props = new_props
+        self._props_str = new_props_str
         return has_changes
 
 
@@ -55,7 +59,6 @@ class MaterialCache:
             for dg_update in depsgraph.updates:
                 if isinstance(dg_update.id, bpy.types.Material):
                     self.changed_materials.add(dg_update.id)
-                    print("mat update:", dg_update.id.name)
         return self.changed_materials
 
     def update(self, exporter, depsgraph, is_viewport_render, props):

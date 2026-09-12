@@ -60,6 +60,10 @@ def force_session_restart(engine):
     """
     if engine.session is not None:
         engine.session.Stop()
+        # Explicitly drop the last reference so the stopped session (and the
+        # copy of the scene it holds) is freed immediately instead of
+        # accumulating until the next garbage collection run
+        del engine.session
         engine.session = None
 
 
@@ -134,12 +138,29 @@ def view_update(engine, context, depsgraph, changes=None):
 
     s = time()
     changes = engine.exporter.get_changes(depsgraph, context, changes)
-    delta_t = (time() - s) * 1000
-    print(
-        f"[BLC] view_update(): checking for other changes took {delta_t:.1f} ms"
-    )
 
     if changes:
+        if changes == export.Change.CONFIG:
+            # Config-only change (e.g. viewport resize, engine settings):
+            # rebuild just the RenderConfig on the existing LuxCore scene
+            # instead of re-exporting the whole scene
+            try:
+                engine.session = engine.exporter._update_config(
+                    engine.session, engine.exporter.config_cache.props
+                )
+                engine.viewport_start_time = time()
+
+                if engine.framebuffer:
+                    engine.framebuffer.reset_denoiser()
+            except Exception as error:
+                # Fall back to the safe full-restart path if the fast path
+                # fails (e.g. unsupported config change in LuxCore)
+                LuxCoreErrorLog.add_error(error)
+                import traceback
+
+                traceback.print_exc()
+                force_session_restart(engine)
+            return
         if changes & export.Change.REQUIRES_VIEW_UPDATE:
             # Only restart the session if the view transform didn't change by
             # itself
@@ -155,11 +176,6 @@ def view_update(engine, context, depsgraph, changes=None):
 
         if engine.framebuffer:
             engine.framebuffer.reset_denoiser()
-        delta_t = (time() - s) * 1000
-        print(f"[BLC] view_update(): applying changes took {delta_t:.1f} ms")
-
-    delta_t = (time() - start) * 1000
-    print(f"[BLC] view_update() took {delta_t:.1f} ms")
 
 
 def view_draw(engine, context, depsgraph):
