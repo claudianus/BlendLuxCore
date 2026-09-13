@@ -99,6 +99,9 @@ class LUXCORE_RENDER_PT_sampling_tiled_multipass(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
+        simple = context.scene.luxcore.config.simple
+        if simple.enabled and not simple.show_advanced:
+            return False
         config = context.scene.luxcore.config
         return config.using_tiled_path()
 
@@ -129,6 +132,9 @@ class LUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
     
     @classmethod
     def poll(cls, context):
+        simple = context.scene.luxcore.config.simple
+        if simple.enabled and not simple.show_advanced:
+            return False
         config = context.scene.luxcore.config
         return config.get_sampler() in {"SOBOL", "RANDOM"} and not config.using_tiled_path()
 

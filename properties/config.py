@@ -177,6 +177,84 @@ FIXED_DESC = (
 )
 
 
+class LuxCoreConfigSimple(PropertyGroup):
+    """Corona-style simplified settings.
+
+    A single quality slider that maps to a curated set of engine
+    parameters, plus a denoiser switch. When enabled, the advanced
+    render panels are hidden (see ui/render panels' poll()).
+    """
+    enabled: BoolProperty(
+        name="Quick Setup",
+        default=False,
+        description="Show a simplified interface with a single quality slider. "
+                    "Hide the advanced render settings panels",
+    )
+    quality: FloatProperty(
+        name="Quality",
+        default=0.6,
+        min=0.0, max=1.0,
+        soft_min=0.0, soft_max=1.0,
+        subtype="FACTOR",
+        description="Draft (fast, noisy) to Production (slow, clean). "
+                    "Adjusts path depths, clamping and sample counts at once",
+    )
+    denoise: BoolProperty(
+        name="Denoise",
+        default=True,
+        description="Automatically denoise the result when rendering finishes",
+    )
+    show_advanced: BoolProperty(
+        name="Show Advanced Settings",
+        default=False,
+        description="Temporarily show the advanced render settings panels",
+    )
+
+    def apply(self, config):
+        """Map the quality value onto the underlying LuxCore config.
+
+        Called by export/config.convert() when Quick Setup is enabled,
+        before the regular conversion.
+        """
+        q = self.quality
+
+        # Path depths: shallow and fast at draft, deep for production
+        config.path.depth_total = 4 if q < 0.4 else (8 if q < 0.7 else 12)
+        config.path.depth_diffuse = 2 if q < 0.4 else (4 if q < 0.7 else 6)
+        config.path.depth_glossy = 2 if q < 0.4 else (4 if q < 0.7 else 5)
+        config.path.depth_specular = 3 if q < 0.4 else (6 if q < 0.7 else 8)
+
+        # Clamping: aggressive at draft (kills fireflies), off at high quality
+        if q < 0.3:
+            config.path.use_clamping = True
+            config.path.clamping = 1.0
+        elif q < 0.7:
+            config.path.use_clamping = True
+            config.path.clamping = 5.0
+        else:
+            config.path.use_clamping = False
+
+        # Adaptive sampling strength (sobol): more adaptivity at high quality
+        config.sobol_adaptive_strength = 0.5 if q < 0.4 else 0.9
+
+    def apply_halt(self, scene):
+        """Map quality onto halt conditions (samples per pixel)."""
+        halt = scene.luxcore.halt
+        q = self.quality
+        if q < 0.2:
+            samples = 8
+        elif q < 0.4:
+            samples = 32
+        elif q < 0.6:
+            samples = 128
+        elif q < 0.8:
+            samples = 384
+        else:
+            samples = 1024
+        halt.enable = True
+        halt.samples = samples
+
+
 class LuxCoreConfigPath(PropertyGroup):
     """
     path.*
@@ -436,6 +514,11 @@ class LuxCoreConfig(PropertyGroup):
     # SOBOL properties
     sobol_adaptive_strength: FloatProperty(name="Adaptive Strength", default=0.9, min=0, max=0.95,
                                             description=SOBOL_ADAPTIVE_STRENGTH_DESC)
+
+    # Quick Setup (Corona-style simplified interface)
+    simple: PointerProperty(type=LuxCoreConfigSimple)
+    # Adaptive strength mapping for Quick Setup (draft = less adaptive)
+    simple_adaptive_strength: FloatProperty(name="Adaptive Strength (Simple)", default=0.9, min=0, max=0.95)
 
     # Noise estimation (used by adaptive samplers like SOBOL and RANDOM)
     noise_estimation: PointerProperty(type=LuxCoreConfigNoiseEstimation)

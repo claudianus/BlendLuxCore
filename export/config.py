@@ -28,6 +28,13 @@ def convert(exporter, scene, context=None, engine=None):
 
         # See properties/config.py
         config = scene.luxcore.config
+
+        # Quick Setup: map the single quality slider onto the underlying
+        # settings before the regular conversion picks them up
+        if config.simple.enabled:
+            config.simple.apply(config)
+            config.simple.apply_halt(scene)
+
         width, height = utils.calc_filmsize(scene, context)
         is_viewport_render = context is not None
         in_material_shading_mode = utils.in_material_shading_mode(context)

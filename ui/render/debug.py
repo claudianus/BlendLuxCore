@@ -10,7 +10,11 @@ class LUXCORE_RENDER_PT_debug_settings(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE" and context.scene.luxcore.debug.show
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced and context.scene.luxcore.debug.show
 
     def draw_header(self, context):
         self.layout.label(text="", icon="CONSOLE")
