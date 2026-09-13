@@ -233,7 +233,9 @@ def view_draw(engine, context, depsgraph):
     if not engine.framebuffer or engine.framebuffer.needs_replacement(
         context, scene
     ):
-        engine.framebuffer = FrameBuffer(engine, context, scene)
+        engine.framebuffer = FrameBuffer._transition_from(
+            engine.framebuffer, engine, context, scene
+        )
 
     framebuffer = engine.framebuffer
 
@@ -241,7 +243,28 @@ def view_draw(engine, context, depsgraph):
     # camera) do not trigger a view_update() call, but only a view_draw() call.
     changes = engine.exporter.get_viewport_changes(depsgraph, context)
 
-    if changes & export.Change.REQUIRES_VIEW_UPDATE:
+    if changes == export.Change.CONFIG:
+        # Config-only change detected during draw (e.g. viewport resize):
+        # rebuild the RenderConfig on the existing scene right away. The
+        # framebuffer transition above keeps the last image on screen, so
+        # the user sees the resized old frame instead of a black flash, and
+        # the new session replaces it as soon as it has its first frame.
+        try:
+            engine.session = engine.exporter._update_config(
+                engine.session, engine.exporter.config_cache.props
+            )
+            engine.viewport_start_time = time()
+            framebuffer.reset_denoiser()
+        except Exception as error:
+            LuxCoreErrorLog.add_error(error)
+            import traceback
+
+            traceback.print_exc()
+            force_session_restart(engine)
+        engine.tag_redraw()
+        framebuffer.draw()
+        return
+    elif changes & export.Change.REQUIRES_VIEW_UPDATE:
         engine.tag_redraw()
         # view_update(engine, context, depsgraph, changes)  # Disabled, see comment on force_session_restart()
         force_session_restart(engine)
@@ -259,16 +282,19 @@ def view_draw(engine, context, depsgraph):
 
     if utils.in_material_shading_mode(context):
         if not engine.session.IsInPause():
-            engine.session.WaitNewFrame()
-            engine.session.UpdateStats()
-            framebuffer.update(engine.session)
+            # Non-blocking: draw whatever the film holds instead of waiting
+            # for a full frame (avoids UI freezes on session restarts)
+            try:
+                engine.session.UpdateStats()
+                framebuffer.update(engine.session)
+            except RuntimeError:
+                pass
             engine.update_stats("", "")
 
             stats = engine.session.GetStats()
             samples = stats.Get("stats.renderengine.pass").GetInt()
 
             if samples >= 5:
-                print("[Engine/Viewport] Pausing session")
                 engine.session.Pause()
             else:
                 engine.tag_redraw()
@@ -303,13 +329,20 @@ def view_draw(engine, context, depsgraph):
                 status_message = "(Paused)"
 
     else:
-        # Not in pause yet, keep drawing
-        engine.session.WaitNewFrame()
+        # Not in pause yet, keep drawing.
+        # WaitNewFrame() blocks the UI thread until the render session has
+        # produced a full frame - after a config change or session restart
+        # this can take a noticeable moment during which the viewport would
+        # freeze. Instead of blocking, we render what we already have and let
+        # the next view_draw() pick up the new frame (it is called again
+        # because of tag_redraw() below).
         try:
             engine.session.UpdateStats()
-        except RuntimeError as error:
-            print("[Engine/Viewport] Error during UpdateStats():", error)
-        framebuffer.update(engine.session)
+            framebuffer.update(engine.session)
+        except RuntimeError:
+            # Session not started yet / no film available: keep showing the
+            # last framebuffer contents instead of flashing black
+            pass
         engine.tag_redraw()
 
     framebuffer.draw()
