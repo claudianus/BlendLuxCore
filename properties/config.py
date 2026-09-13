@@ -1,3 +1,4 @@
+import bpy
 from bpy.types import PropertyGroup
 from bpy.props import (
     EnumProperty, BoolProperty, IntProperty, FloatProperty,
@@ -236,6 +237,51 @@ class LuxCoreConfigSimple(PropertyGroup):
 
         # Adaptive sampling strength (sobol): more adaptivity at high quality
         config.sobol_adaptive_strength = 0.5 if q < 0.4 else 0.9
+
+    # Material node types that transmit light (=> caustics candidates)
+    TRANSMISSIVE_NODE_TYPES = {
+        "LuxCoreNodeMatGlass",   # glass / roughglass / archglass
+        "LuxCoreNodeMatMix",     # can contain glass via mix
+    }
+
+    def apply_scene_scan(self, scene):
+        """Auto-enable caustics support when the scene needs it.
+
+        Corona-style behavior: the user should not have to hunt for the
+        caustics switches. If any material in the scene transmits light
+        (glass etc.), turn on the PhotonGI caustic cache; at higher
+        quality also enable light tracing (hybrid back/forward) which
+        resolves sharp caustics.
+        """
+        config = scene.luxcore.config
+        q = self.quality
+
+        has_transmission = False
+        for mat in bpy.data.materials:
+            lux_mat = getattr(mat, "luxcore", None)
+            if lux_mat is None:
+                continue
+            node_tree = getattr(lux_mat, "node_tree", None)
+            if node_tree is None:
+                continue
+            for node in node_tree.nodes:
+                if node.bl_idname in self.TRANSMISSIVE_NODE_TYPES:
+                    # For mix nodes only count them as glass if they look
+                    # like glass (cheap heuristic: mix name contains glass)
+                    if node.bl_idname == "LuxCoreNodeMatMix" and "glass" not in node.name.lower():
+                        continue
+                    has_transmission = True
+                    break
+            if has_transmission:
+                break
+
+        if has_transmission:
+            config.photongi.enabled = True
+            config.photongi.caustic_enabled = True
+            # Sharp caustics via light tracing at mid quality and above
+            if q >= 0.5 and config.device == "CPU":
+                config.path.hybridbackforward_enable = True
+                config.path.hybridbackforward_lightpartition = 20
 
     def apply_halt(self, scene):
         """Map quality onto halt conditions (samples per pixel)."""

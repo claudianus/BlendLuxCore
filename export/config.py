@@ -34,6 +34,9 @@ def convert(exporter, scene, context=None, engine=None):
         if config.simple.enabled:
             config.simple.apply(config)
             config.simple.apply_halt(scene)
+            # Caustics auto-detection (needs the scene, not just config)
+            if not is_viewport_render:
+                config.simple.apply_scene_scan(scene)
 
         width, height = utils.calc_filmsize(scene, context)
         is_viewport_render = context is not None
