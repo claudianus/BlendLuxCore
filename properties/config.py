@@ -278,6 +278,10 @@ class LuxCoreConfigSimple(PropertyGroup):
         if has_transmission:
             config.photongi.enabled = True
             config.photongi.caustic_enabled = True
+            # Progressive caustics: refine the cache every few SPP instead of
+            # a single upfront pass, so caustics sharpen during the render
+            config.photongi.caustic_periodic_update = True
+            config.photongi.caustic_updatespp = 16 if q < 0.7 else 8
             # Sharp caustics via light tracing at mid quality and above
             if q >= 0.5 and config.device == "CPU":
                 config.path.hybridbackforward_enable = True
