@@ -34,6 +34,11 @@ def luxcore_render_draw(panel, context):
                     text="No CUDA support in this BlendLuxCore version",
                     icon=icons.ERROR,
                 )
+            if gpu_backend == "METAL" and not utils.luxutils.is_metal_build():
+                col_device.label(
+                    text="No Metal support in this BlendLuxCore version",
+                    icon=icons.ERROR,
+                )
     else:
         col_device.enabled = False
         col_device.prop(config, "bidir_device", text="Device")
