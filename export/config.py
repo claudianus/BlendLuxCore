@@ -28,6 +28,7 @@ def convert(exporter, scene, context=None, engine=None):
 
         # See properties/config.py
         config = scene.luxcore.config
+        is_viewport_render = context is not None
 
         # Quick Setup: map the single quality slider onto the underlying
         # settings before the regular conversion picks them up
@@ -39,7 +40,6 @@ def convert(exporter, scene, context=None, engine=None):
                 config.simple.apply_scene_scan(scene)
 
         width, height = utils.calc_filmsize(scene, context)
-        is_viewport_render = context is not None
         in_material_shading_mode = utils.in_material_shading_mode(context)
         denoiser_enabled = (
             not is_viewport_render and scene.luxcore.denoiser.enabled
