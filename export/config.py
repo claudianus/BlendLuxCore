@@ -118,6 +118,9 @@ def convert(exporter, scene, context=None, engine=None):
                     config.restir_candidates
                 )
 
+        if config.mnee_enable:
+            definitions["path.mnee.enable"] = True
+
         if config.photongi.enabled and not is_viewport_render:
             _convert_photongi_settings(context, scene, definitions, config)
 

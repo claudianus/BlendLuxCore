@@ -229,3 +229,5 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
         if config.light_strategy == "RESTIR_DI":
             col.prop(config, "restir_temporal_enable")
             col.prop(config, "restir_candidates")
+
+        col.prop(config, "mnee_enable")

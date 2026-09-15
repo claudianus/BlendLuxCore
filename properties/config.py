@@ -686,6 +686,10 @@ class LuxCoreConfig(PropertyGroup):
     restir_candidates: IntProperty(name="Candidate Count", default=0, min=0, max=32,
                                   description="Number of candidate lights per reservoir (0 = adaptive: scales with the number of lights)")
 
+    # MNEE (specular chain direct light sampling)
+    mnee_enable: BoolProperty(name="MNEE Specular Caustics", default=False,
+                                  description="Direct light through delta specular surfaces (mirrors, glass) via manifold next event estimation. Fix dark caustics from point/spot lights behind mirrors or glass")
+
     # Special properties of the direct light sampling cache
     dls_cache: PointerProperty(type=LuxCoreConfigDLSCache)
     # Special properties of the photon GI cache
