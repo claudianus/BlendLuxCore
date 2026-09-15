@@ -355,6 +355,11 @@ def _convert_final_engine(scene, definitions, config):
             adaptive_strength
         )
 
+        if sampler == "SOBOL":
+            definitions["sampler.sobol.bluenoise.enable"] = (
+                config.sobol_bluenoise_enable
+            )
+
         # Sampler pattern
         if config.using_out_of_core():
             bucketsize = 1

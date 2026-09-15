@@ -564,6 +564,10 @@ class LuxCoreConfig(PropertyGroup):
     # SOBOL properties
     sobol_adaptive_strength: FloatProperty(name="Adaptive Strength", default=0.9, min=0, max=0.95,
                                             description=SOBOL_ADAPTIVE_STRENGTH_DESC)
+    sobol_bluenoise_enable: BoolProperty(name="Blue-Noise Dithering", default=False,
+                                          description="Blue-noise dithered Sobol sampling (Heitz 2019): "
+                                          "each pixel gets a hashed per-dimension scramble and offset, "
+                                          "decorrelating neighboring pixels to remove low-spp sampling artifacts")
 
     # Quick Setup (Corona-style simplified interface)
     simple: PointerProperty(type=LuxCoreConfigSimple)
