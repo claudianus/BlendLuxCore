@@ -32,6 +32,28 @@ def convert(exporter, scene, context=None, engine=None):
         config = scene.luxcore.config
         is_viewport_render = context is not None
 
+        # Compositor trap: rendering with compositing enabled but no
+        # Composite node in the tree yields a black output file even though
+        # the film itself is fine (measured on a production scene: lit film
+        # 0.27, black PNG). Warn loudly instead of silently delivering black.
+        try:
+            if (scene.render.use_compositing and scene.use_nodes and
+                    not is_viewport_render):
+                tree = getattr(scene, "compositing_node_group", None)
+                has_output = False
+                if tree is not None:
+                    for _n in tree.nodes:
+                        if _n.bl_idname == "CompositorNodeComposite":
+                            has_output = True
+                            break
+                if not has_output:
+                    LuxCoreErrorLog.add_warning(
+                        "Compositing is enabled but the node tree has no "
+                        "Composite output node: the saved image will be black. "
+                        "Disable compositing or add a Composite node")
+        except Exception:
+            pass
+
         # Quick Setup: map the single quality slider onto the underlying
         # settings before the regular conversion picks them up.
         # Snapshot/restore: the mapping writes into the live Blender
