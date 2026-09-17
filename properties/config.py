@@ -217,32 +217,90 @@ class LuxCoreConfigSimple(PropertyGroup):
         description="Temporarily show the advanced render settings panels",
     )
 
+    def quality_map(self):
+        """Pure mapping quality -> effective values (no writes).
+
+        Used by apply() and by the UI summary labels, so the panel always
+        shows exactly what a render will use.
+        """
+        q = self.quality
+        if q < 0.2:
+            samples = 8
+        elif q < 0.4:
+            samples = 32
+        elif q < 0.6:
+            samples = 128
+        elif q < 0.8:
+            samples = 384
+        else:
+            samples = 1024
+        return {
+            "depth_total": 4 if q < 0.4 else (8 if q < 0.7 else 12),
+            "depth_diffuse": 2 if q < 0.4 else (4 if q < 0.7 else 6),
+            "depth_glossy": 2 if q < 0.4 else (4 if q < 0.7 else 5),
+            "depth_specular": 3 if q < 0.4 else (6 if q < 0.7 else 8),
+            "use_clamping": q < 0.7,
+            "clamping": 1.0 if q < 0.3 else 5.0,
+            "adaptive": 0.5 if q < 0.4 else 0.9,
+            "halt_samples": samples,
+            # Path guiding pays off once the field can warm up (mid quality
+            # and above); below that it only dilutes against BSDF sampling.
+            "guiding": q >= 0.5,
+        }
+
+    def snapshot(self, scene):
+        """Remember every Blender property Quick Setup is about to overwrite,
+        so export can restore the user's values afterwards (non-destructive).
+        Returns an opaque token for restore().
+        """
+        config = scene.luxcore.config
+        halt = scene.luxcore.halt
+        targets = [
+            (config.path, "depth_total"), (config.path, "depth_diffuse"),
+            (config.path, "depth_glossy"), (config.path, "depth_specular"),
+            (config.path, "use_clamping"), (config.path, "clamping"),
+            (config, "sobol_adaptive_strength"), (config, "guiding_enable"),
+            (halt, "enable"), (halt, "samples"),
+            (config.photongi, "enabled"), (config.photongi, "caustic_enabled"),
+            (config.photongi, "caustic_periodic_update"),
+            (config.photongi, "caustic_updatespp"),
+            (config.path, "hybridbackforward_enable"),
+            (config.path, "hybridbackforward_lightpartition"),
+        ]
+        return [(obj, name, getattr(obj, name)) for obj, name in targets]
+
+    @staticmethod
+    def restore(token):
+        for obj, name, value in token:
+            try:
+                setattr(obj, name, value)
+            except Exception:
+                pass
+
     def apply(self, config):
         """Map the quality value onto the underlying LuxCore config.
 
         Called by export/config.convert() when Quick Setup is enabled,
-        before the regular conversion.
+        before the regular conversion. The caller snapshots first and
+        restores afterwards (see snapshot()/restore()), so the user's
+        own values are never lost.
         """
-        q = self.quality
+        m = self.quality_map()
 
         # Path depths: shallow and fast at draft, deep for production
-        config.path.depth_total = 4 if q < 0.4 else (8 if q < 0.7 else 12)
-        config.path.depth_diffuse = 2 if q < 0.4 else (4 if q < 0.7 else 6)
-        config.path.depth_glossy = 2 if q < 0.4 else (4 if q < 0.7 else 5)
-        config.path.depth_specular = 3 if q < 0.4 else (6 if q < 0.7 else 8)
+        config.path.depth_total = m["depth_total"]
+        config.path.depth_diffuse = m["depth_diffuse"]
+        config.path.depth_glossy = m["depth_glossy"]
+        config.path.depth_specular = m["depth_specular"]
 
         # Clamping: aggressive at draft (kills fireflies), off at high quality
-        if q < 0.3:
-            config.path.use_clamping = True
-            config.path.clamping = 1.0
-        elif q < 0.7:
-            config.path.use_clamping = True
-            config.path.clamping = 5.0
-        else:
-            config.path.use_clamping = False
+        config.path.use_clamping = m["use_clamping"]
+        config.path.clamping = m["clamping"]
 
         # Adaptive sampling strength (sobol): more adaptivity at high quality
-        config.sobol_adaptive_strength = 0.5 if q < 0.4 else 0.9
+        config.sobol_adaptive_strength = m["adaptive"]
+        # Path guiding from mid quality up (field needs passes to warm up)
+        config.guiding_enable = m["guiding"]
 
     # Material node types that transmit light (=> caustics candidates)
     TRANSMISSIVE_NODE_TYPES = {
@@ -272,10 +330,20 @@ class LuxCoreConfigSimple(PropertyGroup):
                 continue
             for node in node_tree.nodes:
                 if node.bl_idname in self.TRANSMISSIVE_NODE_TYPES:
-                    # For mix nodes only count them as glass if they look
-                    # like glass (cheap heuristic: mix name contains glass)
-                    if node.bl_idname == "LuxCoreNodeMatMix" and "glass" not in node.name.lower():
-                        continue
+                    if node.bl_idname == "LuxCoreNodeMatMix":
+                        # Look through the mix inputs instead of trusting
+                        # the node name: glass behind either input counts.
+                        try:
+                            linked = {
+                                link.from_node.bl_idname
+                                for inp in node.inputs
+                                for link in inp.links
+                            }
+                        except Exception:
+                            linked = set()
+                        if "LuxCoreNodeMatGlass" not in linked and \
+                                "glass" not in node.name.lower():
+                            continue
                     has_transmission = True
                     break
             if has_transmission:
@@ -295,20 +363,8 @@ class LuxCoreConfigSimple(PropertyGroup):
 
     def apply_halt(self, scene):
         """Map quality onto halt conditions (samples per pixel)."""
-        halt = scene.luxcore.halt
-        q = self.quality
-        if q < 0.2:
-            samples = 8
-        elif q < 0.4:
-            samples = 32
-        elif q < 0.6:
-            samples = 128
-        elif q < 0.8:
-            samples = 384
-        else:
-            samples = 1024
-        halt.enable = True
-        halt.samples = samples
+        scene.luxcore.halt.enable = True
+        scene.luxcore.halt.samples = self.quality_map()["halt_samples"]
 
 
 class LuxCoreConfigPath(PropertyGroup):
@@ -553,14 +609,18 @@ class LuxCoreConfig(PropertyGroup):
     # Only available when tiled rendering is off (because it uses a special tiled sampler)
     samplers = [
         ("SOBOL", "Sobol", SOBOL_DESC, 0),
-        ("METROPOLIS", "Metropolis", METROPOLIS_DESC, 1),
-        ("RANDOM", "Random", RANDOM_DESC, 2),
+        ("PMJ02", "PMJ02", "Progressive multi-jittered sampler (Christensen et al. 2018): "
+                           "well-stratified on every elementary interval, matches or beats "
+                           "Sobol on most scenes", 1),
+        ("METROPOLIS", "Metropolis", METROPOLIS_DESC, 2),
+        ("RANDOM", "Random", RANDOM_DESC, 3),
     ]
     sampler: EnumProperty(name="Sampler", items=samplers, default="SOBOL")
-    
+
     samplers_gpu = [
         ("SOBOL", "Sobol", "Best suited sampler for the GPU. " + SOBOL_DESC, 0),
-        ("RANDOM", "Random", RANDOM_DESC, 1),
+        ("PMJ02", "PMJ02", "Progressive multi-jittered sampler, GPU port of the CPU sampler", 1),
+        ("RANDOM", "Random", RANDOM_DESC, 2),
     ]
     sampler_gpu: EnumProperty(name="Sampler", items=samplers_gpu, default="SOBOL")
     
@@ -627,8 +687,10 @@ class LuxCoreConfig(PropertyGroup):
     # Only available when engine is PATH (not BIDIR)
     devices = [
         ("CPU", "CPU", "CPU only", 0),
-        # Still called OCL for historical reasons, currently it means either OpenCL or CUDA, depending on selection in addon preferences
-        ("OCL", "GPU", "Use GPU(s) and optionally the CPU. You can choose between OpenCL and CUDA in the addon preferences. "
+        # Identifier stays OCL for blend-file compatibility; it means any GPU
+        # backend selected in the addon preferences (OpenCL / CUDA / Metal).
+        ("OCL", "GPU", "Use GPU(s) and optionally the CPU. The GPU backend (OpenCL/CUDA/Metal) "
+                       "is chosen in the addon preferences. "
                        "You can enable/disable each device in the Devices panel below", 1),
     ]
     device: EnumProperty(name="Device", items=devices, default="CPU")
@@ -685,10 +747,23 @@ class LuxCoreConfig(PropertyGroup):
                                   description="Reuse the reservoir of each pixel from the previous pass (faster convergence on static scenes)")
     restir_candidates: IntProperty(name="Candidate Count", default=0, min=0, max=32,
                                   description="Number of candidate lights per reservoir (0 = adaptive: scales with the number of lights)")
+    restir_spatial_enable: BoolProperty(name="Spatial Reuse", default=False,
+                                  description="EXPERIMENTAL: share reservoirs with neighboring pixels (GRIS merge). "
+                                              "Unbiased, but currently variance-neutral without shift mapping — "
+                                              "expect similar noise, not less")
 
     # MNEE (specular chain direct light sampling)
     mnee_enable: BoolProperty(name="MNEE Specular Caustics", default=False,
                                   description="Direct light through delta specular surfaces (mirrors, glass) via manifold next event estimation. Fix dark caustics from point/spot lights behind mirrors or glass")
+    mnee_maxspecular: IntProperty(name="Max Specular Vertices", default=1, min=1, max=4,
+                                  description="Chain length for multi-specular transport (closed glass slabs need 2+). "
+                                              "Higher values resolve thicker refractive stacks at extra cost")
+
+    # Path guiding (P1-3): learned incident-radiance field steers glossy bounces
+    guiding_enable: BoolProperty(name="Path Guiding", default=False,
+                                 description="Learn where the light comes from while rendering and steer "
+                                             "glossy bounces toward it (one-sample MIS vs BSDF, unbiased). "
+                                             "Helps indirect and glossy transport; needs some passes to warm up")
 
     # Special properties of the direct light sampling cache
     dls_cache: PointerProperty(type=LuxCoreConfigDLSCache)
