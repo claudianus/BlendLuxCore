@@ -142,7 +142,8 @@ def convert(exporter, scene, context=None, engine=None):
             definitions["path.guiding.enable"] = True
 
         if config.photongi.enabled and not is_viewport_render:
-            _convert_photongi_settings(context, scene, definitions, config)
+            _convert_photongi_settings(context is not None, scene,
+                                       definitions, config)
 
         if (
             config.path.use_clamping
@@ -579,7 +580,7 @@ def _convert_dlscache_settings(scene, definitions, config, is_viewport_render):
     )
 
 
-def _convert_photongi_settings(context, scene, definitions, config):
+def _convert_photongi_settings(is_viewport_render, scene, definitions, config):
     photongi = config.photongi
 
     if photongi.indirect_lookup_radius_auto:
@@ -602,7 +603,8 @@ def _convert_photongi_settings(context, scene, definitions, config):
     )
 
     file_path = utils.get_persistent_cache_file_path(
-        photongi.file_path, photongi.save_or_overwrite, context, scene
+        photongi.file_path, photongi.save_or_overwrite, is_viewport_render,
+        scene
     )
 
     definitions.update(
