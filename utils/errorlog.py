@@ -56,4 +56,25 @@ class LuxCoreErrorLog:
         print(prefix, message)
         new = LuxCoreError(message, obj_name)
         collection.append(new)
+        if collection is cls.errors:
+            cls._persist(message, obj_name)
         update_ui()
+
+    @classmethod
+    def _persist(cls, message, obj_name):
+        # Fatal-error file log (13차 잔여): Start() failures and other
+        # aborts survive here even when the console is invisible (GUI) or
+        # the session dies. Warnings stay in-memory only (too noisy).
+        # Logging must never break the render, hence the broad guard.
+        try:
+            import datetime
+            import os
+            import tempfile
+            path = os.path.join(tempfile.gettempdir(),
+                                "blendluxcore_errors.log")
+            stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            obj = (" [%s]" % obj_name) if obj_name else ""
+            with open(path, "a") as f:
+                f.write("%s ERROR%s %s\n" % (stamp, obj, message))
+        except Exception:
+            pass
