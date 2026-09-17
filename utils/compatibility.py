@@ -54,6 +54,8 @@ def update_mat_output_volume_change(node_tree):
         if "Interior Volume" in old_output.inputs:
             continue
 
+        if not old_output.inputs[0].is_linked:
+            continue
         from_node = old_output.inputs[0].links[0].from_node
 
         new_out = node_tree.nodes.new("LuxCoreNodeMatOutput")

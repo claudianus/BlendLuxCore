@@ -128,6 +128,11 @@ class Exporter(object):
         # previous versions of the addon since opening the .blend file.
         utils_compatibility.run()
 
+        # Fresh lightgroup set per session: the exporter (and its cache)
+        # outlives single renders in the viewport, and stale groups would
+        # otherwise export extra pipelines forever.
+        self.lightgroup_cache = set()
+
         # Scene
         image_resize_policy_props = (
             scene.luxcore.config.image_resize_policy.convert()

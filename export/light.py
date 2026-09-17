@@ -765,7 +765,7 @@ def _convert_area_light(obj, scene, is_viewport_render, exporter, depsgraph, lux
         if light.luxcore.efficacy == 0 or light.luxcore.power == 0:
             mat_definitions["emission.gain"] = [0, 0, 0]
         else:
-            mat_definitions["emission.gain"] = [1, 1, 1]
+            mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.luxcore.exposure)
 
     if light.luxcore.light_unit == "lumen":
         mat_definitions["emission.power"] = light.luxcore.lumen / ( 2 * math.pi * (1 - math.cos(light.luxcore.spread_angle/2) ))
@@ -774,7 +774,7 @@ def _convert_area_light(obj, scene, is_viewport_render, exporter, depsgraph, lux
         if light.luxcore.lumen == 0:
             mat_definitions["emission.gain"] = [0, 0, 0]
         else:
-            mat_definitions["emission.gain"] = [1, 1, 1]
+            mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.luxcore.exposure)
     
     if light.luxcore.light_unit == "candela":
         if light.luxcore.per_square_meter:
@@ -790,7 +790,7 @@ def _convert_area_light(obj, scene, is_viewport_render, exporter, depsgraph, lux
             if light.luxcore.candela == 0:
                 mat_definitions["emission.gain"] = [0, 0, 0]
             else:
-                mat_definitions["emission.gain"] = [1, 1, 1]
+                mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.luxcore.exposure)
 
     node_tree = light.luxcore.node_tree
     if node_tree:

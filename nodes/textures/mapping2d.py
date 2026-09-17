@@ -105,7 +105,9 @@ class LuxCoreNodeTexMapping2D(LuxCoreNodeTexture, bpy.types.Node):
         else:
             input_mapping_node = None
 
-        if not input_mapping_node and context.object:
+        if (not input_mapping_node and context.object
+                and context.object.type == "MESH" and context.object.data is not None
+                and hasattr(context.object.data, "uv_layers")):
             layout.prop_search(self, "uvmap", context.object.data, "uv_layers", text="UV Map", icon='GROUP_UVS')
 
         layout.prop(self, "mapping_type")

@@ -53,6 +53,13 @@ def convert(
         if mesh is None:
             return None
 
+        try:
+            # loop_triangles can be empty/stale on meshes coming from
+            # modifiers or fresh to_mesh() results.
+            mesh.calc_loop_triangles()
+        except Exception:
+            pass
+
         # Blender API may not be always consistent with naming, for the mesh object.
         # For the sake of clarity, we list here our naming conventions.
         # They may specially differ from attribute domains...
@@ -68,9 +75,13 @@ def convert(
         vertex_points = get_ndarray(mesh.vertices, "co", 3, np.float32)
         loop_points = vertex_points[loop_vertices]
 
-        # Normals
-        vertex_normals = get_ndarray(mesh.vertices, "normal", 3, np.float32)
-        loop_normals = vertex_normals[loop_vertices]
+        # Normals: per-LOOP normals (split edges and custom normals
+        # survive; the old per-vertex broadcast silently smoothed them).
+        try:
+            loop_normals = get_ndarray(mesh.loops, "normal", 3, np.float32)
+        except Exception:
+            vertex_normals = get_ndarray(mesh.vertices, "normal", 3, np.float32)
+            loop_normals = vertex_normals[loop_vertices]
 
         # Triangle loop indices
         triangle_loops = get_ndarray(

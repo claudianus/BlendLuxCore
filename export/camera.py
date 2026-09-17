@@ -229,11 +229,15 @@ def _clipping_plane(scene, definitions):
 
     if cam_settings.use_clipping_plane and cam_settings.clipping_plane:
         plane = cam_settings.clipping_plane
-        normal = plane.rotation_euler.to_matrix() @ Vector((0, 0, 1))
+        # World-space plane: rotation_euler/location ignore parents, so
+        # derive both from matrix_world (normalized: parents may scale).
+        world = plane.matrix_world
+        normal = (world.to_3x3() @ Vector((0, 0, 1))).normalized()
+        center = world.translation
 
         definitions.update({
             "clippingplane.enable": cam_settings.use_clipping_plane,
-            "clippingplane.center": list(plane.location),
+            "clippingplane.center": list(center),
             "clippingplane.normal": list(normal),
         })
     else:

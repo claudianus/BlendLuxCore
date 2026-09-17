@@ -30,7 +30,7 @@ class LuxCoreLightGroup(PropertyGroup):
             new_name = "Can't be empty"
         
         # Prevent name collisions
-        groups = bpy.context.scene.luxcore.lightgroups.get_all_groups()
+        groups = self.id_data.luxcore.lightgroups.get_all_groups()
         names = {group.name for group in groups}
         i = 0
         new_name_base = new_name

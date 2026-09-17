@@ -721,8 +721,11 @@ class ObjectCache2:
 
         if exported_mesh:
             mat_names = []
+            # Local working copy (see the ExportedObject construction below:
+            # the cached list must not be mutated per object).
+            mesh_definitions = [list(entry) for entry in exported_mesh.mesh_definitions]
             for idx, (shape_name, mat_index) in enumerate(
-                exported_mesh.mesh_definitions
+                mesh_definitions
             ):
                 shape = shape_name
                 lux_mat_name, mat_props, node_tree = export_material(
@@ -739,14 +742,16 @@ class ObjectCache2:
                         shape, node_tree, exporter, depsgraph, scene_props
                     )
 
-                exported_mesh.mesh_definitions[idx] = [shape, mat_index]
+                mesh_definitions[idx] = [shape, mat_index]
 
             obj_transform = transform.copy() if use_instancing else None
             obj_id = utils.make_object_id(dg_obj_instance)
 
+            # mesh_definitions here is the local working copy (the mesh
+            # cache keeps the pristine shapes for the next object).
             return ExportedObject(
                 obj_key,
-                exported_mesh.mesh_definitions,
+                mesh_definitions,
                 mat_names,
                 obj_transform,
                 utils.visible_to_camera(

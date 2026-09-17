@@ -135,9 +135,9 @@ class LuxCoreLightProps(bpy.types.PropertyGroup):
     # sky2, sun, infinite, constantinfinite, area
     visibility_indirect_diffuse: BoolProperty(name="Diffuse", default=True, description=VIS_INDIRECT_DIFFUSE_DESC)
     visibility_indirect_glossy: BoolProperty(name="Glossy", default=True, description=VIS_INDIRECT_GLOSSY_DESC)
-    visibility_indirect_specular: BoolProperty(name="Specular", default=True, description=VIS_INDIRECT_SPECULAR_DESC)
 
-    # sun indirect specular
+    # sun indirect specular (single definition: the update callback syncs
+    # the sun_* mirror key; a duplicate plain definition used to shadow it)
     def update_visibility_indirect_specular(self, context):
         self["sun_visibility_indirect_specular"] = self.visibility_indirect_specular
 

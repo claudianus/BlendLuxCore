@@ -81,6 +81,13 @@ class VisibilityCache:
 
     def diff(self, depsgraph, context):
         visible_objs = self._get_visible_objects(depsgraph, context)
+        if self.last_visible_objects is None:
+            # init() runs on the viewport path only; a first diff without
+            # it would subtract None. Treat as baseline, no changes.
+            self.last_visible_objects = visible_objs
+            self.objects_to_remove = set()
+            self.has_new_objects = False
+            return False
         self.objects_to_remove = self.last_visible_objects - visible_objs
         self.has_new_objects = bool(visible_objs - self.last_visible_objects)
         self.last_visible_objects = visible_objs

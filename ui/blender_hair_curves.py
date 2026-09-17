@@ -51,8 +51,11 @@ class LUXCORE_DATA_PT_curve_hair(DataButtonsPanel, Panel):
         col.prop(settings, "use_active_uv_map")
 
         if settings.use_active_uv_map:
-            if obj.parent.data.uv_layers:
-                active_uv = obj.parent.data.uv_layers[obj.data.surface_uv_map]
+            parent_data = obj.parent.data if obj.parent is not None else None
+            if (parent_data is not None
+                    and getattr(parent_data, "uv_layers", None)
+                    and getattr(obj.data, "surface_uv_map", None) in parent_data.uv_layers):
+                active_uv = parent_data.uv_layers[obj.data.surface_uv_map]
                 if active_uv:
                     row = col.row(align=True)
                     row.label(text="UV Map")

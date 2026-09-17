@@ -33,8 +33,15 @@ class ImageExporter:
 
             # Compute key
             # Note: We can't use utils.make_key(image) here because the memory
-            # address might be re-used on undo, causing a key collision
-            key = orig_filepath or f"{image.name}-{packed.tile_number}"
+            # address might be re-used on undo, causing a key collision.
+            # The packed payload size is part of the key so edited content
+            # (same path/name, different bytes) is not served stale.
+            try:
+                payload_size = len(packed.data)
+            except Exception:
+                payload_size = 0
+            key = (orig_filepath or f"{image.name}-{packed.tile_number}")
+            key += f"-{payload_size}"
 
             # Check whether packed image has already been exported
             try:
@@ -90,7 +97,15 @@ class ImageExporter:
                 f"[BLC] Warning: image '{image.name}' contains multiple "
                 "packed files but only one will be used"
             )
-        return result[0] if result else None
+        if not result:
+            # Every unpack failed: returning None here would poison the
+            # LuxCore properties with a null filepath downstream. Fail
+            # loudly instead (callers already handle OSError).
+            raise OSError(
+                f"Could not unpack image '{image.name}': "
+                "all packed files failed to save"
+            )
+        return result[0]
 
     @classmethod
     def export(cls, image, image_user, scene):

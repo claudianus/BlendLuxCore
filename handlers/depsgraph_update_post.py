@@ -5,6 +5,8 @@ from bpy.app.handlers import persistent
 def handler(scene):
     # If material name was changed, rename the node tree, too.
     for mat in bpy.data.materials:
+        if mat.library is not None:
+            continue
         node_tree = mat.luxcore.node_tree
 
         if node_tree and node_tree.name != mat.name:
