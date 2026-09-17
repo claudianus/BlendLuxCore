@@ -66,6 +66,10 @@ def _view_persp(scene, context, definitions):
     definitions["type"] = "perspective"    
     zoom = 2.25
 
+    # 16mm half-sensor: matches the real-camera convention (camera.data.angle
+    # is ~39.6deg horizontal for a 50mm AUTO lens; 16mm gives 35.5deg, close).
+    # A sensor-fit derivation (18/aspect) would give the *vertical* angle
+    # (~22.9deg wide) and mismatch final renders, so keep this.
     definitions["fieldofview"] = math.degrees(2 * math.atan(16 / context.space_data.lens))
     definitions["screenwindow"] = utils.calc_screenwindow(zoom, 0, 0, scene, context)
 
