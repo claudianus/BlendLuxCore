@@ -1416,6 +1416,15 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 f"Unsupported Particle Info output socket: {output_socket.name}",
                 obj_name=obj_name)
             return ERROR_VALUE
+    elif node.bl_idname == "ShaderNodeVolumeInfo":
+        # Reads one of the object's OpenVDB grids (density / color / flame /
+        # temperature) as a world-space densitygrid texture — the same
+        # sampling the auto-built heterogeneous volume uses.
+        from . import volume  # lazy: volume->object_cache->cycles_node_reader cycle
+        definitions = volume.volume_info_grid_defs(node, output_socket.name, obj_name)
+        if definitions is None:
+            return ERROR_VALUE
+        prefix = "scene.textures."
     elif node.bl_idname == "ShaderNodeBlackbody":
         temperature_socket = node.inputs["Temperature"]
         prefix = "scene.textures."

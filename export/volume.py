@@ -6,6 +6,7 @@ import numpy as np
 import pyluxcore
 
 from .. import utils
+from ..utils import node as utils_node
 from ..utils.errorlog import LuxCoreErrorLog
 from .caches.exported_data import ExportedObject
 
@@ -114,6 +115,134 @@ def _pick_grids(filepath):
             fire = candidate
             break
     return density, color, fire
+
+
+def volume_info_grid_defs(node, output_socket_name, obj_name):
+    """
+    ShaderNodeVolumeInfo -> densitygrid texture definitions bound to this
+    object's OpenVDB grids (reuses the VOLUME-object grid/mapping logic so the
+    result samples the same voxels as the auto-built volume).
+
+    Returns the ``scene.textures.*`` defs dict, or None when the object has no
+    usable volume grid for that output (a warning is logged).
+    """
+    obj = bpy.data.objects.get(obj_name)
+    vol_data = getattr(obj, "data", None)
+    if obj is None or obj.type != "VOLUME" or vol_data is None:
+        LuxCoreErrorLog.add_warning(
+            'Volume Info node "%s": object "%s" is not an OpenVDB volume '
+            "object" % (node.name, obj_name), obj_name=obj_name)
+        return None
+
+    filepath = _resolve_frame_filepath(vol_data, bpy.context.scene)
+    if not filepath or not os.path.isfile(filepath):
+        LuxCoreErrorLog.add_warning(
+            'Volume Info node "%s": no readable OpenVDB file on object "%s"'
+            % (node.name, obj_name), obj_name=obj_name)
+        return None
+
+    try:
+        density_grid, color_grid, fire_grid = _pick_grids(filepath)
+    except Exception as e:
+        LuxCoreErrorLog.add_warning(
+            'Volume Info node "%s": %s' % (node.name, e), obj_name=obj_name)
+        return None
+
+    # Map the requested output to a grid; the node's attribute-name field (the
+    # grid it is configured to read) wins over the auto-detected default.
+    socket_to_grid = {
+        "Density":     getattr(node, "density_attribute", "") or density_grid,
+        "Color":       getattr(node, "color_attribute", "") or color_grid,
+        "Flame":       getattr(node, "flame_attribute", "") or fire_grid,
+        "Temperature": getattr(node, "temperature_attribute", "") or fire_grid,
+    }
+    grid = socket_to_grid.get(output_socket_name)
+    if not grid:
+        LuxCoreErrorLog.add_warning(
+            'Volume Info node "%s": no OpenVDB grid for output "%s"'
+            % (node.name, output_socket_name), obj_name=obj_name)
+        return None
+
+    try:
+        _creator, bbox, bbox_world, _trans, _gridtype, _metadata = (
+            pyluxcore.GetOpenVDBGridInfo(filepath, grid)
+        )
+    except Exception as e:
+        LuxCoreErrorLog.add_warning(
+            'Volume Info node "%s": could not read grid "%s": %s'
+            % (node.name, grid, e), obj_name=obj_name)
+        return None
+
+    nx = abs(bbox[0] - bbox[3])
+    ny = abs(bbox[1] - bbox[4])
+    nz = abs(bbox[2] - bbox[5])
+
+    # Same world -> [0,1]^3 active-voxel mapping the auto-built volume uses.
+    bb_min = mathutils.Vector(bbox_world[0:3])
+    bb_max = mathutils.Vector(bbox_world[3:6])
+    extent = bb_max - bb_min
+    if extent.length < 1e-9:
+        LuxCoreErrorLog.add_warning(
+            'Volume Info node "%s": degenerate grid bounds' % node.name,
+            obj_name=obj_name)
+        return None
+    bbox_matrix = mathutils.Matrix.Translation(bb_min) @ mathutils.Matrix.Diagonal(
+        extent.to_4d()
+    )
+    world_box = obj.matrix_world @ bbox_matrix
+    mapping_transform = utils.luxutils.matrix_to_list(world_box, invert=True)
+
+    return {
+        "type": "densitygrid",
+        "wrap": "black",
+        "storage": "half",
+        "nx": nx,
+        "ny": ny,
+        "nz": nz,
+        "openvdb.file": filepath,
+        "openvdb.grid": grid,
+        "mapping.type": "globalmapping3d",
+        "mapping.transformation": mapping_transform,
+    }
+
+
+def _subtree_uses(node, bl_idname, _seen=None):
+    """True when the subtree feeding `node` contains a node of `bl_idname`."""
+    if _seen is None:
+        _seen = set()
+    if node is None or node in _seen:
+        return False
+    _seen.add(node)
+    if node.bl_idname == bl_idname:
+        return True
+    for socket in node.inputs:
+        for link in socket.links:
+            if _subtree_uses(link.from_node, bl_idname, _seen):
+                return True
+    return False
+
+
+def _material_volume_defs(obj, obj_key, props):
+    """
+    If the object's Cycles material has a Volume subtree that reads this
+    object's grids (a Volume Info node), convert it and return the volume
+    coefficient defs. Otherwise return None so the standard auto-build runs.
+    """
+    mat = obj.material_slots[0].material if len(obj.material_slots) else None
+    node_tree = getattr(mat, "node_tree", None)
+    if mat is None or node_tree is None:
+        return None
+    output = node_tree.get_output_node("CYCLES")
+    if output is None or "Volume" not in output.inputs:
+        return None
+    link = utils_node.get_link(output.inputs["Volume"])
+    if link is None or not _subtree_uses(link.from_node, "ShaderNodeVolumeInfo"):
+        return None
+
+    from . import cycles_node_reader  # lazy: object_cache->cycles_node_reader cycle
+    return cycles_node_reader._volume(
+        link.from_node, link.from_socket, props, mat,
+        obj_key + "_vol", obj.name)
 
 
 def convert_volume_obj(
@@ -225,132 +354,149 @@ def convert_volume_obj(
 
     tex_density = obj_key + "_density"
     props = scene_props
-    tex_defs = {
-        "type": "densitygrid",
-        "wrap": "black",
-        "storage": "half",
-        "nx": nx,
-        "ny": ny,
-        "nz": nz,
-        "openvdb.file": filepath,
-        "openvdb.grid": density_grid,
-        "mapping.type": "globalmapping3d",
-        "mapping.transformation": mapping_transform,
-    }
-    props.Set(
-        utils.luxutils.create_props("scene.textures.%s." % tex_density, tex_defs)
-    )
 
-    # Density clipping mask (Cycles semantics: voxels < clipping render empty)
-    tex_eff_density = tex_density
-    if clipping > 0.0:
-        tex_mask = obj_key + "_clipmask"
-        props.Set(
-            utils.luxutils.create_props(
-                "scene.textures.%s." % tex_mask,
-                {"type": "greaterthan", "texture1": tex_density, "texture2": clipping},
-            )
-        )
-        tex_eff_density = obj_key + "_clippeddensity"
-        props.Set(
-            utils.luxutils.create_props(
-                "scene.textures.%s." % tex_eff_density,
-                {"type": "scale", "texture1": tex_density, "texture2": tex_mask},
-            )
-        )
+    # A Cycles material whose Volume subtree reads this object's grids (a
+    # Volume Info node) overrides the standard auto-built coefficients below.
+    mat_vol = _material_volume_defs(obj, obj_key, props)
 
-    # scattering = density * density_scale [* color grid]
-    if color_grid:
-        tex_color = obj_key + "_color"
-        color_defs = dict(tex_defs)
-        color_defs["openvdb.grid"] = color_grid
-        props.Set(
-            utils.luxutils.create_props("scene.textures.%s." % tex_color, color_defs)
-        )
-        tex_scale = obj_key + "_density_scale"
-        props.Set(
-            utils.luxutils.create_props(
-                "scene.textures.%s." % tex_scale,
-                {
-                    "type": "scale",
-                    "texture1": tex_color,
-                    "texture2": density_scale,
-                },
-            )
-        )
-        tex_scatter = obj_key + "_scattering"
-        props.Set(
-            utils.luxutils.create_props(
-                "scene.textures.%s." % tex_scatter,
-                {
-                    "type": "scale",
-                    "texture1": tex_eff_density,
-                    "texture2": tex_scale,
-                },
-            )
-        )
+    vol_absorption = [0.0, 0.0, 0.0]
+    vol_asymmetry = [0.0, 0.0, 0.0]
+    if mat_vol is not None:
+        # Material drives the volume; its Volume Info -> densitygrid
+        # textures already reference this object's grids.
+        vol_scattering = mat_vol.get("scattering", [0.0, 0.0, 0.0])
+        vol_emission = mat_vol.get("emission", [0.0, 0.0, 0.0])
+        vol_absorption = mat_vol.get("absorption", [0.0, 0.0, 0.0])
+        vol_asymmetry = mat_vol.get("asymmetry", [0.0, 0.0, 0.0])
     else:
-        tex_scatter = obj_key + "_density_scale"
+        tex_defs = {
+            "type": "densitygrid",
+            "wrap": "black",
+            "storage": "half",
+            "nx": nx,
+            "ny": ny,
+            "nz": nz,
+            "openvdb.file": filepath,
+            "openvdb.grid": density_grid,
+            "mapping.type": "globalmapping3d",
+            "mapping.transformation": mapping_transform,
+        }
         props.Set(
-            utils.luxutils.create_props(
-                "scene.textures.%s." % tex_scatter,
-                {
-                    "type": "scale",
-                    "texture1": tex_eff_density,
-                    "texture2": density_scale,
-                },
-            )
+            utils.luxutils.create_props("scene.textures.%s." % tex_density, tex_defs)
         )
 
-    # Fire emission: drive a true blackbody with the fire field. The grid is a
-    # normalized intensity, so it is scaled to a Kelvin temperature for the
-    # Planck colour and reused (scaled up) as the HDR brightness mask. This
-    # yields physically-correct flame chromaticity (deep red edges up to a
-    # white-hot core) instead of a hand-tuned ramp.
-    tex_emission = [0.0, 0.0, 0.0]
-    if fire_grid:
-        tex_fire = obj_key + "_fire"
-        fire_defs = dict(tex_defs)
-        fire_defs["openvdb.grid"] = fire_grid
-        props.Set(
-            utils.luxutils.create_props("scene.textures.%s." % tex_fire, fire_defs)
-        )
-
-        tex_temp = obj_key + "_firetemp"
-        props.Set(
-            utils.luxutils.create_props(
-                "scene.textures.%s." % tex_temp,
-                {
-                    "type": "scale",
-                    "texture1": tex_fire,
-                    "texture2": _FIRE_TEMPERATURE_K,
-                },
+        # Density clipping mask (Cycles semantics: voxels < clipping render empty)
+        tex_eff_density = tex_density
+        if clipping > 0.0:
+            tex_mask = obj_key + "_clipmask"
+            props.Set(
+                utils.luxutils.create_props(
+                    "scene.textures.%s." % tex_mask,
+                    {"type": "greaterthan", "texture1": tex_density, "texture2": clipping},
+                )
             )
-        )
-
-        tex_bb = obj_key + "_firebb"
-        props.Set(
-            utils.luxutils.create_props(
-                "scene.textures.%s." % tex_bb,
-                {
-                    "type": "blackbody",
-                    "temperature": tex_temp,
-                    "normalize": 1,
-                },
+            tex_eff_density = obj_key + "_clippeddensity"
+            props.Set(
+                utils.luxutils.create_props(
+                    "scene.textures.%s." % tex_eff_density,
+                    {"type": "scale", "texture1": tex_density, "texture2": tex_mask},
+                )
             )
-        )
 
-        tex_emission = obj_key + "_emission"
-        props.Set(
-            utils.luxutils.create_props(
-                "scene.textures.%s." % tex_emission,
-                {
-                    "type": "scale",
-                    "texture1": tex_bb,
-                    "texture2": tex_fire,
-                },
+        # scattering = density * density_scale [* color grid]
+        if color_grid:
+            tex_color = obj_key + "_color"
+            color_defs = dict(tex_defs)
+            color_defs["openvdb.grid"] = color_grid
+            props.Set(
+                utils.luxutils.create_props("scene.textures.%s." % tex_color, color_defs)
             )
-        )
+            tex_scale = obj_key + "_density_scale"
+            props.Set(
+                utils.luxutils.create_props(
+                    "scene.textures.%s." % tex_scale,
+                    {
+                        "type": "scale",
+                        "texture1": tex_color,
+                        "texture2": density_scale,
+                    },
+                )
+            )
+            tex_scatter = obj_key + "_scattering"
+            props.Set(
+                utils.luxutils.create_props(
+                    "scene.textures.%s." % tex_scatter,
+                    {
+                        "type": "scale",
+                        "texture1": tex_eff_density,
+                        "texture2": tex_scale,
+                    },
+                )
+            )
+        else:
+            tex_scatter = obj_key + "_density_scale"
+            props.Set(
+                utils.luxutils.create_props(
+                    "scene.textures.%s." % tex_scatter,
+                    {
+                        "type": "scale",
+                        "texture1": tex_eff_density,
+                        "texture2": density_scale,
+                    },
+                )
+            )
+
+        # Fire emission: drive a true blackbody with the fire field. The grid is a
+        # normalized intensity, so it is scaled to a Kelvin temperature for the
+        # Planck colour and reused (scaled up) as the HDR brightness mask. This
+        # yields physically-correct flame chromaticity (deep red edges up to a
+        # white-hot core) instead of a hand-tuned ramp.
+        tex_emission = [0.0, 0.0, 0.0]
+        if fire_grid:
+            tex_fire = obj_key + "_fire"
+            fire_defs = dict(tex_defs)
+            fire_defs["openvdb.grid"] = fire_grid
+            props.Set(
+                utils.luxutils.create_props("scene.textures.%s." % tex_fire, fire_defs)
+            )
+
+            tex_temp = obj_key + "_firetemp"
+            props.Set(
+                utils.luxutils.create_props(
+                    "scene.textures.%s." % tex_temp,
+                    {
+                        "type": "scale",
+                        "texture1": tex_fire,
+                        "texture2": _FIRE_TEMPERATURE_K,
+                    },
+                )
+            )
+
+            tex_bb = obj_key + "_firebb"
+            props.Set(
+                utils.luxutils.create_props(
+                    "scene.textures.%s." % tex_bb,
+                    {
+                        "type": "blackbody",
+                        "temperature": tex_temp,
+                        "normalize": 1,
+                    },
+                )
+            )
+
+            tex_emission = obj_key + "_emission"
+            props.Set(
+                utils.luxutils.create_props(
+                    "scene.textures.%s." % tex_emission,
+                    {
+                        "type": "scale",
+                        "texture1": tex_bb,
+                        "texture2": tex_fire,
+                    },
+                )
+            )
+        vol_scattering = tex_scatter
+        vol_emission = tex_emission
 
     # Step size: user override via the Blender volume render step size
     # (world-space only), otherwise the smallest world-space cell size.
@@ -380,10 +526,10 @@ def convert_volume_obj(
             "scene.volumes.%s." % vol_name,
             {
                 "type": "heterogeneous",
-                "absorption": [0.0, 0.0, 0.0],
-                "scattering": tex_scatter,
-                "asymmetry": [0.0, 0.0, 0.0],
-                "emission": tex_emission,
+                "absorption": vol_absorption,
+                "scattering": vol_scattering,
+                "asymmetry": vol_asymmetry,
+                "emission": vol_emission,
                 "steps.size": step_size,
                 "steps.maxcount": maxcount,
                 "multiscattering": 0,
