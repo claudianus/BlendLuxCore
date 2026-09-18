@@ -750,6 +750,81 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             "vroughness": 0.05,
             "bumptex": _socket(node.inputs["Normal"], props, material, obj_name, group_node_stack),
         }
+    elif node.bl_idname == "ShaderNodeBsdfMetallic":
+        prefix = "scene.materials."
+
+        ior_socket = node.inputs.get("IOR")
+        extinction_socket = node.inputs.get("Extinction")
+        physical_ior = ior_socket is not None and getattr(ior_socket, "enabled", True)
+
+        roughness = _socket(node.inputs["Roughness"], props, material,
+                            obj_name, group_node_stack)
+        anisotropy = _socket(node.inputs["Anisotropy"], props, material,
+                             obj_name, group_node_stack)
+
+        # vroughness shrinks with anisotropy (directional streaks); a scalar
+        # anisotropy can't compose with a textured roughness — warn then
+        if isinstance(anisotropy, str):
+            LuxCoreErrorLog.add_warning(
+                f'Metallic node "{node.name}": textured anisotropy is not '
+                "supported, isotropic roughness is used", obj_name=obj_name)
+            vroughness = roughness
+        elif isinstance(roughness, str):
+            LuxCoreErrorLog.add_warning(
+                f'Metallic node "{node.name}": anisotropy with a textured '
+                "roughness is approximated", obj_name=obj_name)
+            vroughness = roughness
+        else:
+            vroughness = max(1e-4, roughness * (1.0 - anisotropy))
+
+        if getattr(node, "fresnel_type", "F82") == "F82" and \
+                node.inputs.get("Edge Tint") is not None and \
+                (node.inputs["Edge Tint"].is_linked or
+                 list(node.inputs["Edge Tint"].default_value)[:3] != [0, 0, 0]):
+            LuxCoreErrorLog.add_warning(
+                f'Metallic node "{node.name}": Edge Tint (F82) is not '
+                "supported by the conductor model", obj_name=obj_name)
+
+        definitions = {"type": "metal2"}
+
+        if physical_ior:
+            # PHYSICAL mode: explicit complex IOR (n) + extinction (k)
+            definitions["n"] = _socket(ior_socket, props, material, obj_name,
+                                       group_node_stack)
+            definitions["k"] = _socket(extinction_socket, props, material,
+                                       obj_name, group_node_stack)
+        else:
+            # F82 mode (default): derive n,k from the Base Color reflectance
+            base_color = _socket(node.inputs["Base Color"], props, material,
+                                 obj_name, group_node_stack)
+            n_tex = luxcore_name + "approxn"
+            k_tex = luxcore_name + "approxk"
+            props.Set(utils.luxutils.create_props(
+                "scene.textures." + n_tex + ".",
+                {"type": "fresnelapproxn", "texture": base_color}))
+            props.Set(utils.luxutils.create_props(
+                "scene.textures." + k_tex + ".",
+                {"type": "fresnelapproxk", "texture": base_color}))
+            definitions["n"] = n_tex
+            definitions["k"] = k_tex
+
+        definitions["uroughness"] = roughness
+        definitions["vroughness"] = vroughness
+        if node.inputs.get("Rotation") is not None and \
+                (node.inputs["Rotation"].is_linked or
+                 node.inputs["Rotation"].default_value != 0.0):
+            LuxCoreErrorLog.add_warning(
+                f'Metallic node "{node.name}": anisotropy rotation is not '
+                "supported", obj_name=obj_name)
+        if node.inputs.get("Normal") is not None:
+            definitions["bumptex"] = _socket(node.inputs["Normal"], props,
+                                             material, obj_name, group_node_stack)
+        if node.inputs.get("Thin Film Thickness") is not None and \
+                (node.inputs["Thin Film Thickness"].is_linked or
+                 node.inputs["Thin Film Thickness"].default_value != 0.0):
+            LuxCoreErrorLog.add_warning(
+                f'Metallic node "{node.name}": thin film on conductors is not '
+                "supported by metal2", obj_name=obj_name)
     elif node.bl_idname == "ShaderNodeBsdfTranslucent":
         prefix = "scene.materials."
         definitions = {
@@ -1806,6 +1881,65 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         definitions.update(_vector_mapping_defs(
             node.inputs["Vector"], False, False, props, material, obj_name,
             group_node_stack))
+    elif node.bl_idname == "ShaderNodeTexBrick":
+        prefix = "scene.textures."
+
+        def _finput(name, default):
+            s = node.inputs.get(name)
+            if s is None:
+                return default
+            if s.is_linked:
+                LuxCoreErrorLog.add_warning(
+                    f'Brick node "{node.name}": textured "{name}" is not '
+                    "supported, using its default", obj_name=obj_name)
+                return default
+            return s.default_value
+
+        if node.inputs.get("Mortar Smooth") is not None and \
+                _finput("Mortar Smooth", 0.0) != 0.0:
+            LuxCoreErrorLog.add_warning(
+                f'Brick node "{node.name}": mortar smoothing is not supported',
+                obj_name=obj_name)
+        if getattr(node, "squash", 0.0) != 0.0:
+            LuxCoreErrorLog.add_warning(
+                f'Brick node "{node.name}": squash is not supported',
+                obj_name=obj_name)
+
+        # Color2 is approximated as the per-brick modulation texture
+        # (LuxCore modulates each brick by brickmodtex; Cycles alternates
+        # deterministically) — the pattern is preserved, the alternation
+        # is randomized instead.
+        color2_socket = node.inputs.get("Color2")
+        if color2_socket is not None:
+            LuxCoreErrorLog.add_warning(
+                f'Brick node "{node.name}": Color2 is approximated as random '
+                "per-brick modulation", obj_name=obj_name)
+
+        offset = getattr(node, "offset", 0.5)
+        definitions = {
+            "type": "brick",
+            "bricktex": _socket(node.inputs["Color1"], props, material,
+                                obj_name, group_node_stack),
+            "brickmodtex": _socket(color2_socket, props, material, obj_name,
+                                   group_node_stack) if color2_socket else 1.0,
+            "mortartex": _socket(node.inputs["Mortar"], props, material,
+                                 obj_name, group_node_stack),
+            "mortarsize": _finput("Mortar Size", 0.01),
+            "brickmodbias": _finput("Bias", 0.0),
+            "brickwidth": _finput("Brick Width", 0.5),
+            "brickheight": _finput("Row Height", 0.25),
+            "brickdepth": _finput("Brick Width", 0.5),
+            "brickbond": "running",
+            "brickrun": max(0.0, min(1.0, 1.0 - offset)),
+        }
+        definitions.update(_vector_mapping_defs(
+            node.inputs["Vector"], False, False, props, material, obj_name,
+            group_node_stack))
+
+        if output_socket.name == "Fac":
+            LuxCoreErrorLog.add_warning(
+                f'Brick node "{node.name}": the Fac output is approximated by '
+                "the brick color texture", obj_name=obj_name)
     elif node.bl_idname == "ShaderNodeTexWave":
         prefix = "scene.textures."
 
@@ -1975,6 +2109,57 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         for i, sample in enumerate(samples):
             definitions[f"offset{i}"] = i / 8
             definitions[f"value{i}"] = [sample] * 3
+    elif node.bl_idname == "ShaderNodeVectorCurve":
+        prefix = "scene.textures."
+
+        # split the vector, run each channel through its own curve (sampled
+        # into "band" textures), recombine — the Fac mix input is ignored
+        vector_socket = node.inputs["Vector"]
+        fac_socket = node.inputs.get("Factor")
+        if fac_socket is not None and \
+                (fac_socket.is_linked or fac_socket.default_value != 1.0):
+            LuxCoreErrorLog.add_warning(
+                f'Vector Curves node "{node.name}": the Factor input is not '
+                "supported", obj_name=obj_name)
+
+        vector = _socket(vector_socket, props, material, obj_name,
+                         group_node_stack)
+        try:
+            node.mapping.update()
+            channel_names = ("_x", "_y", "_z")
+            tex_names = []
+            for channel in range(3):
+                curve_map = node.mapping.curves[channel + 1]
+                samples = [max(-4.0, min(4.0, _evaluate_curve(
+                    curve_map, node.mapping, i / 8))) for i in range(9)]
+
+                split_name = luxcore_name + channel_names[channel]
+                props.Set(utils.luxutils.create_props(
+                    prefix + split_name + ".",
+                    {"type": "splitfloat3", "texture": vector,
+                     "channel": channel}))
+                band_name = luxcore_name + channel_names[channel] + "_curve"
+                band_defs = {
+                    "type": "band", "amount": split_name,
+                    "offsets": len(samples), "interpolation": "linear",
+                }
+                for i, sample in enumerate(samples):
+                    band_defs[f"offset{i}"] = i / 8
+                    band_defs[f"value{i}"] = [sample] * 3
+                props.Set(utils.luxutils.create_props(
+                    prefix + band_name + ".", band_defs))
+                tex_names.append(band_name)
+
+            definitions = {
+                "type": "makefloat3",
+                "texture1": tex_names[0],
+                "texture2": tex_names[1],
+                "texture3": tex_names[2],
+            }
+        except Exception as error:
+            return _warn_unsupported(
+                node, f"curve evaluation failed ({error}); passing through the "
+                "input", vector, obj_name)
     elif node.bl_idname == "ShaderNodeTexEnvironment":
         if node.image:
             prefix = "scene.textures."
@@ -2234,6 +2419,37 @@ def _volume(node, output_socket, props, material, name_base, obj_name,
                                name_base + "_emission", props)
         if not _is_zero(emission):
             definitions["emission"] = emission
+        return definitions
+
+    if node.bl_idname == "ShaderNodeVolumeCoefficients":
+        # Coefficients are already physical sigma_a / sigma_s — a cleaner
+        # mapping than the Principled color*density approximation
+        definitions = {
+            "type": "homogeneous",
+            "absorption": coeff("Absorption Coefficients", [0.0, 0.0, 0.0]),
+            "scattering": coeff("Scatter Coefficients", [0.0, 0.0, 0.0]),
+            "asymmetry": _volume_asymmetry(coeff("Anisotropy", 0.0)),
+        }
+        ior = coeff("IOR", 1.0)
+        if ior != 1.0:
+            definitions["ior"] = ior
+        emission = coeff("Emission Coefficients", [0.0, 0.0, 0.0])
+        if not _is_zero(emission):
+            definitions["emission"] = emission
+        weight = coeff("Weight", 1.0)
+        if weight != 1.0 and not _is_zero(weight):
+            for key in ("absorption", "scattering", "emission"):
+                if key in definitions and not _is_zero(definitions[key]):
+                    definitions[key] = _tex_binary(
+                        "scale", definitions[key], weight,
+                        f"{name_base}_{key}_w", props)
+        for unsupported in ("Backscatter", "Alpha", "Diameter"):
+            sock = node.inputs.get(unsupported)
+            if sock is not None and \
+                    (sock.is_linked or sock.default_value != 0.0):
+                LuxCoreErrorLog.add_warning(
+                    f'Volume Coefficients node "{node.name}": "{unsupported}" '
+                    "is not supported", obj_name=obj_name)
         return definitions
 
     if node.bl_idname in {"ShaderNodeAddShader", "ShaderNodeMixShader"}:
