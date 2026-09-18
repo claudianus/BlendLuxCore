@@ -10,6 +10,11 @@ from ..utils.errorlog import LuxCoreErrorLog
 from .caches.exported_data import ExportedObject
 
 
+# Peak Kelvin a fully-developed flame (fire field = 1) maps to. Mantaflow fire
+# tops out around 3000 K; lower field values cool toward a deep red edge.
+_FIRE_TEMPERATURE_K = 3000.0
+
+
 # A unit cube spanning [0, 1]^3, with outward-facing normals.
 # Each face contributes 4 loop vertices so normals stay flat-shaded.
 _CUBE_LOOP_POINTS = np.array(
@@ -297,9 +302,11 @@ def convert_volume_obj(
             )
         )
 
-    # Fire emission: map the flame/temperature grid through a blackbody-style
-    # colour ramp. The ramp is black where there is no fire, so it supplies
-    # both the emission colour and the spatial fire mask in one texture.
+    # Fire emission: drive a true blackbody with the fire field. The grid is a
+    # normalized intensity, so it is scaled to a Kelvin temperature for the
+    # Planck colour and reused (scaled up) as the HDR brightness mask. This
+    # yields physically-correct flame chromaticity (deep red edges up to a
+    # white-hot core) instead of a hand-tuned ramp.
     tex_emission = [0.0, 0.0, 0.0]
     if fire_grid:
         tex_fire = obj_key + "_fire"
@@ -309,26 +316,38 @@ def convert_volume_obj(
             utils.luxutils.create_props("scene.textures.%s." % tex_fire, fire_defs)
         )
 
+        tex_temp = obj_key + "_firetemp"
+        props.Set(
+            utils.luxutils.create_props(
+                "scene.textures.%s." % tex_temp,
+                {
+                    "type": "scale",
+                    "texture1": tex_fire,
+                    "texture2": _FIRE_TEMPERATURE_K,
+                },
+            )
+        )
+
+        tex_bb = obj_key + "_firebb"
+        props.Set(
+            utils.luxutils.create_props(
+                "scene.textures.%s." % tex_bb,
+                {
+                    "type": "blackbody",
+                    "temperature": tex_temp,
+                    "normalize": 1,
+                },
+            )
+        )
+
         tex_emission = obj_key + "_emission"
         props.Set(
             utils.luxutils.create_props(
                 "scene.textures.%s." % tex_emission,
                 {
-                    "type": "band",
-                    "amount": tex_fire,
-                    "interpolation": "linear",
-                    "offset0": 0.0,
-                    "value0": [0.0, 0.0, 0.0],
-                    "offset1": 0.2,
-                    "value1": [0.6, 0.03, 0.0],
-                    "offset2": 0.4,
-                    "value2": [2.0, 0.3, 0.0],
-                    "offset3": 0.6,
-                    "value3": [5.0, 1.5, 0.15],
-                    "offset4": 0.8,
-                    "value4": [10.0, 5.0, 1.0],
-                    "offset5": 1.0,
-                    "value5": [16.0, 12.0, 6.0],
+                    "type": "scale",
+                    "texture1": tex_bb,
+                    "texture2": tex_fire,
                 },
             )
         )

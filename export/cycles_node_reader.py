@@ -1418,15 +1418,19 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             return ERROR_VALUE
     elif node.bl_idname == "ShaderNodeBlackbody":
         temperature_socket = node.inputs["Temperature"]
-        if temperature_socket.is_linked:
-            LuxCoreErrorLog.add_warning(f"LuxCore does not support textured blackbody temperature", obj_name=obj_name)
-            return ERROR_VALUE
-        
         prefix = "scene.textures."
-        
+
+        if temperature_socket.is_linked:
+            # A linked temperature (e.g. a density grid or attribute) drives the
+            # per-point Planckian eval on the LuxCore side.
+            temperature = _socket(temperature_socket, props, material, obj_name, group_node_stack)
+            temperature = _convert_to_float(temperature, props)
+        else:
+            temperature = temperature_socket.default_value
+
         definitions = {
             "type": "blackbody",
-            "temperature": temperature_socket.default_value,
+            "temperature": temperature,
             "normalize": True,
         }
     elif node.bl_idname == "ShaderNodeMapRange":
