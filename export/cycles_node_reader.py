@@ -427,6 +427,14 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "sheen": _socket(node.inputs["Sheen Weight"], props, material, obj_name, group_node_stack),
                 "sheentint": _socket(node.inputs["Sheen Tint"], props, material, obj_name, group_node_stack),
                 "clearcoat": _socket(node.inputs["Coat Weight"], props, material, obj_name, group_node_stack),
+                # Disney clearcoatgloss = 1 - coat_roughness
+                "clearcoatgloss": _tex_helper(props, luxcore_name + "coatgloss", {
+                    "type": "subtract",
+                    "texture1": 1.0,
+                    "texture2": _socket(node.inputs["Coat Roughness"], props, material, obj_name, group_node_stack),
+                }) if node.inputs["Coat Roughness"].is_linked
+                    or node.inputs["Coat Roughness"].default_value != 0.0
+                    else 1.0,
             }
             
             # Metallic values > 0 reduce transmission. At metallic = 1, no transmission happens at all
@@ -489,8 +497,21 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 }
         
         # Attach these props to the right-most material node (regardless if it's glass, disney or a mix mat)
+        # Principled v2: emission = Emission Color * Emission Strength
+        emission_strength = _socket(node.inputs["Emission Strength"], props, material, obj_name, group_node_stack)
+        emission_color = _socket(node.inputs["Emission Color"], props, material, obj_name, group_node_stack)
+        if emission_color == [1.0, 1.0, 1.0] or emission_color == 1.0:
+            emission = emission_strength
+        elif emission_strength == 0 or emission_strength == 0.0:
+            emission = emission_strength
+        else:
+            emission = _tex_helper(props, luxcore_name + "emission_col", {
+                "type": "scale",
+                "texture1": emission_strength,
+                "texture2": emission_color,
+            })
         definitions.update({
-            "emission": _socket(node.inputs["Emission Strength"], props, material, obj_name, group_node_stack),
+            "emission": emission,
             "transparency": _socket(node.inputs["Alpha"], props, material, obj_name, group_node_stack),
             "bumptex": _socket(node.inputs["Normal"], props, material, obj_name, group_node_stack),
         })

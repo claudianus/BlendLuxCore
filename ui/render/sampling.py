@@ -236,3 +236,6 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
             col.prop(config, "mnee_maxspecular")
 
         col.prop(config, "guiding_enable")
+
+        if config.engine == "PATH":
+            col.prop(config, "spectral_enable")

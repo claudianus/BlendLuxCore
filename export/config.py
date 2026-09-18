@@ -163,6 +163,11 @@ def convert(exporter, scene, context=None, engine=None):
         ):
             definitions["path.guiding.enable"] = True
 
+        if config.spectral_enable and luxcore_engine in (
+            "PATHCPU", "PATHOCL", "TILEPATHCPU", "TILEPATHOCL", "RTPATHOCL",
+        ):
+            definitions["path.spectral.enable"] = True
+
         if config.photongi.enabled and not is_viewport_render:
             _convert_photongi_settings(context is not None, scene,
                                        definitions, config)

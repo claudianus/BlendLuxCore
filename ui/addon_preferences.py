@@ -4,6 +4,7 @@ from importlib.metadata import version
 
 _needs_reload = "bpy" in locals()
 
+import sys
 import bpy
 from bpy.types import AddonPreferences
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty
@@ -70,7 +71,9 @@ class LuxCoreAddonPreferences(AddonPreferences):
             2,
         ),
     ]
-    gpu_backend: EnumProperty(items=gpu_backend_items, default="OPENCL")
+    gpu_backend: EnumProperty(items=gpu_backend_items,
+                              # Metal is the primary GPU backend on Apple silicon
+                              default="METAL" if sys.platform == "darwin" else "OPENCL")
 
     def film_device_items_callback(self, context):
         """List items for Film Device property (callback)."""
