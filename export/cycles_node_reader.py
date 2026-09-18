@@ -1396,6 +1396,26 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 f"Unsupported Hair Info output socket: {output_socket.name}",
                 obj_name=obj_name)
             return ERROR_VALUE
+    elif node.bl_idname == "ShaderNodeParticleInfo":
+        prefix = "scene.textures."
+        definitions = {}
+
+        # Particle instances are exported as duplicated objects, each carrying
+        # its Blender random_id as the LuxCore object id (see object_cache.py).
+        # hitPoint.objectID is therefore unique per particle.
+        if output_socket.name == "Index":
+            # Unique id per particle instance (deterministic, not sequential).
+            definitions["type"] = "objectid"
+        elif output_socket.name == "Random":
+            # Per-particle random in [0, 1) derived from the instance id.
+            definitions["type"] = "objectidnormalized"
+        else:
+            # Age/Lifetime/Location/Size/Velocity/Angular Velocity require
+            # particle simulation state that is not exported to LuxCore.
+            LuxCoreErrorLog.add_warning(
+                f"Unsupported Particle Info output socket: {output_socket.name}",
+                obj_name=obj_name)
+            return ERROR_VALUE
     elif node.bl_idname == "ShaderNodeBlackbody":
         temperature_socket = node.inputs["Temperature"]
         if temperature_socket.is_linked:
@@ -2033,6 +2053,32 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         definitions.update(_vector_mapping_defs(
             node.inputs["Vector"], False, False, props, material, obj_name,
             group_node_stack))
+    elif node.bl_idname == "ShaderNodeTexWhiteNoise":
+        prefix = "scene.textures."
+
+        # Deterministic hash of a 3D vector seed -> Value + Color.
+        # The same whitenoise texture serves both outputs (LuxCore selects
+        # float/spectrum evaluation by usage).
+        if node.noise_dimensions != "3D":
+            LuxCoreErrorLog.add_warning(
+                f'White Noise node "{node.name}": {node.noise_dimensions} mode '
+                "is approximated by 3D (extra inputs ignored)",
+                obj_name=obj_name)
+
+        vector_socket = node.inputs["Vector"]
+        if vector_socket.is_linked:
+            seed_tex = _socket(vector_socket, props, material, obj_name,
+                               group_node_stack)
+        else:
+            # Unlinked Vector defaults to the position seed
+            seed_tex = node.name + "::wnseed"
+            props.Set(utils.ParseString(
+                f"{prefix}{seed_tex}.type position"))
+
+        definitions = {
+            "type": "whitenoise",
+            "texture": seed_tex,
+        }
     elif node.bl_idname == "ShaderNodeTexBrick":
         prefix = "scene.textures."
 
