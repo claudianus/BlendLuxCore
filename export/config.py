@@ -164,7 +164,8 @@ def convert(exporter, scene, context=None, engine=None):
             definitions["path.guiding.enable"] = True
 
         if config.spectral_enable and luxcore_engine in (
-            "PATHCPU", "PATHOCL", "TILEPATHCPU", "TILEPATHOCL", "RTPATHOCL",
+            "PATHCPU", "PATHOCL", "TILEPATHCPU", "TILEPATHOCL",
+            "RTPATHCPU", "RTPATHOCL",
         ):
             definitions["path.spectral.enable"] = True
 
