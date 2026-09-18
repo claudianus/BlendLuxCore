@@ -235,8 +235,8 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
                 settings = mod.domain_settings
                 col = layout.column(align=True)
                 col.enabled = False
-                col.prop(settings.point_cache.point_caches[0], "frame_start", text="Start frame")
-                col.prop(settings.point_cache.point_caches[0], "frame_end", text="End frame")
+                col.prop(settings.point_cache, "frame_start", text="Start frame")
+                col.prop(settings.point_cache, "frame_end", text="End frame")
             else:
                 col = layout.column(align=True)
                 col.prop(self, "file_path")
@@ -360,12 +360,14 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
 
         if smoke_domain_mod and self.use_internal_cachefiles:
             amplify = 1
-            use_high_resolution = smoke_domain_mod.domain_settings.use_high_resolution
+            # use_high_resolution/amplify were replaced by use_noise/noise_scale
+            # in Blender 2.82 (same check as in export/smoke.py)
+            use_high_resolution = smoke_domain_mod.domain_settings.use_noise
 
             if use_high_resolution and grid_name not in {"density_low", "flame_low", "fuel_low",
                                                                   "react_low", "velocity", "heat"}:
                 # Note: Velocity and heat data is always low-resolution. (Comment from Cycles source code)
-                amplify = smoke_domain_mod.domain_settings.amplify + 1
+                amplify = smoke_domain_mod.domain_settings.noise_scale
 
             resolution = mathutils.Vector((0, 0, 0))
             cell_size = mathutils.Vector((0, 0, 0))

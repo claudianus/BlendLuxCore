@@ -355,8 +355,29 @@ class ObjectCache2:
                     # The code in this try block is performance-critical, as it is
                     # executed most often when exporting millions of instances.
                     duplis = instances[obj.original.as_pointer()]
-                    # If duplis is None, then a non-exportable object like a curve with zero faces is being duplicated
+                    # If duplis is None, then a non-exportable object (e.g. a curve
+                    # with zero faces or an object excluded from the render) is
+                    # being duplicated
                     if duplis:
+                        # The per-object part of utils.is_instance_visible() was
+                        # already checked when the duplis entry was created in the
+                        # except branch below. The remaining checks are
+                        # per-instance and have to be done every time.
+                        if not (
+                            dg_obj_instance.show_self
+                            or dg_obj_instance.show_particles
+                        ):
+                            continue
+                        if context:
+                            viewport_vis_obj = (
+                                dg_obj_instance.parent
+                                if dg_obj_instance.parent
+                                else obj
+                            )
+                            if not viewport_vis_obj.visible_in_viewport_get(
+                                context.space_data
+                            ):
+                                continue
                         obj_id = dg_obj_instance.object.original.luxcore.id
                         if obj_id == -1:
                             obj_id = dg_obj_instance.random_id & 0xFFFFFFFE
@@ -379,6 +400,29 @@ class ObjectCache2:
                             index,
                             obj_count_estimate,
                         )
+                    # Same checks as utils.is_instance_visible() in the non-fast
+                    # path below. Objects that are not renderable at all
+                    # (exclude_from_render, disabled Cycles ray visibility etc.)
+                    # get a None entry so all their remaining duplis are
+                    # skipped cheaply in the try block above.
+                    if not utils.is_obj_visible(obj):
+                        instances[obj.original.as_pointer()] = None
+                        continue
+                    if not (
+                        dg_obj_instance.show_self
+                        or dg_obj_instance.show_particles
+                    ):
+                        continue
+                    if context:
+                        viewport_vis_obj = (
+                            dg_obj_instance.parent
+                            if dg_obj_instance.parent
+                            else obj
+                        )
+                        if not viewport_vis_obj.visible_in_viewport_get(
+                            context.space_data
+                        ):
+                            continue
                     exported_obj = self._convert_obj(
                         exporter,
                         dg_obj_instance,
@@ -516,8 +560,17 @@ class ObjectCache2:
                         visible_to_cam = utils.visible_to_camera(
                             dg_obj_instance, is_viewport_render, view_layer
                         )
+                        # Same rule as use_instancing in _convert_mesh_obj:
+                        # objects with motion blur need a transformation on
+                        # the LuxCore object, it may not be baked into the
+                        # strand points
                         is_for_duplication = (
-                            is_viewport_render or dg_obj_instance.is_instance
+                            is_viewport_render
+                            or dg_obj_instance.is_instance
+                            or (
+                                exporter.motion_blur_enabled
+                                and obj.luxcore.enable_motion_blur
+                            )
                         )
                         lux_shape = convert_hair_curves(
                             exporter,
@@ -526,9 +579,15 @@ class ObjectCache2:
                             obj_key,
                             luxcore_scene,
                             is_for_duplication,
+                            dg_obj_instance.matrix_world,
                         )
                         if lux_shape:
-                            mat = obj.data.materials[0]
+                            # Curves data may have no material slots at all
+                            mat = (
+                                obj.data.materials[0]
+                                if len(obj.data.materials)
+                                else None
+                            )
                             if mat:
                                 node_tree = mat.luxcore.node_tree
                                 if node_tree:
@@ -541,27 +600,27 @@ class ObjectCache2:
                                     )
 
                             self.exported_hair[obj_key] = lux_shape
-                        if lux_shape:
+
                             lux_mat, mat_props, node_tree = export_material(
                                 obj, 0, exporter, depsgraph, is_viewport_render
                             )
                             scene_props.Set(mat_props)
-                            set_hair_props(
-                                scene_props,
-                                lux_shape,
-                                lux_shape,
-                                lux_mat,
-                                visible_to_cam,
-                                is_for_duplication,
-                                dg_obj_instance.matrix_world,
-                                False,
-                            )
 
-                        # TODO handle case when exported_stuff is None
-                        #  (we'll have to create a new ExportedObject just for the hair mesh)
-                        if exported_stuff and lux_shape:
-                            # Should always be the case because lights can't have particle systems
-                            assert isinstance(exported_stuff, ExportedObject)
+                            # Hair curves objects have no mesh parts, so their
+                            # ExportedObject is built manually. Registering it
+                            # enables instancing via DuplicateObject and lets
+                            # update() and motion blur track it like any other
+                            # object.
+                            exported_stuff = ExportedObject(
+                                obj_key,
+                                [],
+                                [],
+                                dg_obj_instance.matrix_world.copy()
+                                if is_for_duplication
+                                else None,
+                                visible_to_cam,
+                                utils.make_object_id(dg_obj_instance),
+                            )
                             exported_stuff.parts.append(
                                 ExportedPart(lux_shape, lux_shape, lux_mat)
                             )
@@ -766,9 +825,12 @@ class ObjectCache2:
         )
         # MESH data-block edits (e.g. mesh data tweaks that only flag the
         # datablock, material-driven geometry) don't always flag the OBJECT.
+        # Same for (hair) curve data-blocks.
         return (
             depsgraph.id_type_updated("OBJECT")
             or depsgraph.id_type_updated("MESH")
+            or depsgraph.id_type_updated("CURVE")
+            or depsgraph.id_type_updated("CURVES")
         ) and not only_scene
 
     def update(self, exporter, depsgraph, luxcore_scene, scene_props, context):
@@ -780,10 +842,13 @@ class ObjectCache2:
         # Geometry updates (mesh edit, modifier edit etc.)
         # MESH datablocks updated without an OBJECT geometry flag (see diff):
         # collect their names so objects using them are refreshed below.
+        # The same applies to CURVE and CURVES (hair curves) datablocks.
         mesh_updated_names = {
             u.id.name
             for u in depsgraph.updates
-            if isinstance(u.id, bpy.types.Mesh)
+            if isinstance(
+                u.id, (bpy.types.Mesh, bpy.types.Curve, bpy.types.Curves)
+            )
         }
         if depsgraph.id_type_updated("OBJECT") or mesh_updated_names:
             for dg_update in depsgraph.updates:
@@ -811,7 +876,27 @@ class ObjectCache2:
                         if obj.type == "CURVES" and not obj.data == None:
                             if obj.data.rna_type.name == "Hair Curves":
                                 obj_key = utils.make_key(obj)
-                                del self.exported_hair[obj_key]
+                                # The hair may not have been exported yet
+                                # (e.g. object was hidden during first_run).
+                                # Instance keys have the object key as prefix
+                                # (see utils.make_key_from_instance).
+                                for key in [
+                                    k
+                                    for k in self.exported_hair
+                                    if k == obj_key
+                                    or k.startswith(obj_key + "_")
+                                ]:
+                                    del self.exported_hair[key]
+                                # Remove all entries of this object and its
+                                # instances so it is fully re-exported below
+                                # instead of only getting a transform update
+                                for key in [
+                                    k
+                                    for k in self.exported_objects
+                                    if k == obj_key
+                                    or k.startswith(obj_key + "_")
+                                ]:
+                                    del self.exported_objects[key]
                         else:
                             mesh_key = self._get_mesh_key(obj, use_instancing)
 
@@ -876,7 +961,8 @@ class ObjectCache2:
                                 # Can't use the memory address of the psys as key because it changes
                                 # when the psys is updated (e.g. because some hair moves)
                                 psys_key = make_psys_key(obj, psys, True)
-                                del self.exported_hair[psys_key]
+                                # The hair may not have been exported yet
+                                self.exported_hair.pop(psys_key, None)
                     elif obj.type == "LIGHT":
                         obj_key = utils.make_key(obj)
                         props, exported_stuff = light.convert_light(
