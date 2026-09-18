@@ -15,7 +15,7 @@ from ..hair import (
     convert_hair_curves,
 )
 from .exported_data import ExportedObject, ExportedPart
-from .. import light, material, pointcloud, volume
+from .. import light, material, pointcloud, volume, cycles_node_reader
 from ...utils.errorlog import LuxCoreErrorLog
 from ...utils import node as utils_node
 from ...utils import MESH_OBJECTS
@@ -68,9 +68,10 @@ def needs_edge_detector_shape(node_tree):
 def uses_displacement(obj):
     for mat_slot in obj.material_slots:
         mat = mat_slot.material
+        if not mat:
+            continue
         if (
-            mat
-            and mat.luxcore.node_tree
+            mat.luxcore.node_tree
             and utils_node.has_nodes_multi(
                 mat.luxcore.node_tree,
                 {
@@ -81,7 +82,49 @@ def uses_displacement(obj):
             )
         ):
             return True
+        # Cycles-routed material with a Displacement output link
+        if (
+            not mat.luxcore.node_tree
+            and cycles_node_reader.get_displacement_link(mat.original) is not None
+        ):
+            return True
     return False
+
+
+def _apply_cycles_displacement(shape, obj, mat_index, depsgraph, scene_props):
+    """
+    Wraps the shape in a LuxCore "displacement" shape when the material on
+    mat_index is a Cycles-routed material whose output Displacement socket
+    is driven by a Displacement/Vector Displacement node.
+    """
+    mat = get_material(obj, mat_index, depsgraph)
+    if mat is None:
+        return shape
+    link = cycles_node_reader.get_displacement_link(mat.original)
+    if link is None:
+        return shape
+
+    disp = cycles_node_reader.export_displacement(
+        link, scene_props, mat.original, obj.name
+    )
+    if disp is None:
+        LuxCoreErrorLog.add_warning(
+            "Material output Displacement is only supported through "
+            "Displacement/Vector Displacement nodes",
+            obj_name=obj.name,
+        )
+        return shape
+
+    disp_shape = "%s_disp%d" % (shape, mat_index)
+    prefix = "scene.shapes." + disp_shape + "."
+    scene_props.Set(pyluxcore.Property(prefix + "type", "displacement"))
+    scene_props.Set(pyluxcore.Property(prefix + "source", shape))
+    scene_props.Set(pyluxcore.Property(prefix + "map", disp["map"]))
+    scene_props.Set(pyluxcore.Property(prefix + "map.type", disp["map.type"]))
+    scene_props.Set(pyluxcore.Property(prefix + "scale", disp["scale"]))
+    scene_props.Set(pyluxcore.Property(prefix + "offset", disp["offset"]))
+    scene_props.Set(pyluxcore.Property(prefix + "normalsmooth", True))
+    return disp_shape
 
 
 def define_shapes(input_shape, node_tree, exporter, depsgraph, scene_props):
@@ -839,6 +882,13 @@ class ObjectCache2:
                     warn_about_missing_uvs(obj, node_tree)
                     shape = define_shapes(
                         shape, node_tree, exporter, depsgraph, scene_props
+                    )
+                elif not loaded_from_cache:
+                    # Cycles-routed material: the Displacement output is a
+                    # mesh-level effect — wrap the shape if the material's
+                    # Blender node tree drives it with a displacement node.
+                    shape = _apply_cycles_displacement(
+                        shape, obj, mat_index, depsgraph, scene_props
                     )
 
                 mesh_definitions[idx] = [shape, mat_index]

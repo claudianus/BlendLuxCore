@@ -30,10 +30,9 @@ def convert(material, props, luxcore_name, obj_name=""):
     link = utils_node.get_link(output.inputs["Surface"])
     volume_link = utils_node.get_link(output.inputs["Volume"]) if "Volume" in output.inputs else None
 
-    displacement_input = output.inputs.get("Displacement")
-    if displacement_input is not None and displacement_input.is_linked:
-        LuxCoreErrorLog.add_warning("Material displacement is not supported and is ignored",
-                                    obj_name=obj_name)
+    # Note: the Displacement output is not handled here — it is a mesh-level
+    # effect exported by the object cache as a LuxCore "displacement" shape
+    # (see get_displacement_link / export_displacement below).
 
     if link is None and volume_link is None:
         return black(luxcore_name)
@@ -61,6 +60,83 @@ def convert(material, props, luxcore_name, obj_name=""):
         # If None, _volume already logged a warning
 
     return luxcore_name, props
+
+
+def get_displacement_link(material):
+    """
+    Returns the link feeding the Cycles output's Displacement socket, or
+    None. Used by the object cache to decide whether to wrap the mesh in a
+    LuxCore "displacement" shape.
+    """
+    node_tree = getattr(material, "node_tree", None)
+    if node_tree is None:
+        return None
+    output = node_tree.get_output_node("CYCLES")
+    if output is None:
+        return None
+    disp_input = output.inputs.get("Displacement")
+    if disp_input is None or not disp_input.is_linked:
+        return None
+    return utils_node.get_link(disp_input)
+
+
+def export_displacement(link, props, material, obj_name):
+    """
+    Exports the textures driving a Cycles Displacement/Vector Displacement
+    node into props and returns the parameters for a LuxCore "displacement"
+    shape, or None when the link is not a supported displacement node.
+    """
+    node = link.from_node
+
+    if node.bl_idname == "ShaderNodeDisplacement":
+        if getattr(node, "space", "OBJECT") != "OBJECT":
+            LuxCoreErrorLog.add_warning(
+                'Displacement node "%s": world space is not supported, '
+                "object space is used instead" % node.name, obj_name=obj_name)
+        height = _socket(node.inputs["Height"], props, material, obj_name, None)
+        if height == ERROR_VALUE:
+            return None
+        scale = _scalar_or_warn(node.inputs["Scale"], 1.0, node, obj_name)
+        midlevel = _scalar_or_warn(node.inputs["Midlevel"], 0.5, node, obj_name)
+        # LuxCore: disp = (map * scale + offset) * N
+        # Cycles:  disp = (height - midlevel) * scale * N
+        return {
+            "map": height,
+            "map.type": "height",
+            "scale": scale,
+            "offset": -midlevel * scale,
+        }
+
+    if node.bl_idname == "ShaderNodeVectorDisplacement":
+        if getattr(node, "space", "OBJECT") != "OBJECT":
+            LuxCoreErrorLog.add_warning(
+                'Vector Displacement node "%s": world space is not supported, '
+                "object space is used instead" % node.name, obj_name=obj_name)
+        vector = _socket(node.inputs["Vector"], props, material, obj_name, None)
+        if vector == ERROR_VALUE:
+            return None
+        scale = _scalar_or_warn(node.inputs["Scale"], 1.0, node, obj_name)
+        return {
+            "map": vector,
+            "map.type": "vector",
+            "scale": scale,
+            "offset": 0.0,
+        }
+
+    # Anything else plugged straight into Displacement behaves like bump in
+    # Cycles — the material-level Normal/bump path covers that case.
+    return None
+
+
+def _scalar_or_warn(socket, fallback, node, obj_name):
+    """ Reads a scalar socket; warns and falls back when it is textured. """
+    if socket.is_linked:
+        LuxCoreErrorLog.add_warning(
+            'Node "%s": textured "%s" input is not supported for '
+            "displacement, using default value" % (node.name, socket.name),
+            obj_name=obj_name)
+        return fallback
+    return socket.default_value
 
 
 def black(luxcore_name="__BLACK__"):
