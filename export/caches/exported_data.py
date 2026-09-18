@@ -23,6 +23,8 @@ class ExportedObject(ExportedData):
         self.parts = []
         self.visible_to_camera = visible_to_camera
         self.obj_id = obj_id
+        # Number of "dupli" objects spawned per part (point cloud instancing)
+        self.duplicate_count = 0
 
         for (shape_name, mat_index), mat_name in zip(mesh_definitions, mat_names):
             obj_name = lux_name_base + str(mat_index)
@@ -47,6 +49,8 @@ class ExportedObject(ExportedData):
 
     def delete(self, luxcore_scene):
         for part in self.parts:
+            for i in range(self.duplicate_count):
+                luxcore_scene.DeleteObject(part.lux_obj + "dupli" + str(i))
             luxcore_scene.DeleteObject(part.lux_obj)
 
 

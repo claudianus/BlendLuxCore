@@ -15,7 +15,7 @@ from ..hair import (
     convert_hair_curves,
 )
 from .exported_data import ExportedObject, ExportedPart
-from .. import light, material
+from .. import light, material, pointcloud, volume
 from ...utils.errorlog import LuxCoreErrorLog
 from ...utils import node as utils_node
 from ...utils import MESH_OBJECTS
@@ -306,6 +306,7 @@ class ObjectCache2:
         self.exported_objects = {}
         self.exported_meshes = {}
         self.exported_hair = {}
+        self.pending_pointcloud_duplicates = []
 
     def first_run(
         self,
@@ -479,6 +480,9 @@ class ObjectCache2:
         """
         start_time = time()
 
+        # Point clouds: one icosphere instance per point beyond the base object
+        self._flush_pointcloud_duplicates(luxcore_scene)
+
         for duplis in instances.values():
             if duplis is None:
                 # If duplis is None, then a non-exportable object like a curve with zero faces is being duplicated
@@ -506,6 +510,13 @@ class ObjectCache2:
 
         if stats:
             stats.export_time_instancing.value = time() - start_time
+
+    def _flush_pointcloud_duplicates(self, luxcore_scene):
+        for src_name, matrices, count, object_ids in self.pending_pointcloud_duplicates:
+            luxcore_scene.DuplicateObject(
+                src_name, src_name + "dupli", count, matrices, object_ids
+            )
+        self.pending_pointcloud_duplicates.clear()
 
     def _debug_info(self):
         print("Objects in cache:", len(self.exported_objects))
@@ -637,6 +648,35 @@ class ObjectCache2:
                         is_viewport_render,
                         view_layer,
                     )
+                if exported_stuff:
+                    props = exported_stuff.get_props()
+            elif obj.type == "POINTCLOUD":
+                exported_stuff = pointcloud.convert_pointcloud_obj(
+                    exporter,
+                    dg_obj_instance,
+                    obj,
+                    obj_key,
+                    depsgraph,
+                    luxcore_scene,
+                    scene_props,
+                    is_viewport_render,
+                    view_layer,
+                    self.pending_pointcloud_duplicates,
+                )
+                if exported_stuff:
+                    props = exported_stuff.get_props()
+            elif obj.type == "VOLUME":
+                exported_stuff = volume.convert_volume_obj(
+                    exporter,
+                    dg_obj_instance,
+                    obj,
+                    obj_key,
+                    depsgraph,
+                    luxcore_scene,
+                    scene_props,
+                    is_viewport_render,
+                    view_layer,
+                )
                 if exported_stuff:
                     props = exported_stuff.get_props()
             elif obj.type == "LIGHT":
@@ -831,6 +871,8 @@ class ObjectCache2:
             or depsgraph.id_type_updated("MESH")
             or depsgraph.id_type_updated("CURVE")
             or depsgraph.id_type_updated("CURVES")
+            or depsgraph.id_type_updated("VOLUME")
+            or depsgraph.id_type_updated("POINTCLOUD")
         ) and not only_scene
 
     def update(self, exporter, depsgraph, luxcore_scene, scene_props, context):
@@ -847,7 +889,14 @@ class ObjectCache2:
             u.id.name
             for u in depsgraph.updates
             if isinstance(
-                u.id, (bpy.types.Mesh, bpy.types.Curve, bpy.types.Curves)
+                u.id,
+                (
+                    bpy.types.Mesh,
+                    bpy.types.Curve,
+                    bpy.types.Curves,
+                    bpy.types.Volume,
+                    bpy.types.PointCloud,
+                ),
             )
         }
         if depsgraph.id_type_updated("OBJECT") or mesh_updated_names:
@@ -963,6 +1012,28 @@ class ObjectCache2:
                                 psys_key = make_psys_key(obj, psys, True)
                                 # The hair may not have been exported yet
                                 self.exported_hair.pop(psys_key, None)
+                    elif obj.type == "VOLUME":
+                        obj_key = utils.make_key(obj)
+                        # Drop the exported object (and its instances) so it is
+                        # fully re-exported below; a new VDB frame or grid change
+                        # can alter every part of the volume definition.
+                        for key in [
+                            k
+                            for k in self.exported_objects
+                            if k == obj_key or k.startswith(obj_key + "_")
+                        ]:
+                            del self.exported_objects[key]
+                    elif obj.type == "POINTCLOUD":
+                        obj_key = utils.make_key(obj)
+                        # Remove the base object and all point duplicates so
+                        # the cloud is fully re-exported below.
+                        for key in [
+                            k
+                            for k in self.exported_objects
+                            if k == obj_key or k.startswith(obj_key + "_")
+                        ]:
+                            self.exported_objects[key].delete(luxcore_scene)
+                            del self.exported_objects[key]
                     elif obj.type == "LIGHT":
                         obj_key = utils.make_key(obj)
                         props, exported_stuff = light.convert_light(
@@ -1033,5 +1104,9 @@ class ObjectCache2:
                     scene_props,
                     is_viewport_render,
                 )
+
+        # Newly re-exported point clouds queued their instances during
+        # _convert_obj; realize them on the live scene now.
+        self._flush_pointcloud_duplicates(luxcore_scene)
 
         # self._debug_info()
