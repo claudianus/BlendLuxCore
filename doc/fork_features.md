@@ -21,6 +21,7 @@ auto-route Blender node trees to the Cycles reader`).
 | BsdfMetallic | metal material | |
 | VectorCurve | curve-map texture | |
 | VolumeCoefficients | volume params | |
+| Volume Info | `densitygrid` texture | Density/Color/Flame/Temperature -> object grids |
 | Displacement | `displacement` shape | output-socket mapping |
 | Principled Hair BSDF | `hairmat` | Chiang model; see engine hair doc |
 | Hair Info | `hitpointvertexaov` (strand-u / strand-random) | engine strand AOVs |
@@ -32,7 +33,7 @@ auto-route Blender node trees to the Cycles reader`).
 
 **Validation:** exported SDL parses + renders; coverage measured at 71/101.
 Remaining unmapped: IES, Sky/Environment, Gabor, PointDensity, VectorRotate,
-VectorTransform, VolumeInfo, RayPortal — tracked on the roadmap.
+VectorTransform, RayPortal — tracked on the roadmap.
 
 **References:** Blender/Cycles node reference (Blender manual); the mapping
 table above is the API surface.
@@ -50,9 +51,18 @@ grid.
   hand-tuned `band` ramp (`blackbody: ... + Planckian fire emission`). The raw
   field also provides the HDR brightness mask.
 - `B3: VOLUME and POINTCLOUD object export support` added the object types.
+- **Volume Info node + material-driven volumes** (`VolumeInfo node export ->
+  densitygrid...`): a `ShaderNodeVolumeInfo` in the material's *Volume* input
+  reads the object's `density`/`color`/`flame`/`temperature` grid as a
+  `densitygrid` texture (same world->[0,1]^3 active-voxel mapping as the
+  auto-build). When such a material is present it **drives the volume
+  coefficients** — tint / remap / custom emission on a `.vdb` — otherwise the
+  object auto-builds exactly as before. Validation scene:
+  `scenes/cornell/volumeinfo-test.scn` in the engine repo.
 
-**Validation:** `scenes/cornell/fire-test.scn` + `bb-test.scn` in the engine
-repo render correct Planckian fire gradients on CPU and Metal/OpenCL.
+**Validation:** `scenes/cornell/fire-test.scn`, `bb-test.scn` and
+`volumeinfo-test.scn` in the engine repo render correct Planckian fire
+gradients on CPU and Metal/OpenCL.
 
 ## Object export — dupli / instances / point clouds
 
