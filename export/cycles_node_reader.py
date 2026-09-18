@@ -4,7 +4,7 @@ from .. import utils
 from ..utils import node as utils_node
 from ..utils.errorlog import LuxCoreErrorLog
 from .image import ImageExporter
-from math import degrees
+from math import degrees, log
 from mathutils import Euler, Matrix, Vector
 
 ERROR_VALUE = 0
@@ -894,6 +894,64 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             LuxCoreErrorLog.add_warning(
                 f'Metallic node "{node.name}": thin film on conductors is not '
                 "supported by metal2", obj_name=obj_name)
+    elif node.bl_idname == "ShaderNodeBsdfHairPrincipled":
+        prefix = "scene.materials."
+
+        # Cycles' Principled Hair maps onto LuxCore's Marschner "hairmat".
+        def _sock(name, fallback):
+            s = node.inputs.get(name)
+            return _socket(s, props, material, obj_name, group_node_stack) \
+                if s is not None else fallback
+
+        # Cycles' Offset is radians; LuxCore's alpha is degrees.
+        offset_sock = node.inputs.get("Offset")
+        offset = _socket(offset_sock, props, material, obj_name, group_node_stack) \
+            if offset_sock is not None else 0.0
+        if offset_sock is not None and offset_sock.is_linked and offset != ERROR_VALUE:
+            alpha = luxcore_name + "offset_to_deg"
+            props.Set(utils.luxutils.create_props("scene.textures." + alpha + ".", {
+                "type": "scale",
+                "texture1": offset,
+                "texture2": 57.29577951308232,
+            }))
+        else:
+            alpha = offset * 57.29577951308232
+
+        definitions = {
+            "type": "hairmat",
+            "eta": _sock("IOR", 1.55),
+            # Roughness/Radial Roughness -> beta_m/beta_n. Both are 0..1 and
+            # drive the same longitudinal/azimuthal roughness axes; the exact
+            # parameterizations differ so this is a first-order match.
+            "beta_m": _sock("Roughness", 0.3),
+            "beta_n": _sock("Radial Roughness", 0.3),
+            "alpha": alpha,
+        }
+        # Color parameterization is mutually exclusive in both engines.
+        if node.parametrization == "ABSORPTION":
+            definitions["sigma_a"] = _sock("Absorption Coefficient", [0.0, 0.0, 0.0])
+        elif node.parametrization == "COLOR":
+            definitions["color"] = _sock("Color", [0.5, 0.5, 0.5])
+        else:  # "MELANIN" - eumelanin/pheomelanin concentration model
+            mel_sock = node.inputs.get("Melanin")
+            red_sock = node.inputs.get("Melanin Redness")
+            mel_linked = mel_sock is not None and mel_sock.is_linked
+            red_linked = red_sock is not None and red_sock.is_linked
+            if not mel_linked and not red_linked:
+                melanin = mel_sock.default_value if mel_sock is not None else 0.8
+                redness = red_sock.default_value if red_sock is not None else 0.0
+                # Cycles: melanin_qty = -ln(1 - Melanin); the concentration is
+                # split into eumelanin/pheomelanin by the redness fraction.
+                qty = -log(max(1.0 - melanin, 0.0001))
+                definitions["eumelanin"] = qty * (1.0 - redness)
+                definitions["pheomelanin"] = qty * redness
+            else:
+                LuxCoreErrorLog.add_warning(
+                    'Principled Hair node "%s": textured Melanin inputs are '
+                    "approximated by constant melanin concentrations" % node.name,
+                    obj_name=obj_name)
+                definitions["eumelanin"] = 1.3
+                definitions["pheomelanin"] = 0.0
     elif node.bl_idname == "ShaderNodeBsdfTranslucent":
         prefix = "scene.materials."
         definitions = {
@@ -1312,6 +1370,31 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             definitions["type"] = "objectidnormalized"
         else:
             LuxCoreErrorLog.add_warning(f"Unsupported Object Info output socket: {output_socket.name}", obj_name=obj_name)
+            return ERROR_VALUE
+    elif node.bl_idname == "ShaderNodeHairInfo":
+        prefix = "scene.textures."
+        definitions = {}
+
+        if output_socket.name == "Intercept":
+            # Normalized position along the strand (0 = root, 1 = tip), written
+            # by the strands tessellation into vertex AOV layer
+            # HAIR_STRAND_U_DATA_INDEX (see slg/shapes/strands.h).
+            definitions["type"] = "hitpointvertexaov"
+            definitions["dataindex"] = 7
+        elif output_socket.name == "Random":
+            # Deterministic per-strand random in [0,1), written by the strands
+            # tessellation into vertex AOV layer HAIR_STRAND_RANDOM_DATA_INDEX.
+            definitions["type"] = "hitpointvertexaov"
+            definitions["dataindex"] = 0
+        elif output_socket.name == "Is Strand":
+            # HairInfo is only meaningful on strand geometry, where every
+            # shaded point is a strand.
+            definitions["type"] = "constfloat1"
+            definitions["value"] = 1.0
+        else:
+            LuxCoreErrorLog.add_warning(
+                f"Unsupported Hair Info output socket: {output_socket.name}",
+                obj_name=obj_name)
             return ERROR_VALUE
     elif node.bl_idname == "ShaderNodeBlackbody":
         temperature_socket = node.inputs["Temperature"]
