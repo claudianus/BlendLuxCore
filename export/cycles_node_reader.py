@@ -409,12 +409,11 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 definitions["vroughness"] = roughness
         else:
             definitions = {
-                # TODO:
-                #  - subsurface
-                #  - clearcoat roughness (we have clearcoat gloss, probably need to invert or something)
-                #  - clearcoat normal (no idea)
-                #  - tangent (no idea)
-                #  - transmission roughness (weird thing, might require rough glass + glossy coating?)
+                # TODO (needs OpenPBR material — no Disney params):
+                #  - subsurface radius/scale/IOR (Disney has weight only)
+                #  - coat IOR / coat tint / coat normal
+                #  - sheen roughness, diffuse roughness
+                #  - anisotropic rotation, tangent, thin wall
                 "type": "disney",
                 "basecolor": base_color,
                 "subsurface": _socket(node.inputs["Subsurface Weight"], props, material, obj_name, group_node_stack),
@@ -435,66 +434,39 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 }) if node.inputs["Coat Roughness"].is_linked
                     or node.inputs["Coat Roughness"].default_value != 0.0
                     else 1.0,
+                # Integrated dielectric transmission lobe (no disney+glass
+                # mix hack): weight, roughness and IOR map directly.
+                "transmission": transmission,
+                "ior": _socket(node.inputs["IOR"], props, material, obj_name, group_node_stack),
             }
-            
-            # Metallic values > 0 reduce transmission. At metallic = 1, no transmission happens at all
-            if metallic != 1 and (transmission_socket.is_linked or transmission_socket.default_value > 0):
-                luxcore_name_disney = luxcore_name + "_disney"
-                props.Set(utils.luxutils.create_props(prefix + luxcore_name_disney + ".", definitions))
-                
-                # Glass/Roughglass
-                luxcore_name_glass = luxcore_name + "_glass"
-                roughness = _squared_roughness_to_linear(node.inputs["Roughness"], props, material,
-                                                         luxcore_name_glass, obj_name, group_node_stack)
 
-                definitions = {
-                    "type": "glass" if roughness == 0 else "roughglass",
-                    "kt": base_color,
-                    "kr": [1, 1, 1],
-                    "interiorior": _socket(node.inputs["IOR"], props, material, obj_name, group_node_stack),
-                }
+            # Transmission Roughness: Principled default 0 (sharp). Always emit
+            # the socket value — the Disney material otherwise falls back to
+            # the base roughness, which would break sharp-transmission looks.
+            tr_roughness_socket = node.inputs.get("Transmission Roughness")
+            if tr_roughness_socket is not None:
+                definitions["transmissionroughness"] = _socket(
+                    tr_roughness_socket, props, material, obj_name, group_node_stack
+                )
 
-                if roughness != 0:
-                    definitions["uroughness"] = roughness
-                    definitions["vroughness"] = roughness
-                
-                props.Set(utils.luxutils.create_props(prefix + luxcore_name_glass + ".", definitions))
-                
-                # Calculate mix amount
-                # metallic 1, transmission whatever -> mix_amount = 0
-                # metallic 0, transmission whatever -> mix_amount = transmission
-                # so: result = transmission * (1 - metallic)
-                if _is_textured(metallic) or _is_textured(transmission):
-                    if _is_textured(metallic):
-                        inverted_metallic = luxcore_name + "inverted_metallic"
-                        tex_prefix = "scene.textures." + inverted_metallic + "."
-                        tex_definitions = {
-                            "type": "subtract",
-                            "texture1": 1,
-                            "texture2": metallic,
-                        }
-                        props.Set(utils.luxutils.create_props(tex_prefix, tex_definitions))
-                    else:
-                        inverted_metallic = 1 - metallic
-                        
-                    mix_amount = luxcore_name + "mix_amount"
-                    tex_prefix = "scene.textures." + mix_amount + "."
-                    tex_definitions = {
-                        "type": "scale",
-                        "texture1": inverted_metallic,
-                        "texture2": transmission,
-                    }
-                    props.Set(utils.luxutils.create_props(tex_prefix, tex_definitions))
-                else:
-                    mix_amount = transmission * (1 - metallic)
-                
-                # Mix
-                definitions = {
-                    "type": "mix",
-                    "material1": luxcore_name_disney,
-                    "material2": luxcore_name_glass,
-                    "amount": mix_amount,
-                }
+            # Thin film (Principled v2): thickness + IOR -> Disney film params
+            tf_thickness_socket = node.inputs.get("Thin Film Thickness")
+            if tf_thickness_socket is not None and (
+                tf_thickness_socket.is_linked
+                or tf_thickness_socket.default_value != 0.0
+            ):
+                definitions["filmamount"] = 1.0
+                definitions["filmthickness"] = _socket(
+                    tf_thickness_socket, props, material, obj_name, group_node_stack
+                )
+                tf_ior_socket = node.inputs.get("Thin Film IOR")
+                if tf_ior_socket is not None and (
+                    tf_ior_socket.is_linked
+                    or tf_ior_socket.default_value != 1.33
+                ):
+                    definitions["filmior"] = _socket(
+                        tf_ior_socket, props, material, obj_name, group_node_stack
+                    )
         
         # Attach these props to the right-most material node (regardless if it's glass, disney or a mix mat)
         # Principled v2: emission = Emission Color * Emission Strength
