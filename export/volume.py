@@ -88,8 +88,8 @@ def _resolve_frame_filepath(vol_data, scene):
 
 def _pick_grids(filepath):
     """
-    Returns (density_grid, color_grid) — names of the grids used for
-    the density and scattering albedo. Either may be None.
+    Returns (density_grid, color_grid, fire_grid) — names of the grids used
+    for the density, scattering albedo and fire emission. Either may be None.
     """
     try:
         names = list(pyluxcore.GetOpenVDBGridNames(filepath))
@@ -101,7 +101,14 @@ def _pick_grids(filepath):
 
     density = "density" if "density" in names else names[0]
     color = "color" if "color" in names else None
-    return density, color
+    # Fire emission source. "flame" (Mantaflow) is normalized to [0,1]; fall
+    # back to "temperature"/"heat" if that is what the file stores.
+    fire = None
+    for candidate in ("flame", "temperature", "heat"):
+        if candidate in names:
+            fire = candidate
+            break
+    return density, color, fire
 
 
 def convert_volume_obj(
@@ -136,7 +143,7 @@ def convert_volume_obj(
         return None
 
     try:
-        density_grid, color_grid = _pick_grids(filepath)
+        density_grid, color_grid, fire_grid = _pick_grids(filepath)
     except Exception as e:
         LuxCoreErrorLog.add_warning('Volume object "%s": %s' % (obj.name, e))
         return None
@@ -290,6 +297,42 @@ def convert_volume_obj(
             )
         )
 
+    # Fire emission: map the flame/temperature grid through a blackbody-style
+    # colour ramp. The ramp is black where there is no fire, so it supplies
+    # both the emission colour and the spatial fire mask in one texture.
+    tex_emission = [0.0, 0.0, 0.0]
+    if fire_grid:
+        tex_fire = obj_key + "_fire"
+        fire_defs = dict(tex_defs)
+        fire_defs["openvdb.grid"] = fire_grid
+        props.Set(
+            utils.luxutils.create_props("scene.textures.%s." % tex_fire, fire_defs)
+        )
+
+        tex_emission = obj_key + "_emission"
+        props.Set(
+            utils.luxutils.create_props(
+                "scene.textures.%s." % tex_emission,
+                {
+                    "type": "band",
+                    "amount": tex_fire,
+                    "interpolation": "linear",
+                    "offset0": 0.0,
+                    "value0": [0.0, 0.0, 0.0],
+                    "offset1": 0.2,
+                    "value1": [0.6, 0.03, 0.0],
+                    "offset2": 0.4,
+                    "value2": [2.0, 0.3, 0.0],
+                    "offset3": 0.6,
+                    "value3": [5.0, 1.5, 0.15],
+                    "offset4": 0.8,
+                    "value4": [10.0, 5.0, 1.0],
+                    "offset5": 1.0,
+                    "value5": [16.0, 12.0, 6.0],
+                },
+            )
+        )
+
     # Step size: user override via the Blender volume render step size
     # (world-space only), otherwise the smallest world-space cell size.
     res = (nx, ny, nz)
@@ -321,7 +364,7 @@ def convert_volume_obj(
                 "absorption": [0.0, 0.0, 0.0],
                 "scattering": tex_scatter,
                 "asymmetry": [0.0, 0.0, 0.0],
-                "emission": [0.0, 0.0, 0.0],
+                "emission": tex_emission,
                 "steps.size": step_size,
                 "steps.maxcount": maxcount,
                 "multiscattering": 0,
