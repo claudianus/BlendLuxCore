@@ -22,7 +22,13 @@ from . import (
     mesh_converter,
 )
 from .light import WORLD_BACKGROUND_LIGHT_NAME
-from .caches.object_cache import supports_live_transform
+from .caches.object_cache import (
+    supports_live_transform,
+    uses_displacement,
+    get_material,
+    define_shapes,
+    _apply_cycles_displacement,
+)
 from .caches import persistent_scene
 
 if _needs_reload:
@@ -196,6 +202,7 @@ class Exporter(object):
         pkey = None
         pentry = None
         transform_deltas = set()
+        geometry_keys = set()
         material_dirty = False
         mb_sig = (False, 0)
         camera_sig = None
@@ -259,6 +266,20 @@ class Exporter(object):
                 )
                 pentry = persistent_scene.get(pkey)
                 if pentry is not None:
+                    # Replay the wrapper-shape chain on the current
+                    # node trees: material edits can add/remove shape
+                    # wrappers (e.g. displacement), which a material
+                    # delta alone cannot create in the cached scene.
+                    _eval_shape = {
+                        utils.make_key(o): o
+                        for o in depsgraph.objects
+                    }
+                    _shape_now = {
+                        k: self._shape_stack_sig(
+                            _eval_shape.get(k), depsgraph, meta[3]
+                        )
+                        for k, meta in pentry["geo_meta"].items()
+                    }
                     if (
                         pentry["mb_sig"] != mb_sig
                         or pentry["camera_sig"] != camera_sig
@@ -284,11 +305,18 @@ class Exporter(object):
                         # changed — object-side definitions a material
                         # delta cannot reach
                         pentry = None
+                    elif _shape_now != pentry["shape_sig"]:
+                        # A material edit changed the required wrapper
+                        # shape stack (e.g. displacement added) — a
+                        # material delta cannot create the missing
+                        # wrapper shapes, so rebuild.
+                        pentry = None
                     else:
                         (
                             _mode,
                             transform_deltas,
                             material_dirty,
+                            geometry_keys,
                         ) = persistent_scene.classify(
                             dirty, pentry, scene.camera
                         )
@@ -356,6 +384,16 @@ class Exporter(object):
         objects_start = time()
         if pentry is not None:
             try:
+                if geometry_keys:
+                    # In-place mesh re-definition; world-baked re-
+                    # exports already carry the current transform, so
+                    # those keys leave the transform-delta set.
+                    transform_deltas -= (
+                        self._apply_geometry_deltas(
+                            pentry, geometry_keys, depsgraph,
+                            luxcore_scene
+                        )
+                    )
                 self._apply_transform_deltas(
                     pentry, transform_deltas, depsgraph, luxcore_scene
                 )
@@ -368,6 +406,7 @@ class Exporter(object):
                 print(
                     "[Exporter] Persistent scene reuse:"
                     f" {len(transform_deltas)} transform delta(s),"
+                    f" {len(geometry_keys)} geometry delta(s),"
                     f" materials {'refreshed' if material_dirty else 'kept'},"
                     f" {len(pentry['objects'])} objects kept"
                 )
@@ -475,6 +514,20 @@ class Exporter(object):
                 and utils.make_key(o)
                 not in self.object_cache2.bake_matrices
             }
+            _eval_shape = {
+                utils.make_key(o): o for o in depsgraph.objects
+            }
+            _geo_meta = {
+                k: v
+                for k, v in self.object_cache2.obj_geo_meta.items()
+                if k in vis_sig
+            }
+            _shape_sig = {
+                k: self._shape_stack_sig(
+                    _eval_shape.get(k), depsgraph, meta[3]
+                )
+                for k, meta in _geo_meta.items()
+            }
             persistent_scene.store(
                 pkey,
                 luxcore_scene,
@@ -489,6 +542,8 @@ class Exporter(object):
                 depsgraph.scene.frame_current,
                 mat_sig,
                 slot_sig,
+                _geo_meta,
+                _shape_sig,
             )
 
         # Convert config at last because all lightgroups and passes have to be
@@ -713,6 +768,132 @@ class Exporter(object):
                     part.lux_obj, mat_list
                 )
             pentry["bake"][key] = new_matrix.copy()
+
+    def _apply_geometry_deltas(
+        self, pentry, geometry_keys, depsgraph, luxcore_scene
+    ):
+        """
+        Re-export the meshes of member objects whose geometry changed.
+
+        ``Scene.DefineMesh`` replaces a named mesh in place and rewires
+        every scene object referencing it — including triangle lights —
+        so a geometry delta is just a mesh re-export; object
+        definitions and material bindings stay untouched.
+
+        Returns the keys whose transform delta is subsumed (world-baked
+        meshes re-export with the current matrix). Raises on any
+        ineligible case, which the caller turns into a full rebuild —
+        importantly *before* deciding, since a re-defined base mesh
+        leaves wrapper shapes (displacement/pointiness/...) holding a
+        dangling source-mesh pointer.
+        """
+        eval_by_key = {
+            utils.make_key(o): o for o in depsgraph.objects
+        }
+        geo_meta = pentry["geo_meta"]
+        subsumed = set()
+        for key in geometry_keys:
+            meta = geo_meta.get(key)
+            exported = pentry["objects"].get(key)
+            if meta is None or exported is None:
+                raise ValueError(f"no geometry meta for {key}")
+            (
+                _src_ptr,
+                mesh_key,
+                use_instancing,
+                base_list,
+                wrapped,
+            ) = meta
+            if (
+                wrapped
+                or getattr(exported, "duplicate_count", 0)
+                or key not in pentry["delta_safe"]
+            ):
+                raise ValueError(
+                    f"{key}: wrappers/duplicates unsafe for mesh delta"
+                )
+            # Every object sharing this mesh_key must be wrapper-free,
+            # or its wrapper keeps a dangling source-mesh pointer.
+            for key2, meta2 in geo_meta.items():
+                if key2 != key and meta2[1] == mesh_key and meta2[4]:
+                    raise ValueError(
+                        f"{key}: shared-mesh user {key2} has wrappers"
+                    )
+            obj = eval_by_key.get(key)
+            if obj is None or obj.type != "MESH":
+                raise ValueError(f"{key}: not a mesh object")
+            # The instancing decision must match export time, or the
+            # recomputed mesh_key/shape names would not line up.
+            cur_instancing = (
+                utils.can_share_mesh(obj.original)
+                or uses_displacement(obj)
+                or (
+                    self.motion_blur_enabled
+                    and obj.luxcore.enable_motion_blur
+                )
+            )
+            if cur_instancing != use_instancing:
+                raise ValueError(f"{key}: instancing decision changed")
+            new_mesh = mesh_converter.convert(
+                obj,
+                mesh_key,
+                depsgraph,
+                luxcore_scene,
+                False,
+                use_instancing,
+                obj.matrix_world,
+                self,
+            )
+            if {n for n, _m in new_mesh.mesh_definitions} != {
+                n for n, _m in base_list
+            }:
+                # A slot became (un)used — part names shifted, so the
+                # scene now holds stale object definitions.
+                raise ValueError(f"{key}: submesh set changed")
+            self.object_cache2.exported_meshes[mesh_key] = new_mesh
+            if not use_instancing:
+                # The re-export already baked the current matrix into
+                # the mesh verts — no separate transform delta needed.
+                subsumed.add(key)
+                pentry["bake"][key] = obj.matrix_world.copy()
+        return subsumed
+
+    def _shape_stack_sig(self, obj, depsgraph, base_list):
+        """
+        Recompute the wrapper-shape chain a member object's materials
+        would produce today.
+
+        Material edits can change the shape stack — adding a
+        displacement link or a luxcore shape node means a *new* wrapper
+        shape is required, which a material re-export alone cannot
+        create. Replaying the same functions the export path uses into
+        a scratch Properties catches both name-level (added/removed
+        wrappers) and value-level (displacement scale) changes; on any
+        failure the caller must rebuild, so ``None`` is a never-match
+        sentinel rather than an error.
+        """
+        try:
+            scratch = pyluxcore.Properties()
+            shapes = []
+            for base_name, mat_index in base_list:
+                mat = get_material(obj, mat_index, depsgraph)
+                node_tree = (
+                    mat.original.luxcore.node_tree
+                    if mat is not None
+                    else None
+                )
+                if node_tree:
+                    shape = define_shapes(
+                        base_name, node_tree, self, depsgraph, scratch
+                    )
+                else:
+                    shape = _apply_cycles_displacement(
+                        base_name, obj, mat_index, depsgraph, scratch
+                    )
+                shapes.append(shape)
+            return (tuple(shapes), str(scratch))
+        except Exception:
+            return None
 
     def _reexport_scene_materials(self, depsgraph, luxcore_scene):
         """

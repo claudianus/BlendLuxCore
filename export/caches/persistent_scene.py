@@ -32,7 +32,8 @@ _KIND_OBJECT = 0
 _KIND_IGNORE = 1
 _KIND_MATERIAL_ECHO = 2
 _KIND_MATERIAL = 3
-_KIND_REBUILD = 4
+_KIND_GEOMETRY = 4
+_KIND_REBUILD = 5
 
 # Datablock types whose updates do not require a scene rebuild: either
 # they are re-exported every render anyway (World, Camera data, Scene
@@ -103,18 +104,21 @@ def on_depsgraph_update(scene, depsgraph):
         elif isinstance(
             id_block, (bpy.types.Mesh, bpy.types.NodeTree)
         ):
-            # Mesh/NodeTree datablocks ride along with material edits
-            # (shading-only flags). They are only an *echo*: a world or
-            # light node tree looks identical here, so the echo is
-            # compatible with a material delta but may never trigger
-            # one — classify() rebuilds when no Material datablock
-            # accompanies it. Geometry/transform flags stay a hard
-            # rebuild.
-            kind = (
-                _KIND_MATERIAL_ECHO
-                if not flags & ~FLAG_SHADING
-                else _KIND_REBUILD
-            )
+            if not flags & ~FLAG_SHADING:
+                # Mesh/NodeTree datablocks ride along with material
+                # edits (shading-only flags). They are only an *echo*:
+                # a world or light node tree looks identical here, so
+                # the echo is compatible with a material delta but may
+                # never trigger one — classify() rebuilds when no
+                # Material datablock accompanies it.
+                kind = _KIND_MATERIAL_ECHO
+            elif isinstance(id_block, bpy.types.Mesh):
+                # A Mesh datablock with geometry flags: classify()
+                # resolves it to member objects via geo_meta (no member
+                # uses it -> hard rebuild).
+                kind = _KIND_GEOMETRY
+            else:
+                kind = _KIND_REBUILD
         else:
             kind = _KIND_REBUILD
         # DepsgraphUpdate.id is the *evaluated* datablock: the original
@@ -144,7 +148,7 @@ def get(key):
 
 def store(key, luxcore_scene, exported_objects, member_keys,
           bake_matrices, member_mats, mb_sig, camera_sig, world_sig,
-          vis_sig, frame, mat_sig, slot_sig):
+          vis_sig, frame, mat_sig, slot_sig, geo_meta, shape_sig):
     _entries[key] = {
         "scene": luxcore_scene,
         # frame at export time: frame_set() moves animated objects
@@ -180,6 +184,18 @@ def store(key, luxcore_scene, exported_objects, member_keys,
         # object-side definitions a material delta cannot reach
         "mat_sig": mat_sig,
         "slot_sig": slot_sig,
+        # {obj_key: (mesh src ptr, mesh_key, use_instancing,
+        # base shape names, has wrapper shapes)} — geometry-delta
+        # eligibility: DefineMesh replaces a named mesh in place and
+        # rewires every object referencing it (incl. triangle lights),
+        # but wrapper shapes hold raw source-mesh pointers it cannot
+        # fix, so they are excluded here and re-checked at apply time
+        "geo_meta": geo_meta,
+        # {obj_key: (expected shape chain, wrapper prop string)} —
+        # replayed at reuse because material edits can add/remove
+        # wrapper shapes (displacement, pointiness...) that neither a
+        # material delta nor slot signatures can see
+        "shape_sig": shape_sig,
     }
 
 
@@ -196,21 +212,25 @@ def classify(dirty, entry, camera_obj=None):
     """
     Decide how the cached scene can be reused.
 
-    Returns (mode, transform_deltas, material_dirty):
+    Returns (mode, transform_deltas, material_dirty, geometry_keys):
       mode "full"      — entry unusable, run first_run and rebuild it
       mode "reuse"     — dirty set empty/ignorable + membership intact
-      mode "delta"     — reuse + per-object transform updates
-    transform_deltas is a set of obj_keys needing transform updates
-    (filled for "delta", empty otherwise); material_dirty asks the
-    exporter to re-export every member material in place (material
-    re-definition is supported by Scene.Parse).
+      mode "delta"     — reuse + per-object deltas
+    transform_deltas is a set of obj_keys needing transform updates,
+    geometry_keys a set of obj_keys whose mesh can be re-DefineMesh'ed
+    in place (final eligibility — wrappers, shared meshes, submesh
+    count — is re-verified at apply time, which falls back to "full"
+    on any mismatch); material_dirty asks the exporter to re-export
+    every member material in place (material re-definition is
+    supported by Scene.Parse).
     """
     if entry is None:
-        return "full", set(), False
+        return "full", set(), False, set()
 
     camera_ptr = camera_obj.original.as_pointer() if camera_obj else None
 
     transform_keys = set()
+    geometry_keys = set()
     material_dirty = False
     material_echo = False
     for ptr, (flags, kind) in dirty.items():
@@ -227,8 +247,20 @@ def classify(dirty, entry, camera_obj=None):
             # node trees produce the same shape and must rebuild.
             material_echo = True
             continue
+        if kind == _KIND_GEOMETRY:
+            # A Mesh datablock changed geometry: resolve to the member
+            # objects that source it. No user -> unexportable change.
+            users = {
+                key
+                for key, meta in entry["geo_meta"].items()
+                if meta[0] == ptr
+            }
+            if not users:
+                return "full", set(), False, set()
+            geometry_keys |= users
+            continue
         if kind != _KIND_OBJECT:
-            return "full", set(), False
+            return "full", set(), False, set()
         if ptr == camera_ptr:
             # The render camera is re-exported every render, so its
             # updates never need a scene delta.
@@ -236,10 +268,12 @@ def classify(dirty, entry, camera_obj=None):
         key = str(ptr)
         exported = entry["objects"].get(key)
         if flags & ~(FLAG_TRANSFORM | FLAG_SHADING):
-            # Geometry (or anything else) on an object needs a rebuild;
-            # shading+transform together are fine (verified empirically:
-            # slot reassignment also flags geometry, so it lands here).
-            return "full", set(), False
+            # Geometry on an object: a candidate for an in-place mesh
+            # re-definition (verified at apply time). The camera is
+            # exempted above; slot reassignment lands here too and is
+            # filtered out by the slot_sig check upstream.
+            geometry_keys.add(key)
+            continue
         if flags & FLAG_SHADING:
             # Object-side shading echo — same trigger rule as
             # Mesh/NodeTree echoes: a material delta only runs when a
@@ -258,7 +292,7 @@ def classify(dirty, entry, camera_obj=None):
                 # transform path), an instancer/pointcloud (its
                 # duplicate set can move too), or a type whose
                 # transform cannot be updated in place.
-                return "full", set(), False
+                return "full", set(), False, set()
             transform_keys.add(key)
 
     if material_echo and not material_dirty:
@@ -266,11 +300,13 @@ def classify(dirty, entry, camera_obj=None):
         # datablock update: the change is something a material
         # re-export cannot cover (world/light node tree, object-side
         # shading props) — rebuild conservatively.
-        return "full", set(), False
+        return "full", set(), False, set()
 
     return (
-        "delta" if transform_keys or material_dirty else "reuse"
-    ), transform_keys, material_dirty
+        "delta"
+        if transform_keys or material_dirty or geometry_keys
+        else "reuse"
+    ), transform_keys, material_dirty, geometry_keys
 
 
 # ------------------------------------------------------------------

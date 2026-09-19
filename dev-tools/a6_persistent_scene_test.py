@@ -4,7 +4,7 @@
 #   R1  first render            -> full export, scene cached
 #   R2  unchanged re-render     -> cached pyluxcore.Scene reused as-is
 #   R3  object moved            -> transform-only delta on the same Scene
-#   R4  mesh edited via bmesh   -> full rebuild (new Scene object)
+#   R4  mesh edited via bmesh   -> in-place mesh delta (same Scene)
 #   R5  unchanged re-render     -> new cache entry reused
 #   R6  hide_render toggled     -> visibility signature mismatch, rebuild
 #   R7  camera moved            -> same Scene reused (camera re-exported)
@@ -17,6 +17,7 @@
 #   M2  material renamed        -> rebuild (LuxCore name changes)
 #   M3  slot reassigned         -> rebuild (geometry flags)
 #   M4  driver-animated color   -> frame change keeps Scene, refreshes
+#   M5  displacement node added -> shape signature mismatch, rebuild
 #
 # Run headless:
 #   blender --background --factory-startup \
@@ -208,11 +209,14 @@ check(
     ),
 )
 
-# ---------- R4: geometry edit -> full rebuild ----------
+# ---------- R4: geometry edit -> in-place mesh delta -----------------
+# A bmesh edit dirties the Mesh datablock (+object geometry flag):
+# DefineMesh replaces the named shapes in place, so the same Scene
+# survives with updated geometry.
 bm = bmesh.new()
 bm.from_mesh(cube.data)
 bmesh.ops.translate(
-    bm, vec=mathutils.Vector((0, 0, 0.4)), verts=bm.verts[:4]
+    bm, vec=mathutils.Vector((0, 0, 0.9)), verts=bm.verts[:4]
 )
 bm.to_mesh(cube.data)
 bm.free()
@@ -222,8 +226,8 @@ render("r4")
 entry = entry_of(persistent_scene)
 scene_r4 = entry["scene"]
 check(
-    "R4: geometry edit rebuilt the cached scene",
-    scene_r4 is not scene_r1,
+    "R4: geometry edit applied in-place mesh delta",
+    scene_r4 is scene_r1,
 )
 
 # ---------- R5: reuse of the rebuilt entry ----------
@@ -381,6 +385,31 @@ check(
     entry["scene"] is scene_m3,
 )
 
+# ---------- M5: displacement added -> shape signature rebuild ---------
+# A Displacement output link on the *assigned* material means the
+# object's shape needs a wrapper shape (scene.shapes.*_disp*) that a
+# material delta cannot create — the replayed shape signature must
+# catch it and rebuild. (mat is assigned to both cube and plane; the
+# renamed mat2 is unreferenced since M3, so it must be mat here.)
+out_node = mat.node_tree.nodes["Material Output"]
+disp_node = mat.node_tree.nodes.new("ShaderNodeDisplacement")
+disp_node.inputs["Scale"].default_value = 0.3
+noise_node = mat.node_tree.nodes.new("ShaderNodeTexNoise")
+mat.node_tree.links.new(
+    noise_node.outputs["Fac"], disp_node.inputs["Height"]
+)
+mat.node_tree.links.new(
+    disp_node.outputs["Displacement"],
+    out_node.inputs["Displacement"],
+)
+bpy.context.view_layer.update()
+render("m5")
+entry = entry_of(persistent_scene)
+check(
+    "M5: displacement node rebuilt the scene",
+    entry["scene"] is not scene_m3,
+)
+
 # ---------- image comparisons ----------
 p = lambda tag: os.path.join(OUT_DIR, f"a6test_{tag}.png")
 mean, frac = image_stats(p("r1"), p("r2"))
@@ -395,9 +424,15 @@ check(
     mean > 0.02 and frac > 0.05,
     f"mean={mean:.4f} changed={frac:.3f}",
 )
+mean, frac = image_stats(p("r3"), p("r4"))
+check(
+    "R3!=R4 images differ (geometry delta applied)",
+    mean > 0.02 and frac > 0.05,
+    f"mean={mean:.4f} changed={frac:.3f}",
+)
 mean, frac = image_stats(p("r4"), p("r5"))
 check(
-    "R4~R5 images match (rebuilt scene reused)",
+    "R4~R5 images match (delta'd scene reused)",
     mean < 0.02 and frac < 0.05,
     f"mean={mean:.4f} changed={frac:.3f}",
 )

@@ -144,6 +144,38 @@ though most objects are static between frames.
     (per-object slot material/link layout) catches binding edits.
     Both force a rebuild; slot reassignment additionally flags
     geometry anyway.
+- **Shape-stack signature guards material edits that change the
+  wrapper chain** — adding a displacement link or a luxcore shape
+  node means the object needs a *new* `scene.shapes.*` wrapper a
+  material delta cannot create (the cached scene has no such shape).
+  `_shape_stack_sig()` replays the same `define_shapes`/
+  `_apply_cycles_displacement` functions the export uses into a
+  scratch `Properties`; the replayed `(shape names, prop string)`
+  per member is compared at reuse and any mismatch rebuilds. This
+  catches added/removed wrappers and value changes alike, and uses
+  the export's own code path so it cannot drift from it.
+- **Mesh geometry deltas ride on `Scene.DefineMesh`
+  re-definition** — `DefineMesh` on an existing shape name replaces
+  the mesh in place, updates every scene object's mesh reference,
+  and rewires triangle lights for emissive materials. A dirty
+  `Mesh` datablock resolves to its member objects via stored
+  `geo_meta`; a geometry-flagged object becomes a candidate
+  directly. Final eligibility is re-verified at apply time (any
+  failure discards the scene and falls back to a full export):
+  - the object must be a `MESH` type, delta-safe, and free of
+    `dupli`/`duplicate` sub-objects;
+  - **no wrapper shapes anywhere on the shared mesh** — wrapper
+    shapes (displacement/pointiness/…) hold raw source-mesh pointers
+    `UpdateMeshReferences` cannot rewire, so a replaced base mesh
+    would leave them dangling;
+  - the instancing decision (`can_share_mesh`/displacement/motion
+    blur) must be unchanged, or the recomputed `mesh_key` and shape
+    names would not line up;
+  - the re-exported submesh set must be identical (a slot becoming
+    (un)used shifts part names).
+  World-baked meshes re-export with the current `matrix_world`, so
+  their transform delta is subsumed; instanced exports keep the
+  object transform and still take `UpdateObjectTransformation`.
 
 ## Phasing
 
@@ -154,12 +186,13 @@ though most objects are static between frames.
 2. ~~depsgraph_update_post dirty set + per-object transform delta~~ —
    done for transform-only changes on delta-safe types (MESH-family:
    instanced exports get the absolute matrix, world-baked exports get
-   `new @ old.inverted()` via `UpdateObjectTransformation`). Geometry/
-   shading dirt, non-object datablock dirt, new/removed objects,
-   instancers, lights and volumes still take the full-export path.
+   `new @ old.inverted()` via `UpdateObjectTransformation`).
+   Non-object datablock dirt, new/removed objects, instancers,
+   lights and volumes still take the full-export path; geometry and
+   shading dirt gained dedicated delta paths in items 3–4.
    Verified headless: repeated F12 reuses the scene (identical
    image), a moved object applies one transform delta (image shows
-   the move), a bmesh edit triggers a full rebuild and re-cache.
+   the move), a bmesh edit updates the mesh in place.
 3. ~~Material-only delta~~ — done: dirty `Material` datablocks re-
    export all member materials via `Scene.Parse` re-definition on the
    cached scene; shading echoes without a `Material` trigger, material
@@ -169,7 +202,17 @@ though most objects are static between frames.
    `dev-tools/a6_persistent_scene_test.py`): color edit keeps the
    Scene and changes the image; rename/slot-swap rebuild; animated
    material refreshes across a frame change.
-4. Extend to CURVES/POINTCLOUD/VOLUME and instancer re-flush.
+4. ~~Mesh geometry delta~~ — done: dirty `Mesh` datablocks and
+   geometry-flagged objects re-`DefineMesh` their named shapes in
+   place (object references and triangle lights rewire themselves).
+   Eligibility is re-verified at apply time — MESH type, delta-safe,
+   no wrappers on the shared mesh, unchanged instancing decision,
+   identical submesh set — and any failure discards the scene for a
+   full export. A `shape_sig` replay of the wrapper chain guards
+   material edits that add/remove `scene.shapes.*` wrappers. Verified
+   headless (R4, M5): a bmesh edit keeps the Scene and changes the
+   image; adding a Displacement link rebuilds.
+5. Extend to CURVES/POINTCLOUD/VOLUME and instancer re-flush.
 5. Validation: repeated F12 timing, animation-sequence render timing,
    correctness diff (same outputs as full export) on the A6 benchmark
    scenes (500k duplis, 1M-strand hair, classroom).

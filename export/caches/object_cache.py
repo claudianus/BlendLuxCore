@@ -408,6 +408,10 @@ class ObjectCache2:
         # {obj_key: (baked matrix_world, delta-safe)} used by the
         # persistent-scene cache for transform-only deltas (A6-II).
         self.bake_matrices = {}
+        # {obj_key: (mesh src ptr, mesh_key, use_instancing, base shape
+        # names, has wrapper shapes)} — geometry-delta eligibility
+        # metadata for the persistent-scene cache (A6-III).
+        self.obj_geo_meta = {}
 
     def first_run(
         self,
@@ -1014,7 +1018,7 @@ class ObjectCache2:
 
             # mesh_definitions here is the local working copy (the mesh
             # cache keeps the pristine shapes for the next object).
-            return ExportedObject(
+            exported_obj = ExportedObject(
                 obj_key,
                 mesh_definitions,
                 mat_names,
@@ -1024,6 +1028,26 @@ class ObjectCache2:
                 ),
                 obj_id,
             )
+            # Geometry-delta metadata (A6-III): the ordered base shape
+            # list lets the persistent-scene delta re-DefineMesh in
+            # place and the shape signature replay the wrapper chain,
+            # while the wrapper flag excludes objects whose final
+            # shape is a derived wrapper (displacement/pointiness/...) —
+            # those hold a raw pointer to the base mesh that DefineMesh
+            # replacement cannot rewire.
+            base_list = list(exported_mesh.mesh_definitions)
+            base_names = {name for name, _m in base_list}
+            self.obj_geo_meta[obj_key] = (
+                obj.original.data.as_pointer() if obj.original.data else 0,
+                mesh_key,
+                use_instancing,
+                base_list,
+                any(
+                    part.lux_shape not in base_names
+                    for part in exported_obj.parts
+                ),
+            )
+            return exported_obj
 
     def diff(self, depsgraph):
         only_scene = len(depsgraph.updates) == 1 and isinstance(

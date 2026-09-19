@@ -113,12 +113,24 @@ gradients on CPU and Metal/OpenCL.
   ride along with a real `Material` update — an echo without one
   (e.g. a world node tree) rebuilds — and material identity
   (`mat_sig`, renames) plus slot topology (`slot_sig`) signatures keep
-  renames and binding edits on the rebuild path.
+  renames and binding edits on the rebuild path. A `shape_sig`
+  signature replays the wrapper-shape chain (`define_shapes`/
+  `_apply_cycles_displacement`) so material edits that add or remove
+  `scene.shapes.*` wrappers (e.g. a displacement link) rebuild instead
+  of going stale.
+  **Mesh geometry deltas**: a dirty `Mesh` datablock or
+  geometry-flagged object re-`DefineMesh`es its named shapes in place —
+  the engine rewires every referencing scene object and triangle light
+  itself. Eligibility is re-verified at apply time (MESH type,
+  delta-safe, no wrapper shapes on the shared mesh, unchanged
+  instancing decision, identical submesh set) and any failure falls
+  back to a full export.
   Design + rationale: `doc/incremental_export_design.md`.
   Regression: `dev-tools/a6_persistent_scene_test.py` (headless;
-  covers reuse, transform/material deltas, geometry rebuild,
-  re-cache, visibility/camera/world signature fallbacks, animated
-  transforms and animated materials, with image-diff assertions).
+  covers reuse, transform/material/geometry deltas, signature-driven
+  rebuilds (visibility, camera, world, material rename, slot
+  topology, shape stack), animated transforms and animated
+  materials, with image-diff assertions).
 
 ## UX — Quick Setup + viewport stability
 
