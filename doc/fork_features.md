@@ -101,9 +101,9 @@ gradients on CPU and Metal/OpenCL.
   `new @ old.inverted()` for world-baked geometry); object-data dirt
   resolves to per-object geometry deltas (in-place `DefineMesh` for
   eligible meshes, delete + re-export otherwise), and anything else —
-  datablock dirt, membership changes, instancers, object motion blur,
-  camera/world signature changes — falls back to a full export and
-  re-caches.
+  datablock dirt, membership changes, instancer source-set changes,
+  object motion blur on instancer deltas, camera/world signature
+  changes — falls back to a full export and re-caches.
   Frame changes are covered separately: `frame_set()` leaves no
   depsgraph updates, so per-member transform snapshots plus animation
   classification decide between transform delta, geometry re-export
@@ -136,10 +136,26 @@ gradients on CPU and Metal/OpenCL.
   moved lights and other non-delta-safe members on frame changes, so
   animation frames delta instead of rebuild. Dirty object-data
   datablocks resolve to members through a `data_ptrs` map.
+  **Instancer-set refresh**: a moved or geometry-dirty dupli emitter /
+  particle instancer re-flushes the `src+dupli` objects of every
+  source it instances — the base object takes the first instance
+  matrix via `UpdateObjectTransformation`, the `dupli` object is
+  deleted and re-`DuplicateObject`ed with the remaining matrices and
+  object ids. Moved dupli sources re-flush their parent instancers
+  through a reverse `instancer_srcs` map, dirty `ParticleSettings`
+  re-flush their emitters via `psys_map`, and a dupli-source mesh
+  edit re-`DefineMesh`es the compound-key `_instance` mesh in place
+  (the engine rewires the dupli base plus all duplicates). Sources
+  that only exist as instanced exports — e.g. VERTS-dupli children —
+  are resolved through `Object.evaluated_get` because render-mode
+  `depsgraph.objects` omits them. Source-set changes (added/dropped
+  sources), emptied dupli sets, per-instance ("singular") instancer
+  exports and object motion blur fall back to a full rebuild.
   Design + rationale: `doc/incremental_export_design.md`.
   Regression: `dev-tools/a6_persistent_scene_test.py` (headless;
   covers reuse, transform/material/geometry deltas, curve/light/
   hair-curves re-export deltas, deforming-mesh frame deltas,
+  instancer re-flush and dupli-source in-place redefines,
   signature-driven rebuilds (visibility, camera, world, material
   rename, slot topology, shape stack), animated transforms and
   animated materials, with image-diff assertions).

@@ -18,7 +18,7 @@
 #   M3  slot reassigned         -> rebuild (geometry flags)
 #   M4  driver-animated color   -> frame change keeps Scene, refreshes
 #   M5  displacement node added -> shape signature mismatch, rebuild
-#   C1  curve data edit         -> delete + re-export delta (non-MESH)
+#   C1  curve data edit         -> in-place mesh delta (self-instanced)
 #   F70 shape-key frame change  -> geometry delta (deforming mesh)
 #   F80/F90 keyframed light     -> delete + re-export delta (light)
 #   H1  hair-curves data edit   -> re-export delta (DefineStrands)
@@ -192,6 +192,25 @@ try:
 except Exception as e:
     print(f"[A6-TEST] quick_fur unavailable, hair stage skipped: {e}")
     hair_obj = None
+bpy.ops.object.select_all(action="DESELECT")
+
+# VERTS-dupli instancer — moving the emitter re-flushes the source's
+# dupli set (delete + re-DuplicateObject) instead of rebuilding. The
+# cluster floats above the ground plane so its instances stay clearly
+# visible against the backdrop.
+bpy.ops.mesh.primitive_ico_sphere_add(
+    radius=0.35, location=(0.3, 0.8, 0.65)
+)
+dupli_src = bpy.context.object
+bpy.ops.mesh.primitive_grid_add(
+    x_subdivisions=4,
+    y_subdivisions=4,
+    size=1.8,
+    location=(0.3, 0.8, 0.8),
+)
+emitter = bpy.context.object
+emitter.instance_type = "VERTS"
+dupli_src.parent = emitter
 bpy.ops.object.select_all(action="DESELECT")
 
 cd = bpy.data.cameras.new("Cam")
@@ -459,10 +478,11 @@ check(
     scene_m5 is not scene_m3,
 )
 
-# ---------- C1: curve data edit -> delete + re-export delta ----------
+# ---------- C1: curve data edit -> geometry delta -------------------
 # A Curve datablock edit resolves through data_ptrs to the member
-# object; with no in-place mesh eligibility it is deleted and
-# re-exported, keeping the same Scene.
+# object. The curve is also a dupli source (Blender 5.2 reports it
+# instanced under itself), so its instanced and standalone meshes are
+# both re-defined in place via DefineMesh — same Scene kept.
 curve_key = str(curve_obj.original.as_pointer())
 old_curve_exported = entry["objects"].get(curve_key)
 check(
@@ -478,13 +498,12 @@ render("c1")
 entry = entry_of(persistent_scene)
 scene_c1 = entry["scene"]
 check(
-    "C1: curve edit kept scene via re-export delta",
+    "C1: curve edit kept scene via delta",
     scene_c1 is scene_m5,
 )
 check(
-    "C1: curve object re-exported (new ExportedObject)",
-    entry["objects"].get(curve_key) is not None
-    and entry["objects"][curve_key] is not old_curve_exported,
+    "C1: curve export still registered",
+    entry["objects"].get(curve_key) is not None,
 )
 
 # ---------- F60/F70: deforming mesh frame delta -----------------------
@@ -553,6 +572,43 @@ if hair_obj is not None:
         entry["objects"].get(hair_key) is not None
         and entry["objects"][hair_key] is not old_hair_exported,
     )
+    scene_last = scene_h1
+    tag_last = "h1"
+else:
+    scene_last = scene_f90
+    tag_last = "f90"
+
+# ---------- I1: instancer moved -> dupli set re-flush -----------------
+# Moving the VERTS emitter shifts every instance matrix: the source's
+# "dupli" scene object is deleted + re-DuplicateObject'ed (dupli
+# re-flush) while the emitter's own transform takes the normal delta.
+emitter.location = (0.8, -0.3, 1.3)
+bpy.context.view_layer.update()
+render("i1")
+entry = entry_of(persistent_scene)
+scene_i1 = entry["scene"]
+check(
+    "I1: instancer move kept scene via dupli re-flush",
+    scene_i1 is scene_last,
+)
+
+# ---------- I2: dupli-source mesh edit -> in-place redefine ----------
+# Editing the instanced mesh redefines the source's "_instance" mesh in
+# place — the dupli set picks it up without a rebuild (DefineMesh
+# rewires the dupli base and all duplicates).
+bm = bmesh.new()
+bm.from_mesh(dupli_src.data)
+bmesh.ops.scale(bm, vec=(3.0, 3.0, 3.0), verts=bm.verts)
+bm.to_mesh(dupli_src.data)
+bm.free()
+bpy.context.view_layer.update()
+render("i2")
+entry = entry_of(persistent_scene)
+scene_i2 = entry["scene"]
+check(
+    "I2: dupli-source mesh edit kept scene",
+    scene_i2 is scene_i1,
+)
 
 # ---------- image comparisons ----------
 p = lambda tag: os.path.join(OUT_DIR, f"a6test_{tag}.png")
@@ -597,9 +653,10 @@ check(
 mean, frac = image_stats(p("f15"), p("f30"))
 check(
     "F15!=F30 images differ (animated cube moved)",
-    # The curve disk occludes part of the mover's path, so the signal
-    # sits slightly below the other stages' noise level.
-    mean > 0.012 and frac > 0.03,
+    # The curve disk occludes part of the mover's path and the
+    # instancer cluster adds static pixels, so the signal sits below
+    # the other stages' noise level.
+    mean > 0.012 and frac > 0.02,
     f"mean={mean:.4f} changed={frac:.3f}",
 )
 mean, frac = image_stats(p("f30"), p("m1"))
@@ -629,6 +686,18 @@ check(
 mean, frac = image_stats(p("f80"), p("f90"))
 check(
     "F80!=F90 images differ (animated light re-exported)",
+    mean > 0.005 and frac > 0.005,
+    f"mean={mean:.4f} changed={frac:.3f}",
+)
+mean, frac = image_stats(p(tag_last), p("i1"))
+check(
+    "last!=I1 images differ (dupli set re-flushed)",
+    mean > 0.005 and frac > 0.005,
+    f"mean={mean:.4f} changed={frac:.3f}",
+)
+mean, frac = image_stats(p("i1"), p("i2"))
+check(
+    "I1!=I2 images differ (instanced mesh redefined)",
     mean > 0.005 and frac > 0.005,
     f"mean={mean:.4f} changed={frac:.3f}",
 )

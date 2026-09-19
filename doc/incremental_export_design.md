@@ -242,10 +242,29 @@ though most objects are static between frames.
    (C1/F70/L80/L90/H1 in `dev-tools/a6_persistent_scene_test.py`):
    curve bevel edit, shape-keyed mesh across frames, keyframed light
    and a quick_fur hair-curves object all keep the Scene and change
-   the image. Remaining: instancer *set* re-flush (a dirty/moved
-   instancer still rebuilds — its dupli objects are separate scene
-   entries the per-object delta cannot reach).
-6. Validation: repeated F12 timing, animation-sequence render timing,
+   the image.
+6. Instancer-set re-flush — done: a moved/dirty instancer (dupli
+   emitter or particle system) re-flushes its sources' "src+dupli"
+   scene objects instead of rebuilding. first_run records
+   per-instancer source sets (instancer_srcs), sources with no
+   standalone export (dupli_srcs), singular per-instance exports
+   (instancer_singular) and ParticleSettings-to-instancer bindings
+   (psys_map); _refresh_dupli_sets rescans
+   depsgraph.object_instances, updates the base object's transform
+   to the first instance matrix and re-DuplicateObjects the rest
+   (typed array buffers, same as Duplis). A changed source set,
+   emptied set, non-instancing base or an object_blur session falls
+   back to rebuild. Dupli-source mesh edits re-DefineMesh the
+   source's compound-key "_instance" mesh in place — the engine
+   rewires the dupli base and every duplicate itself.
+   depsgraph.objects in render mode omits instanced-only members,
+   so all evaluated-object maps fill gaps through
+   Object.evaluated_get (_eval_object_map). Verified headless
+   (I1/I2 in dev-tools/a6_persistent_scene_test.py): moving a VERTS
+   emitter re-flushes the dupli set on the same Scene, and a bmesh
+   edit on the instanced source redefines its instanced mesh in
+   place — both change the image.
+7. Validation: repeated F12 timing, animation-sequence render timing,
    correctness diff (same outputs as full export) on the A6 benchmark
    scenes (500k duplis, 1M-strand hair, classroom). First numbers:
    `dev-tools/a6_benchmark.py` on a 1202-object ~2M-tri scene —

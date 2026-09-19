@@ -1,4 +1,5 @@
 from time import time
+from array import array
 import types
 
 _needs_reload = "bpy" in locals()
@@ -28,6 +29,7 @@ from .caches.object_cache import (
     uses_displacement,
     get_material,
     define_shapes,
+    make_psys_key,
     _apply_cycles_displacement,
 )
 from .caches import persistent_scene
@@ -76,6 +78,29 @@ def _camera_spec(camera_props):
         for line in str(camera_props).splitlines()
         if not line.startswith(volatile)
     )
+
+
+def _eval_object_map(depsgraph, scene, wanted):
+    """
+    {obj_key: evaluated object} for depsgraph.objects plus every
+    wanted key it omits.
+
+    A render-mode depsgraph skips objects that exist only as instance
+    sources (e.g. a VERTS-dupli child Blender never emits as its own
+    scene object): ``Object.evaluated_get`` still resolves them, and
+    the persistent-scene signatures (data_ptrs, shape_sig,
+    member_mats, frame_change matrix compares) depend on coverage of
+    every member.
+    """
+    by_key = {utils.make_key(o): o for o in depsgraph.objects}
+    for o in scene.objects:
+        key = utils.make_key(o)
+        if key not in by_key and key in wanted:
+            try:
+                by_key[key] = o.evaluated_get(depsgraph)
+            except Exception:
+                pass
+    return by_key
 
 
 class Change:
@@ -271,13 +296,26 @@ class Exporter(object):
                     # node trees: material edits can add/remove shape
                     # wrappers (e.g. displacement), which a material
                     # delta alone cannot create in the cached scene.
-                    _eval_shape = {
-                        utils.make_key(o): o
-                        for o in depsgraph.objects
+                    _eval_shape = _eval_object_map(
+                        depsgraph,
+                        scene,
+                        set(pentry["members"])
+                        | set(pentry["dupli_srcs"]),
+                    )
+                    # Compound keys of dupli sources resolve their
+                    # signature against the source's evaluated object.
+                    _dupli_eval = {
+                        ck: _eval_shape[sk]
+                        for sk, (_e, ck) in pentry[
+                            "dupli_srcs"
+                        ].items()
+                        if ck and sk in _eval_shape
                     }
                     _shape_now = {
                         k: self._shape_stack_sig(
-                            _eval_shape.get(k), depsgraph, meta[3]
+                            _eval_shape.get(k) or _dupli_eval.get(k),
+                            depsgraph,
+                            meta[3],
                         )
                         for k, meta in pentry["geo_meta"].items()
                     }
@@ -318,6 +356,7 @@ class Exporter(object):
                             transform_deltas,
                             material_dirty,
                             geometry_keys,
+                            instancer_keys,
                         ) = persistent_scene.classify(
                             dirty, pentry, scene.camera
                         )
@@ -331,10 +370,12 @@ class Exporter(object):
                             # leaving depsgraph updates — re-check every
                             # member against its stored transform and
                             # animation kind.
-                            eval_by_key = {
-                                utils.make_key(o): o
-                                for o in depsgraph.objects
-                            }
+                            eval_by_key = _eval_object_map(
+                                depsgraph,
+                                scene,
+                                set(pentry["members"])
+                                | set(pentry["dupli_srcs"]),
+                            )
                             _camera_key = (
                                 utils.make_key(scene.camera)
                                 if scene.camera
@@ -344,6 +385,7 @@ class Exporter(object):
                                 _rebuild,
                                 _moved,
                                 _geo_keys,
+                                _inst_keys,
                                 _mat_dirty,
                             ) = persistent_scene.frame_change(
                                 pentry, eval_by_key, _camera_key
@@ -353,6 +395,7 @@ class Exporter(object):
                             else:
                                 transform_deltas |= _moved
                                 geometry_keys |= _geo_keys
+                                instancer_keys |= _inst_keys
                                 material_dirty |= _mat_dirty
 
         luxcore_scene = (
@@ -388,15 +431,14 @@ class Exporter(object):
         if pentry is not None:
             try:
                 if geometry_keys:
-                    # In-place mesh re-definition; world-baked re-
-                    # exports already carry the current transform, so
-                    # those keys leave the transform-delta set.
-                    transform_deltas -= (
-                        self._apply_geometry_deltas(
-                            pentry, geometry_keys, depsgraph,
-                            luxcore_scene, view_layer, engine
-                        )
+                    # In-place mesh re-definition or delete + re-export;
+                    # both carry the current transform, so those keys
+                    # leave the transform-delta set.
+                    _subsumed = self._apply_geometry_deltas(
+                        pentry, geometry_keys, depsgraph,
+                        luxcore_scene, view_layer, engine
                     )
+                    transform_deltas -= _subsumed
                 self._apply_transform_deltas(
                     pentry, transform_deltas, depsgraph, luxcore_scene
                 )
@@ -404,12 +446,20 @@ class Exporter(object):
                     self._reexport_scene_materials(
                         depsgraph, luxcore_scene
                     )
+                # Instancer sets are flushed last: refreshed dupli
+                # bases must already exist for DuplicateObject to bind.
+                if instancer_keys:
+                    self._refresh_dupli_sets(
+                        pentry, instancer_keys, depsgraph,
+                        luxcore_scene
+                    )
                 pentry["frame"] = depsgraph.scene.frame_current
                 instances = {}
                 print(
                     "[Exporter] Persistent scene reuse:"
                     f" {len(transform_deltas)} transform delta(s),"
                     f" {len(geometry_keys)} geometry delta(s),"
+                    f" {len(instancer_keys)} instancer flush(es),"
                     f" materials {'refreshed' if material_dirty else 'kept'},"
                     f" {len(pentry['objects'])} objects kept"
                 )
@@ -498,6 +548,15 @@ class Exporter(object):
         # We can only duplicate the instances *after* the scene_props were
         # parsed so the base objects are available for luxcore_scene
         self.object_cache2.duplicate_instances(instances, luxcore_scene, stats)
+        # Dupli source objects need their "src+dupli" set re-flushed
+        # when an instancer changes — keep the source->(ExportedObject,
+        # compound obj_key) map for the persistent-scene delta path.
+        # None entries mark sources that were instanced but not
+        # exportable (first_run stores them as None).
+        _dupli_srcs = {
+            str(ptr): (d.exported_obj, d.obj_key) if d else (None, None)
+            for ptr, d in instances.items()
+        }
         # The instances dict can be quite large, delete explicitely (TODO maybe
         # even call gc.collect()?)
         del instances
@@ -513,36 +572,68 @@ class Exporter(object):
                 "[Exporter] Caching scene for persistent reuse:"
                 f" {len(self.object_cache2.exported_objects)} objects"
             )
+            _eval_shape = _eval_object_map(
+                depsgraph, scene, set(vis_sig) | set(_dupli_srcs)
+            )
             _member_mats = {
-                utils.make_key(o): o.matrix_world.copy()
-                for o in depsgraph.objects
-                if utils.make_key(o) in vis_sig
-                and utils.make_key(o)
-                not in self.object_cache2.bake_matrices
+                k: o.matrix_world.copy()
+                for k, o in _eval_shape.items()
+                if k in vis_sig
+                and k not in self.object_cache2.bake_matrices
             }
-            _eval_shape = {
-                utils.make_key(o): o for o in depsgraph.objects
+            # Dupli sources keep their instanced mesh under a compound
+            # obj_key — include their geo_meta so the delta path can
+            # redefine those meshes in place too.
+            _dupli_eval = {
+                ck: _eval_shape[sk]
+                for sk, (_e, ck) in _dupli_srcs.items()
+                if ck and sk in _eval_shape
             }
             _geo_meta = {
                 k: v
                 for k, v in self.object_cache2.obj_geo_meta.items()
-                if k in vis_sig
+                if k in vis_sig or k in _dupli_eval
             }
             _shape_sig = {
                 k: self._shape_stack_sig(
-                    _eval_shape.get(k), depsgraph, meta[3]
+                    _eval_shape.get(k) or _dupli_eval.get(k),
+                    depsgraph,
+                    meta[3],
                 )
                 for k, meta in _geo_meta.items()
             }
             # Original data pointer per member object — dirty data
             # datablocks (Mesh, Curves, Volume, ...) resolve to member
-            # objects through this map at reuse time.
+            # objects through this map at reuse time. Built from the
+            # original objects because depsgraph.objects can skip
+            # instanced-only members.
             _data_ptrs = {
-                k: o.original.data.as_pointer()
+                utils.make_key(o): o.data.as_pointer()
+                for o in scene.objects
+                if utils.make_key(o) in vis_sig
+                and getattr(o, "data", None) is not None
+            }
+            # Member instancers (dupli/particle emitters): their dirty
+            # flags re-flush affected dupli sets instead of rebuilding.
+            _instancers = {
+                k
                 for k, o in _eval_shape.items()
                 if k in vis_sig
-                and getattr(o.original, "data", None) is not None
+                and (
+                    o.instance_type != "NONE" or o.particle_systems
+                )
             }
+            # ParticleSettings ptr -> instancer key: a settings edit
+            # re-flushes the dupli sets of every instancer using it.
+            _psys_map = {}
+            for _o in scene.objects:
+                _ok = utils.make_key(_o)
+                if _ok in vis_sig:
+                    for _psys in _o.particle_systems:
+                        _s = getattr(_psys.settings, "original", None)
+                        _psys_map[
+                            (_s or _psys.settings).as_pointer()
+                        ] = _ok
             persistent_scene.store(
                 pkey,
                 luxcore_scene,
@@ -560,6 +651,11 @@ class Exporter(object):
                 _geo_meta,
                 _shape_sig,
                 _data_ptrs,
+                _instancers,
+                _dupli_srcs,
+                _psys_map,
+                self.object_cache2.instancer_srcs,
+                self.object_cache2.instancer_singular,
             )
 
         # Convert config at last because all lightgroups and passes have to be
@@ -765,15 +861,8 @@ class Exporter(object):
                 # same scene. Skip rather than corrupt the entry.
                 continue
             new_matrix = eval_obj.matrix_world
-            if (
-                eval_obj.instance_type != "NONE"
-                or eval_obj.particle_systems
-            ):
-                # An instancer's transform also moves its dupli/particle
-                # instance set, which a per-object delta cannot update.
-                raise RuntimeError(
-                    f"instancer '{eval_obj.name}' needs full export"
-                )
+            # An instancer's own transform is patchable here; its dupli
+            # set is flushed separately via _refresh_dupli_sets.
             if exported.transform is None:
                 delta = new_matrix @ pentry["bake"][key].inverted()
             else:
@@ -814,7 +903,10 @@ class Exporter(object):
             if key2 != key and meta2[1] == mesh_key and meta2[4]:
                 return False
         obj = eval_by_key.get(key)
-        if obj is None or obj.type != "MESH":
+        # All mesh-convertible types (MESH/CURVE/FONT/...) re-define
+        # through the same DefineMesh path; hair-curves objects carry
+        # no geo_meta entry and are excluded above.
+        if obj is None or obj.type not in utils.MESH_OBJECTS:
             return False
         # The instancing decision must match export time, or the
         # recomputed mesh_key/shape names would not line up.
@@ -849,17 +941,36 @@ class Exporter(object):
         through the normal conversion path, which also picks up the
         current transform.
 
-        Returns the keys whose transform delta is subsumed (all
+        Returns the set of keys whose transform delta is subsumed (all
         re-exports carry the current matrix). Raises on any failure,
         which the caller turns into a full rebuild.
         """
-        eval_by_key = {
-            utils.make_key(o): o for o in depsgraph.objects
-        }
+        eval_by_key = _eval_object_map(
+            depsgraph,
+            depsgraph.scene,
+            set(pentry["members"]) | set(pentry["dupli_srcs"]),
+        )
         geo_meta = pentry["geo_meta"]
         subsumed = set()
         reexport_keys = []
         for key in sorted(geometry_keys):
+            if key in pentry["dupli_srcs"]:
+                # A dupli source's instanced copy lives under a
+                # different mesh_key ("_instance" suffix) than its
+                # standalone export — redefine it in place as well so
+                # the whole dupli set follows the edit (DefineMesh
+                # rewires the dupli base and all duplicates).
+                if not self._dupli_src_inplace(
+                    pentry, key, eval_by_key, depsgraph, luxcore_scene
+                ):
+                    raise ValueError(
+                        f"{key}: dupli-source mesh cannot be redefined"
+                    )
+                if key not in pentry["objects"]:
+                    # Instancer-only source (e.g. a vert-dupli child
+                    # Blender never exports standalone): the instanced
+                    # mesh redefine covered everything.
+                    continue
             inplace = self._mesh_inplace_safe(
                 pentry, key, geo_meta, eval_by_key
             )
@@ -913,6 +1024,66 @@ class Exporter(object):
             )
         return subsumed
 
+    def _dupli_src_inplace(
+        self, pentry, key, eval_by_key, depsgraph, luxcore_scene
+    ):
+        """
+        In-place ``DefineMesh`` for a dupli source's *instanced* mesh.
+
+        The dupli set references the mesh under the compound key's
+        ``_instance`` mesh_key, which a plain-object re-definition does
+        not touch. Redefining it here rewires the dupli base object and
+        every duplicate sharing the shape name. Returns False when the
+        instanced mesh cannot be safely redefined (the caller rebuilds).
+        """
+        exported, compound_key = pentry["dupli_srcs"][key]
+        geo_meta = pentry["geo_meta"]
+        meta = geo_meta.get(compound_key)
+        obj = eval_by_key.get(key)
+        if (
+            exported is None
+            or meta is None
+            or obj is None
+            # All mesh-convertible types take the same DefineMesh path;
+            # hair-curves sources have no geo_meta entry and fail above.
+            or obj.type not in utils.MESH_OBJECTS
+        ):
+            return False
+        (
+            _src_ptr,
+            mesh_key,
+            use_instancing,
+            base_list,
+            wrapped,
+        ) = meta
+        if wrapped or not use_instancing:
+            return False
+        # Every object sharing this instanced mesh_key must be
+        # wrapper-free, or its wrapper keeps a dangling source-mesh
+        # pointer.
+        for k2, meta2 in geo_meta.items():
+            if k2 != compound_key and meta2[1] == mesh_key and meta2[4]:
+                return False
+        try:
+            new_mesh = mesh_converter.convert(
+                obj,
+                mesh_key,
+                depsgraph,
+                luxcore_scene,
+                False,
+                use_instancing,
+                obj.matrix_world,
+                self,
+            )
+            if {n for n, _m in new_mesh.mesh_definitions} != {
+                n for n, _m in base_list
+            }:
+                return False
+        except Exception:
+            return False
+        self.object_cache2.exported_meshes[mesh_key] = new_mesh
+        return True
+
     def _reexport_objects(
         self,
         pentry,
@@ -964,6 +1135,12 @@ class Exporter(object):
                 random_id=0,
                 matrix_world=matrix,
             )
+            if key in pentry["dupli_srcs"]:
+                # A dupli source's ExportedObject is registered under a
+                # compound instance key and carries the first instance's
+                # transform — the plain-object re-export would corrupt
+                # both. Dupli sources rebuild conservatively.
+                raise ValueError(f"{key}: dupli source re-export unsafe")
             exported = pentry["objects"].get(key)
             if exported is not None:
                 exported.delete(luxcore_scene)
@@ -983,6 +1160,13 @@ class Exporter(object):
                 if k == key or k.startswith(key + "_")
             ):
                 cache.exported_hair.pop(hkey, None)
+            # Particle hair is cached under a name-based psys key —
+            # drop the entries of this object's particle systems.
+            for _psys in eval_obj.particle_systems:
+                for _inst in (False, True):
+                    cache.exported_hair.pop(
+                        make_psys_key(eval_obj, _psys, _inst), None
+                    )
             scratch = pyluxcore.Properties()
             new_exported = cache._convert_obj(
                 self,
@@ -1041,6 +1225,101 @@ class Exporter(object):
                     mat.original, False
                 )
             pentry["slot_sig"][key] = tuple(slots)
+
+    def _refresh_dupli_sets(
+        self, pentry, instancer_keys, depsgraph, luxcore_scene
+    ):
+        """
+        Re-flush the dupli objects of every source instanced by a dirty
+        or moved instancer.
+
+        LuxCore stores a source's dupli instances as a single scene
+        object per part (``src+dupli``) holding the flattened transform
+        list of *all* its instances — so the set is rebuilt wholesale:
+        collect every current instance of the source, update the base
+        object's transform to the first instance's matrix, delete the
+        old ``dupli`` object and re-``DuplicateObject`` the rest.
+        Sources re-exported by the geometry path are also refreshed
+        (their dupli objects were deleted with them).
+        """
+        if self.object_blur_enabled:
+            # Per-step motion buffers are built by motion_blur.convert's
+            # re-evaluation — a plain matrix re-flush would lose blur.
+            raise ValueError(
+                "instancer delta unsupported with object motion blur"
+            )
+        mat_to_list = pyluxcore.BlenderMatrix4x4ToList
+        # One pass over the instance list: collect each dirty
+        # instancer's current source set plus, per source, the flat
+        # matrix list and object IDs of its visible instances — the
+        # same data first_run feeds DuplicateObject (the first
+        # instance's transform rides on the base object).
+        cur_srcs = {}
+        inst_mats = {}
+        inst_ids = {}
+        for dg_inst in depsgraph.object_instances:
+            if not dg_inst.is_instance or dg_inst.parent is None:
+                continue
+            pkey = utils.make_key(dg_inst.parent)
+            if pkey not in instancer_keys:
+                continue
+            sptr = dg_inst.object.original.as_pointer()
+            cur_srcs.setdefault(pkey, set()).add(sptr)
+            if not (dg_inst.show_self or dg_inst.show_particles):
+                continue
+            obj_id = dg_inst.object.original.luxcore.id
+            if obj_id == -1:
+                obj_id = dg_inst.random_id & 0xFFFFFFFE
+            inst_ids.setdefault(sptr, []).append(obj_id)
+            inst_mats.setdefault(sptr, []).extend(
+                mat_to_list(dg_inst.matrix_world.copy())
+            )
+        for key in instancer_keys:
+            if cur_srcs.get(key, set()) != pentry["instancer_srcs"].get(
+                key, set()
+            ):
+                # A source was added or dropped entirely (e.g. the
+                # particle count hit zero): dropped sources would leave
+                # orphaned dupli objects behind and new ones have no
+                # base export to duplicate — rebuild.
+                raise ValueError(
+                    f"{key}: instancer source set changed"
+                )
+        for key in instancer_keys:
+            for sptr in cur_srcs.get(key, ()):
+                src_key = str(sptr)
+                if src_key not in pentry["dupli_srcs"]:
+                    raise ValueError(f"{key}: unexported dupli source")
+                exported, _compound_key = pentry["dupli_srcs"][src_key]
+                if exported is None:
+                    # Instanced but not exportable at export time —
+                    # first_run skipped it the same way.
+                    continue
+                mats = inst_mats.get(sptr, [])
+                ids = inst_ids.get(sptr, [])
+                count = len(ids)
+                if count == 0 or exported.transform is None:
+                    # An emptied set cannot leave a stale dupli object,
+                    # and a non-instancing (baked) base cannot take an
+                    # absolute transform — rebuild.
+                    raise ValueError(
+                        f"{key}: dupli set {src_key} not refreshable"
+                    )
+                for part in exported.parts:
+                    luxcore_scene.DeleteObject(part.lux_obj + "dupli")
+                    luxcore_scene.UpdateObjectTransformation(
+                        part.lux_obj, mats[:16]
+                    )
+                    if count > 1:
+                        # DuplicateObject wants typed buffers, same as
+                        # Duplis.matrices/object_ids in first_run.
+                        luxcore_scene.DuplicateObject(
+                            part.lux_obj,
+                            part.lux_obj + "dupli",
+                            count - 1,
+                            array("f", mats[16:]),
+                            array("I", ids[1:]),
+                        )
 
     def _shape_stack_sig(self, obj, depsgraph, base_list):
         """

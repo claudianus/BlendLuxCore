@@ -394,6 +394,10 @@ class Duplis:
         # per-object constant, so reading original.luxcore.id per instance
         # would be a wasted 4-level RNA traversal in the hot loop.
         self.luxcore_id = -1
+        # Compound instance key of the first (base) instance — lets the
+        # persistent-scene delta find this source's geo_meta entry
+        # (A6-III instancer refresh).
+        self.obj_key = None
 
     def get_count(self):
         return len(self.object_ids)
@@ -412,6 +416,13 @@ class ObjectCache2:
         # names, has wrapper shapes)} — geometry-delta eligibility
         # metadata for the persistent-scene cache (A6-III).
         self.obj_geo_meta = {}
+        # {instancer obj_key: set(source original ptr)} — which objects
+        # each instancer emitted duplis of, and
+        # {instancer obj_key} whose instances took the singular
+        # (per-instance ExportedObject) path instead of a dupli set —
+        # populated by first_run for the persistent-scene delta.
+        self.instancer_srcs = {}
+        self.instancer_singular = set()
 
     def first_run(
         self,
@@ -425,6 +436,12 @@ class ObjectCache2:
     ):
         is_viewport_render = bool(context)
         instances = {}
+        # Persistent-scene delta bookkeeping: for every instancer, the
+        # set of source objects it spawned duplis of (fast path) or a
+        # marker that some of its instances were exported individually
+        # (singular path — such instancers cannot be delta-refreshed).
+        self.instancer_srcs = {}
+        self.instancer_singular = set()
 
         if engine:
             obj_count_estimate = max(1, get_obj_count_estimate(depsgraph))
@@ -454,6 +471,13 @@ class ObjectCache2:
                 # This code is optimized for large amounts of duplis. Drawback is that objects generated from this
                 # code can't be transformed later in a viewport render session (due to BlendLuxCore implementation
                 # reasons, not because of LuxCore)
+                if dg_obj_instance.parent is not None:
+                    # Record unconditionally (even for instances skipped
+                    # below): the refresh path compares this source set
+                    # against the instancer's current depsgraph output.
+                    self.instancer_srcs.setdefault(
+                        utils.make_key(dg_obj_instance.parent), set()
+                    ).add(obj.original.as_pointer())
                 if engine and index % 5000 == 0:
                     if engine.test_break():
                         return None
@@ -552,6 +576,9 @@ class ObjectCache2:
                         # Note, the transformation matrix and object ID of this first instance is not added
                         # to the duplication list, since it already exists in the scene
                         new_duplis = Duplis(exported_obj)
+                        new_duplis.obj_key = utils.make_key_from_instance(
+                            dg_obj_instance
+                        )
                         new_duplis.luxcore_id = obj.original.luxcore.id
                         if (
                             exporter.object_blur_enabled
@@ -564,6 +591,17 @@ class ObjectCache2:
                         instances[obj.original.as_pointer()] = None
             else:
                 # This code is for singular objects and for duplis that should be movable later in a viewport render
+                if (
+                    dg_obj_instance.is_instance
+                    and dg_obj_instance.parent is not None
+                ):
+                    # Instances converted one-by-one (non-mesh sources,
+                    # viewport live-transform particles): their matrices
+                    # live on per-instance ExportedObjects a dupli
+                    # re-flush cannot reach — flag the instancer.
+                    self.instancer_singular.add(
+                        utils.make_key(dg_obj_instance.parent)
+                    )
                 if not utils.is_instance_visible(
                     dg_obj_instance, obj, context
                 ):
