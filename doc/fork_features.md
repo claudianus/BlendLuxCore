@@ -70,6 +70,19 @@ gradients on CPU and Metal/OpenCL.
   depsgraph Geometry-Nodes realized output is covered automatically.
 - Blender 5.2 export bugs fixed (instancing visibility, hair curves, CURVE
   type, removed APIs).
+- **Dupli/particle transform motion blur** (A5): when camera motion blur
+  is enabled with object blur, dupli/particle instances export per-instance
+  transform time series through `Scene.DuplicateObject`'s motion-multi
+  overload — instances blur instead of rendering static. Opt-in is
+  `enable_motion_blur` on the instanced object OR its instancer (emitter);
+  either flag blurs all copies including the first instance. Matched
+  across shutter steps by `(instancer, persistent_id)`; steps where an
+  instance has no evaluated transform (particle born/died mid-shutter)
+  reuse its center-frame matrix, and a dupli object whose ids collide
+  falls back to static duplication. Transform interpolation only —
+  vertex-level deformation blur is not supported by the engine.
+  Per-stage export timings (export time breakdown + instance/object
+  counts) are exposed in render stats.
 
 ## UX — Quick Setup + viewport stability
 

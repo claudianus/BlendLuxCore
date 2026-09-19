@@ -94,6 +94,7 @@ class Exporter(object):
         self.imagepipeline_cache = caches.StringCache()
         self.halt_cache = caches.StringCache()
         self.motion_blur_enabled = False
+        self.object_blur_enabled = False
 
         # A dictionary with the following mapping:
         # {node_key: luxcore_name}
@@ -161,6 +162,15 @@ class Exporter(object):
                 and (blur_settings.object_blur or camera_blur)
                 and (blur_settings.shutter > 0)
             )
+            # Object blur including dupli/particle instances (A5). Kept
+            # separate from motion_blur_enabled so a camera-blur-only
+            # render does not pay for per-instance key collection.
+            self.object_blur_enabled = (
+                blur_settings.enable
+                and blur_settings.object_blur
+                and (blur_settings.shutter > 0)
+                and context is None
+            )
 
         # Objects and lights
         is_viewport_render = context is not None
@@ -195,6 +205,7 @@ class Exporter(object):
                     scene,
                     depsgraph,
                     self.object_cache2.exported_objects,
+                    instances,
                 )
 
                 if cam_moving:

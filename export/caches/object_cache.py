@@ -31,6 +31,29 @@ class TriAOVDataIndices:
 MAX_PARTICLES_FOR_LIVE_TRANSFORM = 2000
 
 
+def _instance_key(dg_obj_instance):
+    # Stable inter-frame identity for a dupli/particle instance
+    # (A5 motion blur). persistent_id is only unique per instancer, so
+    # the instancer pointer is included: two emitters sharing one dupli
+    # object would otherwise alias their particle ids. parent is None
+    # for some instance types, hence the 0 fallback.
+    parent = dg_obj_instance.parent
+    parent_ptr = parent.original.as_pointer() if parent else 0
+    return (parent_ptr, tuple(dg_obj_instance.persistent_id))
+
+
+def _dupli_motion_enabled(dg_obj_instance):
+    # Opt-in for instance transform motion blur (A5): enable_motion_blur
+    # on the instanced object OR on the instancer (emitter). Checking
+    # both keeps the first instance's object-level motion props and the
+    # duplicated instances consistent — flagging either side blurs all
+    # copies instead of a subset.
+    if dg_obj_instance.object.luxcore.enable_motion_blur:
+        return True
+    parent = dg_obj_instance.parent
+    return bool(parent and parent.luxcore.enable_motion_blur)
+
+
 @contextmanager
 def _timed(exporter, stat_name):
     # Accumulates elapsed seconds into exporter.stats.<stat_name> when
@@ -353,6 +376,20 @@ class Duplis:
         self.exported_obj = exported_obj
         self.matrices = array("f", [])
         self.object_ids = array("I", [])
+        # Transform motion blur for instances (A5). `keys` is allocated
+        # only when object blur is enabled and the instanced object opts
+        # in via luxcore.enable_motion_blur; it stores one
+        # (instancer_ptr, persistent_id) key per instance, parallel to
+        # object_ids. motion_blur.convert() then fills motion/motion_times
+        # as [instance][step]-major buffers for Scene.DuplicateObject's
+        # motion-multi overload. `motion_missing` counts steps where an
+        # instance had no evaluated transform and fell back to its
+        # center-frame matrix (particle born/died mid-shutter).
+        self.keys = None
+        self.motion = None
+        self.motion_times = None
+        self.motion_steps = 0
+        self.motion_missing = 0
 
     def get_count(self):
         return len(self.object_ids)
@@ -440,6 +477,10 @@ class ObjectCache2:
                         if obj_id == -1:
                             obj_id = dg_obj_instance.random_id & 0xFFFFFFFE
                         duplis.object_ids.append(obj_id)
+                        if duplis.keys is not None:
+                            duplis.keys.append(
+                                _instance_key(dg_obj_instance)
+                            )
                         # We need a copy of matrix_world here, not sure why, but if we don't
                         # make a copy, we only get an identity matrix in C++
                         duplis.matrices.extend(
@@ -495,9 +536,13 @@ class ObjectCache2:
                     if exported_obj:
                         # Note, the transformation matrix and object ID of this first instance is not added
                         # to the duplication list, since it already exists in the scene
-                        instances[obj.original.as_pointer()] = Duplis(
-                            exported_obj
-                        )
+                        new_duplis = Duplis(exported_obj)
+                        if (
+                            exporter.object_blur_enabled
+                            and _dupli_motion_enabled(dg_obj_instance)
+                        ):
+                            new_duplis.keys = []
+                        instances[obj.original.as_pointer()] = new_duplis
                     else:
                         # Could not export the object, happens e.g. with curve objects with zero faces
                         instances[obj.original.as_pointer()] = None
@@ -557,18 +602,26 @@ class ObjectCache2:
             for part in duplis.exported_obj.parts:
                 src_name = part.lux_obj
                 dst_name = src_name + "dupli"
-                luxcore_scene.DuplicateObject(
-                    src_name,
-                    dst_name,
-                    duplis.get_count(),
-                    duplis.matrices,
-                    duplis.object_ids,
-                )
-
-                # TODO: support steps and times (motion blur)
-                # steps = 0 # TODO
-                # times = array("f", [])
-                # luxcore_scene.DuplicateObject(src_name, dst_name, count, steps, times, transformations)
+                if duplis.motion is not None and duplis.motion_steps > 1:
+                    # Transform motion blur for instances (A5): per-instance
+                    # [step] time series collected by motion_blur.convert().
+                    luxcore_scene.DuplicateObject(
+                        src_name,
+                        dst_name,
+                        duplis.get_count(),
+                        duplis.motion_steps,
+                        duplis.motion_times,
+                        duplis.motion,
+                        duplis.object_ids,
+                    )
+                else:
+                    luxcore_scene.DuplicateObject(
+                        src_name,
+                        dst_name,
+                        duplis.get_count(),
+                        duplis.matrices,
+                        duplis.object_ids,
+                    )
 
         if stats:
             stats.export_time_instancing.value = time() - start_time
