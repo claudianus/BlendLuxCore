@@ -41,9 +41,11 @@ though most objects are static between frames.
    keep the Scene instead of dropping it.
 2. **Dirty tracking**: a `depsgraph_update_post` app handler appends
    `(id.as_pointer(), flags)` to a per-scene dirty set between renders.
-   Frame changes mark the scene "frame-dirty" (objects with drivers/
-   animation need re-eval — the depsgraph reports them as updated
-   anyway, so the handler path covers it).
+   Frame changes are handled separately — *verified*: `frame_set()`
+   produces no `depsgraph.updates` entries at all, so animated objects
+   would otherwise reuse a stale scene silently. The entry stores the
+   export frame; on a frame change `frame_change()` re-checks every
+   member object directly (see Risks).
 3. **Delta export**: on render, for each dirty id: re-convert just that
    object through the existing `_convert_obj` path into a partial
    `Properties`, then `Parse` + `UpdateObjectTransformation`/
@@ -96,6 +98,28 @@ though most objects are static between frames.
 - **Instancer exclusion**: an instancer's transform moves its whole
   dupli set — detected at delta time via `instance_type != "NONE" or
   particle_systems` and forced to a full rebuild.
+- **Frame changes are invisible to dirty tracking** — *verified
+  empirically*: `scene.frame_set(N)` produces no
+  `depsgraph.updates` entries (the depsgraph just re-evaluates at the
+  new time). Without a dedicated check, an animation render would
+  reuse the frame-1 scene for every frame — the worst kind of stale
+  output. The entry therefore stores `frame_current` plus a
+  `matrix_world` snapshot for every member object (`bake` for
+  delta-safe exports, `member_mats` for the rest). On a frame change
+  `frame_change()` walks all members:
+  - `_animation_kind()` inspects action + driver data paths (legacy
+    and slotted actions): transform-only animation stays delta-safe,
+    anything else forces a rebuild;
+  - `_geometry_animated()` catches datablock/shape-key animation,
+    physics/deformer modifiers, and NODES groups that read Scene
+    Time — all rebuild;
+  - a changed `matrix_world` on a delta-safe object becomes a
+    transform delta; a changed matrix on anything else (lights,
+    instancers) rebuilds.
+  Verified headless: keyframed cube rendered at frames 1/15/30
+  produces correct per-frame output with `1 transform delta(s)` per
+  frame instead of a re-export — and before this fix it rendered the
+  frame-1 image three times.
 
 ## Phasing
 

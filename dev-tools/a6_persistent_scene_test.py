@@ -10,6 +10,9 @@
 #   R7  camera moved            -> same Scene reused (camera re-exported)
 #   R8  DoF toggled             -> camera signature mismatch, rebuild
 #   R9  world color changed     -> world signature mismatch, rebuild
+#   F15/F30 frame_set()         -> keyframed transform arrives via
+#                                  delta (depsgraph reports nothing
+#                                  on frame changes — see frame_change)
 #
 # Run headless:
 #   blender --background --factory-startup \
@@ -105,6 +108,8 @@ scene.render.resolution_y = 240
 scene.render.resolution_percentage = 100
 scene.render.image_settings.file_format = "PNG"
 scene.render.film_transparent = False
+scene.frame_start = 1
+scene.frame_end = 30
 
 prefs = bpy.context.preferences.addons[find_addon_key()].preferences
 if hasattr(prefs, "gpu_backend"):
@@ -272,9 +277,48 @@ w.node_tree.nodes["Background"].inputs[0].default_value = (
 bpy.context.view_layer.update()
 render("r9")
 entry = entry_of(persistent_scene)
+scene_r9 = entry["scene"]
 check(
     "R9: world change rebuilt the scene",
-    entry["scene"] is not scene_r8,
+    scene_r9 is not scene_r8,
+)
+
+# ---------- F15/F30: frame_set moves animated transform via delta ------
+# depsgraph reports no updates on frame changes; frame_change() must
+# catch the moved keyframed object and patch it as a transform delta.
+cube.hide_render = False
+scene.frame_set(1)
+cube.keyframe_insert("location", frame=1)
+cube.location = (1.5, 0.5, 0.6)
+cube.keyframe_insert("location", frame=30)
+
+scene.frame_set(15)
+bpy.context.view_layer.update()
+render("f15")
+entry = entry_of(persistent_scene)
+scene_f15 = entry["scene"]
+check(
+    "F15: unhide + frame change rebuilt entry",
+    scene_f15 is not scene_r9,
+)
+
+scene.frame_set(30)
+bpy.context.view_layer.update()
+render("f30")
+entry = entry_of(persistent_scene)
+check(
+    "F30: frame change applied transform delta on same scene",
+    entry["scene"] is scene_f15,
+)
+bake = entry["bake"].get(mover_key)
+check(
+    "F30: bake matrix tracks animated position",
+    bake is not None
+    and all(
+        abs(a - b) < 1e-5
+        for row_a, row_b in zip(bake, cube.matrix_world)
+        for a, b in zip(row_a, row_b)
+    ),
 )
 
 # ---------- image comparisons ----------
@@ -309,6 +353,12 @@ check(
     # Cube is hidden here, so the frame is a near-featureless plane:
     # a large camera move shifts shading subtly (noise floor ~0.002).
     mean > 0.005,
+    f"mean={mean:.4f} changed={frac:.3f}",
+)
+mean, frac = image_stats(p("f15"), p("f30"))
+check(
+    "F15!=F30 images differ (animated cube moved)",
+    mean > 0.02 and frac > 0.05,
     f"mean={mean:.4f} changed={frac:.3f}",
 )
 

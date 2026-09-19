@@ -262,6 +262,32 @@ class Exporter(object):
                         )
                         if _mode == "full":
                             pentry = None
+                        elif (
+                            depsgraph.scene.frame_current
+                            != pentry["frame"]
+                        ):
+                            # frame_set() moves animated objects without
+                            # leaving depsgraph updates — re-check every
+                            # member against its stored transform and
+                            # animation kind.
+                            eval_by_key = {
+                                utils.make_key(o): o
+                                for o in depsgraph.objects
+                            }
+                            _camera_key = (
+                                utils.make_key(scene.camera)
+                                if scene.camera
+                                else None
+                            )
+                            _rebuild, _moved = (
+                                persistent_scene.frame_change(
+                                    pentry, eval_by_key, _camera_key
+                                )
+                            )
+                            if _rebuild:
+                                pentry = None
+                            else:
+                                transform_deltas |= _moved
 
         luxcore_scene = (
             pentry["scene"]
@@ -298,6 +324,7 @@ class Exporter(object):
                 self._apply_transform_deltas(
                     pentry, transform_deltas, depsgraph, luxcore_scene
                 )
+                pentry["frame"] = depsgraph.scene.frame_current
                 instances = {}
                 print(
                     "[Exporter] Persistent scene reuse:"
@@ -401,16 +428,25 @@ class Exporter(object):
                 "[Exporter] Caching scene for persistent reuse:"
                 f" {len(self.object_cache2.exported_objects)} objects"
             )
+            _member_mats = {
+                utils.make_key(o): o.matrix_world.copy()
+                for o in depsgraph.objects
+                if utils.make_key(o) in vis_sig
+                and utils.make_key(o)
+                not in self.object_cache2.bake_matrices
+            }
             persistent_scene.store(
                 pkey,
                 luxcore_scene,
                 self.object_cache2.exported_objects,
                 set(vis_sig),
                 self.object_cache2.bake_matrices,
+                _member_mats,
                 mb_sig,
                 camera_sig,
                 world_sig,
                 vis_sig,
+                depsgraph.scene.frame_current,
             )
 
         # Convert config at last because all lightgroups and passes have to be
@@ -604,7 +640,9 @@ class Exporter(object):
         """
         if not transform_deltas:
             return
-        eval_by_key = {utils.make_key(o): o for o in depsgraph.objects}
+        eval_by_key = {
+            utils.make_key(o): o for o in depsgraph.objects
+        }
         matrix_to_list = utils.luxutils.matrix_to_list
         for key in transform_deltas:
             exported = pentry["objects"][key]

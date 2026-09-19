@@ -124,9 +124,18 @@ def get(key):
 
 
 def store(key, luxcore_scene, exported_objects, member_keys,
-          bake_matrices, mb_sig, camera_sig, world_sig, vis_sig):
+          bake_matrices, member_mats, mb_sig, camera_sig, world_sig,
+          vis_sig, frame):
     _entries[key] = {
         "scene": luxcore_scene,
+        # frame at export time: frame_set() moves animated objects
+        # without leaving depsgraph updates, so a changed frame forces
+        # the per-member frame_change() re-check below
+        "frame": frame,
+        # matrix_world of member objects not covered by bake_matrices
+        # (lights, non-mesh types): frame_change() compares against it
+        # to spot transforms it cannot apply as deltas
+        "member_mats": member_mats,
         # {obj_key: ExportedObject} for lux object names / delete()
         "objects": dict(exported_objects),
         # base-object key set at export time (add/remove detection)
@@ -202,3 +211,157 @@ def classify(dirty, entry, camera_obj=None):
         transform_keys.add(key)
 
     return ("delta" if transform_keys else "reuse"), transform_keys
+
+
+# ------------------------------------------------------------------
+# Frame-change handling
+#
+# depsgraph.updates does NOT report changes driven by frame_set() —
+# the depsgraph simply re-evaluates at the new time and every animated
+# value moves without a dirty flag. Between animation frames the dirty
+# set therefore comes back empty even though objects moved, which is
+# exactly the reuse case that must not be trusted. On a frame change
+# every member object is re-checked directly instead.
+
+# Object channels that only affect the transform and can therefore be
+# applied through a transform delta.
+_TRANSFORM_DATA_PATHS = frozenset(
+    {
+        "location",
+        "scale",
+        "rotation_euler",
+        "rotation_quaternion",
+        "rotation_axis_angle",
+        "delta_location",
+        "delta_scale",
+        "delta_rotation_euler",
+        "delta_rotation_quaternion",
+        "delta_rotation_axis_angle",
+    }
+)
+
+# Modifier types whose output geometry can change over time even when
+# no datablock carries animation (physics sims, deformers, animated
+# displacement/wrapping). A NODES modifier is only suspicious when its
+# node group actually reads Scene Time.
+_GEOMETRY_ANIMATED_MODIFIERS = frozenset(
+    {
+        "ARMATURE",
+        "CAST",
+        "CLOTH",
+        "CURVE",
+        "DISPLACE",
+        "DYNAMIC_PAINT",
+        "FLUID",
+        "HOOK",
+        "LATTICE",
+        "MESH_DEFORM",
+        "OCEAN",
+        "PARTICLE_SYSTEM",
+        "SHRINKWRAP",
+        "SIMPLE_DEFORM",
+        "SOFT_BODY",
+        "SURFACE_DEFORM",
+        "WAVE",
+    }
+)
+
+
+def _action_data_paths(action):
+    paths = [fc.data_path for fc in getattr(action, "fcurves", ())]
+    # Slotted actions (Blender 4.4+): layers -> strips -> channelbags
+    for layer in getattr(action, "layers", ()):
+        for strip in layer.strips:
+            for bag in getattr(strip, "channelbags", ()):
+                paths.extend(fc.data_path for fc in bag.fcurves)
+    return paths
+
+
+def _animation_kind(obj):
+    """
+    Classify the original object's own animation:
+      "none"      — no animation channels on the object
+      "transform" — only object transform channels are animated
+      "other"     — anything else (shape/misc channels, unreadable
+                    actions): cannot be trusted for a transform delta
+    """
+    ad = getattr(obj, "animation_data", None)
+    if ad is None:
+        return "none"
+    paths = [fc.data_path for fc in ad.drivers]
+    if ad.action is not None:
+        paths.extend(_action_data_paths(ad.action))
+    if not paths:
+        # animation_data exists but exposes no readable channels —
+        # cannot prove it is transform-only, so stay conservative.
+        return "other"
+    base = {p.split("[", 1)[0] for p in paths}
+    return "transform" if base <= _TRANSFORM_DATA_PATHS else "other"
+
+
+def _nodes_uses_scene_time(node_group):
+    stack, seen = [node_group], set()
+    while stack:
+        group = stack.pop()
+        if group is None or id(group) in seen:
+            continue
+        seen.add(id(group))
+        for node in group.nodes:
+            if "SceneTime" in node.bl_idname:
+                return True
+            child = getattr(node, "node_tree", None)
+            if child is not None:
+                stack.append(child)
+    return False
+
+
+def _geometry_animated(obj):
+    """Can the evaluated geometry change between frames by itself?"""
+    data = getattr(obj, "data", None)
+    if getattr(data, "animation_data", None) is not None:
+        return True
+    if (
+        getattr(getattr(data, "shape_keys", None), "animation_data", None)
+        is not None
+    ):
+        return True
+    for mod in obj.modifiers:
+        if not mod.show_render:
+            continue
+        if mod.type in _GEOMETRY_ANIMATED_MODIFIERS:
+            return True
+        if mod.type == "NODES" and _nodes_uses_scene_time(
+            getattr(mod, "node_group", None)
+        ):
+            return True
+    return False
+
+
+def frame_change(entry, eval_by_key, camera_key):
+    """
+    Classify a reuse candidate after scene.frame_current changed.
+
+    Returns (rebuild_needed, transform_keys): transform_keys holds the
+    delta-safe member objects whose matrix_world differs from the
+    stored export-time matrix (animated or silently moved). Anything
+    animated beyond a plain transform — geometry animation of any
+    kind, or a transform change on an object that cannot be patched in
+    place — forces a full rebuild.
+    """
+    transform_keys = set()
+    for key, eval_obj in eval_by_key.items():
+        if key == camera_key or key not in entry["members"]:
+            continue
+        original = getattr(eval_obj, "original", None) or eval_obj
+        if _animation_kind(original) == "other" or _geometry_animated(
+            original
+        ):
+            return True, set()
+        base = entry["bake"].get(key) or entry["member_mats"].get(key)
+        if base is not None and eval_obj.matrix_world != base:
+            if key not in entry["delta_safe"]:
+                # A light, instancer or other unpatchable object moved
+                # between frames.
+                return True, set()
+            transform_keys.add(key)
+    return False, transform_keys
