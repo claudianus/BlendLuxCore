@@ -22,6 +22,9 @@
 #   F70 shape-key frame change  -> geometry delta (deforming mesh)
 #   F80/F90 keyframed light     -> delete + re-export delta (light)
 #   H1  hair-curves data edit   -> re-export delta (DefineStrands)
+#   I1  instancer moved         -> dupli set re-flush (same Scene)
+#   I2  dupli-source mesh edit  -> in-place "_instance" mesh redefine
+#   P1  particle settings edit  -> psys_map re-flush (same Scene)
 #
 # Run headless:
 #   blender --background --factory-startup \
@@ -211,6 +214,32 @@ bpy.ops.mesh.primitive_grid_add(
 emitter = bpy.context.object
 emitter.instance_type = "VERTS"
 dupli_src.parent = emitter
+
+# Particle instancer — a ParticleSettings edit re-flushes the emitter's
+# dupli set via psys_map (settings ptr -> instancer key). Static
+# particles (physics NO, lifetime spanning the whole test) keep the
+# image stable across the frame changes above.
+bpy.ops.mesh.primitive_ico_sphere_add(
+    radius=0.12, location=(0, 0, 5)
+)
+psys_src = bpy.context.object
+psys_src.hide_render = True
+bpy.ops.mesh.primitive_plane_add(
+    size=1.2, location=(-2.0, -1.5, -0.55)
+)
+psys_emitter = bpy.context.object
+bpy.ops.object.select_all(action="DESELECT")
+psys_emitter.select_set(True)
+bpy.context.view_layer.objects.active = psys_emitter
+bpy.ops.object.particle_system_add()
+psys_settings = psys_emitter.particle_systems[-1].settings
+psys_settings.count = 20
+psys_settings.frame_start = 1
+psys_settings.frame_end = 1
+psys_settings.lifetime = 500
+psys_settings.physics_type = "NO"
+psys_settings.render_type = "OBJECT"
+psys_settings.instance_object = psys_src
 bpy.ops.object.select_all(action="DESELECT")
 
 cd = bpy.data.cameras.new("Cam")
@@ -610,6 +639,21 @@ check(
     scene_i2 is scene_i1,
 )
 
+# ---------- P1: particle settings -> instancer re-flush -------------
+# A ParticleSettings datablock edit resolves through psys_map to the
+# emitter: the emitter takes a geometry delta and its dupli set is
+# re-flushed with the new particle count — same Scene kept.
+scene.frame_set(1)
+psys_settings.count = 45
+bpy.context.view_layer.update()
+render("p1")
+entry = entry_of(persistent_scene)
+scene_p1 = entry["scene"]
+check(
+    "P1: particle settings edit kept scene",
+    scene_p1 is scene_i2,
+)
+
 # ---------- image comparisons ----------
 p = lambda tag: os.path.join(OUT_DIR, f"a6test_{tag}.png")
 mean, frac = image_stats(p("r1"), p("r2"))
@@ -698,6 +742,12 @@ check(
 mean, frac = image_stats(p("i1"), p("i2"))
 check(
     "I1!=I2 images differ (instanced mesh redefined)",
+    mean > 0.005 and frac > 0.005,
+    f"mean={mean:.4f} changed={frac:.3f}",
+)
+mean, frac = image_stats(p("i2"), p("p1"))
+check(
+    "I2!=P1 images differ (particle count re-flushed)",
     mean > 0.005 and frac > 0.005,
     f"mean={mean:.4f} changed={frac:.3f}",
 )
