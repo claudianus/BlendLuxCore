@@ -13,6 +13,10 @@
 #   F15/F30 frame_set()         -> keyframed transform arrives via
 #                                  delta (depsgraph reports nothing
 #                                  on frame changes — see frame_change)
+#   M1  material node edit      -> in-place material delta (same Scene)
+#   M2  material renamed        -> rebuild (LuxCore name changes)
+#   M3  slot reassigned         -> rebuild (geometry flags)
+#   M4  driver-animated color   -> frame change keeps Scene, refreshes
 #
 # Run headless:
 #   blender --background --factory-startup \
@@ -321,6 +325,62 @@ check(
     ),
 )
 
+# ---------- M1: material node edit -> in-place material delta --------
+# Material datablock + Mesh/NodeTree shading echoes -> all member
+# materials are re-exported into the same cached scene (Parse
+# re-definition), while identity/slot signatures stay intact.
+mat2.node_tree.nodes["Principled BSDF"].inputs[
+    "Base Color"
+].default_value = (0.05, 0.05, 0.8, 1)
+bpy.context.view_layer.update()
+render("m1")
+entry = entry_of(persistent_scene)
+check(
+    "M1: material edit reused scene via material delta",
+    entry["scene"] is scene_f15,
+)
+
+# ---------- M2: material rename -> rebuild (LuxCore name changes) -----
+mat2.name = "Renamed"
+bpy.context.view_layer.update()
+render("m2")
+entry = entry_of(persistent_scene)
+scene_m2 = entry["scene"]
+check(
+    "M2: material rename rebuilt the scene",
+    scene_m2 is not scene_f15,
+)
+
+# ---------- M3: slot reassignment -> rebuild ---------------------------
+# Slot swaps flag geometry on object+mesh, so they can never reach the
+# material-delta path.
+cube.data.materials[0] = mat
+bpy.context.view_layer.update()
+render("m3")
+entry = entry_of(persistent_scene)
+scene_m3 = entry["scene"]
+check(
+    "M3: slot reassignment rebuilt the scene",
+    scene_m3 is not scene_m2,
+)
+
+# ---------- M4: animated material across a frame change ---------------
+# A driver on the Ground material's node tree must mark the entry
+# material-dirty at frame_change(): same scene, refreshed materials.
+# The cube's transform animation already finished at f30, so the f50
+# image change is purely shading.
+sock = mat.node_tree.nodes["Principled BSDF"].inputs["Base Color"]
+fc = sock.driver_add("default_value", 0)
+fc.driver.expression = "frame / 50"
+scene.frame_set(50)
+bpy.context.view_layer.update()
+render("f50")
+entry = entry_of(persistent_scene)
+check(
+    "M4: animated material kept scene on frame change",
+    entry["scene"] is scene_m3,
+)
+
 # ---------- image comparisons ----------
 p = lambda tag: os.path.join(OUT_DIR, f"a6test_{tag}.png")
 mean, frac = image_stats(p("r1"), p("r2"))
@@ -358,6 +418,18 @@ check(
 mean, frac = image_stats(p("f15"), p("f30"))
 check(
     "F15!=F30 images differ (animated cube moved)",
+    mean > 0.02 and frac > 0.05,
+    f"mean={mean:.4f} changed={frac:.3f}",
+)
+mean, frac = image_stats(p("f30"), p("m1"))
+check(
+    "F30!=M1 images differ (material delta applied)",
+    mean > 0.02 and frac > 0.05,
+    f"mean={mean:.4f} changed={frac:.3f}",
+)
+mean, frac = image_stats(p("f30"), p("f50"))
+check(
+    "F30!=F50 images differ (animated material applied)",
     mean > 0.02 and frac > 0.05,
     f"mean={mean:.4f} changed={frac:.3f}",
 )

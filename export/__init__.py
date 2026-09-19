@@ -196,6 +196,7 @@ class Exporter(object):
         pkey = None
         pentry = None
         transform_deltas = set()
+        material_dirty = False
         mb_sig = (False, 0)
         camera_sig = None
         world_sig = None
@@ -225,6 +226,25 @@ class Exporter(object):
                 )
                 for o in scene.objects
             }
+            # Material identity (rename changes the LuxCore name) and
+            # slot layout per member object — both force a rebuild
+            # because they change object-side definitions a material
+            # delta cannot reach.
+            mat_sig = {}
+            slot_sig = {}
+            for o in scene.objects:
+                slots = []
+                for slot in o.material_slots:
+                    mat = slot.material
+                    if mat is None:
+                        slots.append((None, slot.link))
+                        continue
+                    mptr = str(mat.original.as_pointer())
+                    slots.append((mptr, slot.link))
+                    mat_sig[mptr] = utils.get_luxcore_name(
+                        mat.original, is_viewport_render
+                    )
+                slot_sig[utils.make_key(o)] = tuple(slots)
             if not (
                 _blur.enable and _blur.object_blur and _blur.shutter > 0
             ):
@@ -256,8 +276,20 @@ class Exporter(object):
                         # Visibility toggled or an object was
                         # added/removed
                         pentry = None
+                    elif (
+                        mat_sig != pentry["mat_sig"]
+                        or slot_sig != pentry["slot_sig"]
+                    ):
+                        # A material was renamed or slot layout/link
+                        # changed — object-side definitions a material
+                        # delta cannot reach
+                        pentry = None
                     else:
-                        _mode, transform_deltas = persistent_scene.classify(
+                        (
+                            _mode,
+                            transform_deltas,
+                            material_dirty,
+                        ) = persistent_scene.classify(
                             dirty, pentry, scene.camera
                         )
                         if _mode == "full":
@@ -279,15 +311,18 @@ class Exporter(object):
                                 if scene.camera
                                 else None
                             )
-                            _rebuild, _moved = (
-                                persistent_scene.frame_change(
-                                    pentry, eval_by_key, _camera_key
-                                )
+                            (
+                                _rebuild,
+                                _moved,
+                                _mat_dirty,
+                            ) = persistent_scene.frame_change(
+                                pentry, eval_by_key, _camera_key
                             )
                             if _rebuild:
                                 pentry = None
                             else:
                                 transform_deltas |= _moved
+                                material_dirty |= _mat_dirty
 
         luxcore_scene = (
             pentry["scene"]
@@ -324,11 +359,16 @@ class Exporter(object):
                 self._apply_transform_deltas(
                     pentry, transform_deltas, depsgraph, luxcore_scene
                 )
+                if material_dirty:
+                    self._reexport_scene_materials(
+                        depsgraph, luxcore_scene
+                    )
                 pentry["frame"] = depsgraph.scene.frame_current
                 instances = {}
                 print(
                     "[Exporter] Persistent scene reuse:"
                     f" {len(transform_deltas)} transform delta(s),"
+                    f" materials {'refreshed' if material_dirty else 'kept'},"
                     f" {len(pentry['objects'])} objects kept"
                 )
             except Exception:
@@ -447,6 +487,8 @@ class Exporter(object):
                 world_sig,
                 vis_sig,
                 depsgraph.scene.frame_current,
+                mat_sig,
+                slot_sig,
             )
 
         # Convert config at last because all lightgroups and passes have to be
@@ -671,6 +713,36 @@ class Exporter(object):
                     part.lux_obj, mat_list
                 )
             pentry["bake"][key] = new_matrix.copy()
+
+    def _reexport_scene_materials(self, depsgraph, luxcore_scene):
+        """
+        Re-export every member material into the cached scene.
+
+        Material (and texture/volume) re-definition via Scene.Parse is
+        a first-class engine operation: the new properties rebuild the
+        named material in place, including its light-source
+        associations. Only the material's *content* is refreshed —
+        identity and slot bindings are guarded by the mat_sig/slot_sig
+        signatures checked before reuse.
+        """
+        done = set()
+        for obj in depsgraph.scene.objects:
+            for slot in obj.material_slots:
+                mat = slot.material
+                if mat is None:
+                    continue
+                ptr = str(mat.original.as_pointer())
+                if ptr in done:
+                    continue
+                done.add(ptr)
+                _lux_name, mat_props = material.convert(
+                    self, depsgraph, mat.original, False, obj.name
+                )
+                luxcore_scene.Parse(mat_props)
+        print(
+            "[Exporter] Re-exported"
+            f" {len(done)} material(s) into cached scene"
+        )
 
     def get_viewport_changes(self, depsgraph, context=None):
         self.scene = depsgraph.scene_eval

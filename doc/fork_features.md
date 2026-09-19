@@ -99,13 +99,26 @@ gradients on CPU and Metal/OpenCL.
   transform-only update on a delta-safe object applies
   `Scene.UpdateObjectTransformation` (absolute for instanced exports,
   `new @ old.inverted()` for world-baked geometry), and anything else
-  — geometry/shading dirt, datablock dirt, membership changes,
-  instancers, lights, volumes, object motion blur, camera/world
-  signature changes — falls back to a full export and re-caches.
+  — geometry dirt, datablock dirt, membership changes, instancers,
+  lights, volumes, object motion blur, camera/world signature changes —
+  falls back to a full export and re-caches.
+  Frame changes are covered separately: `frame_set()` leaves no
+  depsgraph updates, so per-member transform snapshots plus animation
+  classification decide between transform delta and rebuild, and
+  animated materials mark the scene for an in-place material refresh.
+  **Material deltas** (A6-III): a dirty `Material` datablock re-exports
+  all member materials into the cached scene via `Scene.Parse`
+  re-definition (a first-class engine operation, including light-source
+  re-wiring). Shading echoes on objects/meshes/node trees only ever
+  ride along with a real `Material` update — an echo without one
+  (e.g. a world node tree) rebuilds — and material identity
+  (`mat_sig`, renames) plus slot topology (`slot_sig`) signatures keep
+  renames and binding edits on the rebuild path.
   Design + rationale: `doc/incremental_export_design.md`.
   Regression: `dev-tools/a6_persistent_scene_test.py` (headless;
-  covers reuse, transform delta, geometry rebuild, re-cache, and
-  `hide_render` visibility fallback with image-diff assertions).
+  covers reuse, transform/material deltas, geometry rebuild,
+  re-cache, visibility/camera/world signature fallbacks, animated
+  transforms and animated materials, with image-diff assertions).
 
 ## UX — Quick Setup + viewport stability
 

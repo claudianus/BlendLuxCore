@@ -30,7 +30,9 @@ FLAG_SHADING = 4
 
 _KIND_OBJECT = 0
 _KIND_IGNORE = 1
-_KIND_REBUILD = 2
+_KIND_MATERIAL_ECHO = 2
+_KIND_MATERIAL = 3
+_KIND_REBUILD = 4
 
 # Datablock types whose updates do not require a scene rebuild: either
 # they are re-exported every render anyway (World, Camera data, Scene
@@ -96,6 +98,23 @@ def on_depsgraph_update(scene, depsgraph):
             kind = _KIND_OBJECT
         elif isinstance(id_block, _IGNORABLE_TYPES):
             kind = _KIND_IGNORE
+        elif isinstance(id_block, bpy.types.Material):
+            kind = _KIND_MATERIAL
+        elif isinstance(
+            id_block, (bpy.types.Mesh, bpy.types.NodeTree)
+        ):
+            # Mesh/NodeTree datablocks ride along with material edits
+            # (shading-only flags). They are only an *echo*: a world or
+            # light node tree looks identical here, so the echo is
+            # compatible with a material delta but may never trigger
+            # one — classify() rebuilds when no Material datablock
+            # accompanies it. Geometry/transform flags stay a hard
+            # rebuild.
+            kind = (
+                _KIND_MATERIAL_ECHO
+                if not flags & ~FLAG_SHADING
+                else _KIND_REBUILD
+            )
         else:
             kind = _KIND_REBUILD
         # DepsgraphUpdate.id is the *evaluated* datablock: the original
@@ -125,7 +144,7 @@ def get(key):
 
 def store(key, luxcore_scene, exported_objects, member_keys,
           bake_matrices, member_mats, mb_sig, camera_sig, world_sig,
-          vis_sig, frame):
+          vis_sig, frame, mat_sig, slot_sig):
     _entries[key] = {
         "scene": luxcore_scene,
         # frame at export time: frame_set() moves animated objects
@@ -155,6 +174,12 @@ def store(key, luxcore_scene, exported_objects, member_keys,
         # property string — same reason: Parse cannot delete stale keys
         "camera_sig": camera_sig,
         "world_sig": world_sig,
+        # {material ptr: luxcore name} — a rename changes the LuxCore
+        # material name, which objects reference, so it must rebuild;
+        # {obj_key: ((mat ptr, slot link), ...)} — slot/link edits are
+        # object-side definitions a material delta cannot reach
+        "mat_sig": mat_sig,
+        "slot_sig": slot_sig,
     }
 
 
@@ -171,46 +196,81 @@ def classify(dirty, entry, camera_obj=None):
     """
     Decide how the cached scene can be reused.
 
-    Returns (mode, transform_deltas):
+    Returns (mode, transform_deltas, material_dirty):
       mode "full"      — entry unusable, run first_run and rebuild it
       mode "reuse"     — dirty set empty/ignorable + membership intact
       mode "delta"     — reuse + per-object transform updates
     transform_deltas is a set of obj_keys needing transform updates
-    (filled for "delta", empty otherwise).
+    (filled for "delta", empty otherwise); material_dirty asks the
+    exporter to re-export every member material in place (material
+    re-definition is supported by Scene.Parse).
     """
     if entry is None:
-        return "full", set()
+        return "full", set(), False
 
     camera_ptr = camera_obj.original.as_pointer() if camera_obj else None
 
     transform_keys = set()
+    material_dirty = False
+    material_echo = False
     for ptr, (flags, kind) in dirty.items():
         if kind == _KIND_IGNORE:
             continue
+        if kind == _KIND_MATERIAL:
+            # A material content edit: refresh all member materials
+            # via Parse re-definition.
+            material_dirty = True
+            continue
+        if kind == _KIND_MATERIAL_ECHO:
+            # Mesh/NodeTree shading echo — only safe alongside a real
+            # Material update (checked after the loop); world/light
+            # node trees produce the same shape and must rebuild.
+            material_echo = True
+            continue
         if kind != _KIND_OBJECT:
-            return "full", set()
+            return "full", set(), False
         if ptr == camera_ptr:
             # The render camera is re-exported every render, so its
             # updates never need a scene delta.
             continue
         key = str(ptr)
         exported = entry["objects"].get(key)
-        if (
-            exported is None
-            or not hasattr(exported, "transform")
-            or exported.duplicate_count > 0
-            or key not in entry["delta_safe"]
-        ):
-            # Not in the exported map (newly added, instancer compound
-            # key, unexportable type), a light (no transform path), an
-            # instancer/pointcloud (its duplicate set can move too), or
-            # a type whose transform cannot be updated in place.
-            return "full", set()
-        if flags & ~FLAG_TRANSFORM:
-            return "full", set()
-        transform_keys.add(key)
+        if flags & ~(FLAG_TRANSFORM | FLAG_SHADING):
+            # Geometry (or anything else) on an object needs a rebuild;
+            # shading+transform together are fine (verified empirically:
+            # slot reassignment also flags geometry, so it lands here).
+            return "full", set(), False
+        if flags & FLAG_SHADING:
+            # Object-side shading echo — same trigger rule as
+            # Mesh/NodeTree echoes: a material delta only runs when a
+            # Material datablock was also dirtied, because object-side
+            # shading changes it cannot cover must stay a rebuild.
+            material_echo = True
+        if flags & FLAG_TRANSFORM:
+            if (
+                exported is None
+                or not hasattr(exported, "transform")
+                or exported.duplicate_count > 0
+                or key not in entry["delta_safe"]
+            ):
+                # Not in the exported map (newly added, instancer
+                # compound key, unexportable type), a light (no
+                # transform path), an instancer/pointcloud (its
+                # duplicate set can move too), or a type whose
+                # transform cannot be updated in place.
+                return "full", set(), False
+            transform_keys.add(key)
 
-    return ("delta" if transform_keys else "reuse"), transform_keys
+    if material_echo and not material_dirty:
+        # Shading echoes (object/mesh/node-tree) with no Material
+        # datablock update: the change is something a material
+        # re-export cannot cover (world/light node tree, object-side
+        # shading props) — rebuild conservatively.
+        return "full", set(), False
+
+    return (
+        "delta" if transform_keys or material_dirty else "reuse"
+    ), transform_keys, material_dirty
 
 
 # ------------------------------------------------------------------
@@ -337,18 +397,37 @@ def _geometry_animated(obj):
     return False
 
 
+def _material_animated(obj):
+    """Could any of the object's slot materials change across frames?"""
+    for slot in obj.material_slots:
+        mat = slot.material
+        if mat is None:
+            continue
+        if getattr(mat, "animation_data", None) is not None:
+            return True
+        for tree in (
+            getattr(mat, "node_tree", None),
+            getattr(getattr(mat, "luxcore", None), "node_tree", None),
+        ):
+            if getattr(tree, "animation_data", None) is not None:
+                return True
+    return False
+
+
 def frame_change(entry, eval_by_key, camera_key):
     """
     Classify a reuse candidate after scene.frame_current changed.
 
-    Returns (rebuild_needed, transform_keys): transform_keys holds the
-    delta-safe member objects whose matrix_world differs from the
-    stored export-time matrix (animated or silently moved). Anything
-    animated beyond a plain transform — geometry animation of any
-    kind, or a transform change on an object that cannot be patched in
-    place — forces a full rebuild.
+    Returns (rebuild_needed, transform_keys, material_dirty):
+    transform_keys holds the delta-safe member objects whose
+    matrix_world differs from the stored export-time matrix (animated
+    or silently moved); material_dirty asks for a member-material
+    refresh when a material is animated. Anything animated beyond that
+    — geometry animation of any kind, or a transform change on an
+    object that cannot be patched in place — forces a full rebuild.
     """
     transform_keys = set()
+    material_dirty = False
     for key, eval_obj in eval_by_key.items():
         if key == camera_key or key not in entry["members"]:
             continue
@@ -356,12 +435,14 @@ def frame_change(entry, eval_by_key, camera_key):
         if _animation_kind(original) == "other" or _geometry_animated(
             original
         ):
-            return True, set()
+            return True, set(), False
+        if _material_animated(original):
+            material_dirty = True
         base = entry["bake"].get(key) or entry["member_mats"].get(key)
         if base is not None and eval_obj.matrix_world != base:
             if key not in entry["delta_safe"]:
                 # A light, instancer or other unpatchable object moved
                 # between frames.
-                return True, set()
+                return True, set(), False
             transform_keys.add(key)
-    return False, transform_keys
+    return False, transform_keys, material_dirty

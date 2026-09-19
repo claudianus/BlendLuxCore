@@ -115,11 +115,35 @@ though most objects are static between frames.
     Time — all rebuild;
   - a changed `matrix_world` on a delta-safe object becomes a
     transform delta; a changed matrix on anything else (lights,
-    instancers) rebuilds.
+    instancers) rebuilds;
+  - `_material_animated()` marks the entry when any member material or
+    its node tree carries animation/drivers, so a frame change also
+    refreshes materials in place.
   Verified headless: keyframed cube rendered at frames 1/15/30
   produces correct per-frame output with `1 transform delta(s)` per
   frame instead of a re-export — and before this fix it rendered the
   frame-1 image three times.
+- **Material deltas ride on `Scene.Parse` re-definition** — *verified
+  empirically*: a material node edit dirties
+  `Object(shading) + Mesh(shading) + Material(shading) +
+  ShaderNodeTree(no flags)`. Material (like texture/volume)
+  re-definition is a first-class engine operation — `ParseMaterials`
+  rebuilds the named material in place including light-source
+  re-wiring — so a dirty `Material` datablock triggers a re-export of
+  every member material into the cached scene. Two safety rules keep
+  this conservative:
+  - *Echoes need a trigger*: `Mesh`/`NodeTree` datablocks and
+    object-side `FLAG_SHADING` are classified as *echoes* — compatible
+    with a material delta but unable to start one. A shading echo
+    without an accompanying `Material` datablock update (world/light
+    node trees look identical here, and luxcore-mode worlds do not
+    read the node tree at all) forces a full rebuild.
+  - *Identity/topology signatures*: `mat_sig` (material pointer ->
+    LuxCore name) catches renames — a rename changes the
+    `scene.materials.*` key objects reference — and `slot_sig`
+    (per-object slot material/link layout) catches binding edits.
+    Both force a rebuild; slot reassignment additionally flags
+    geometry anyway.
 
 ## Phasing
 
@@ -136,7 +160,16 @@ though most objects are static between frames.
    Verified headless: repeated F12 reuses the scene (identical
    image), a moved object applies one transform delta (image shows
    the move), a bmesh edit triggers a full rebuild and re-cache.
-3. Extend to CURVES/POINTCLOUD/VOLUME and instancer re-flush.
-4. Validation: repeated F12 timing, animation-sequence render timing,
+3. ~~Material-only delta~~ — done: dirty `Material` datablocks re-
+   export all member materials via `Scene.Parse` re-definition on the
+   cached scene; shading echoes without a `Material` trigger, material
+   renames (`mat_sig`) and slot topology edits (`slot_sig`) all fall
+   back to rebuild. Driver/keyframed materials mark the entry
+   material-dirty at frame changes. Verified headless (M1–M4 in
+   `dev-tools/a6_persistent_scene_test.py`): color edit keeps the
+   Scene and changes the image; rename/slot-swap rebuild; animated
+   material refreshes across a frame change.
+4. Extend to CURVES/POINTCLOUD/VOLUME and instancer re-flush.
+5. Validation: repeated F12 timing, animation-sequence render timing,
    correctness diff (same outputs as full export) on the A6 benchmark
    scenes (500k duplis, 1M-strand hair, classroom).
