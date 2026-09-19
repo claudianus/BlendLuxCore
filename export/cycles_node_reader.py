@@ -3049,6 +3049,27 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             return _warn_unsupported(
                 node, "'Radius' has no per-instance texture channel in "
                 "LuxCore; using 1.0", 1.0, obj_name)
+    elif node.bl_idname == "ShaderNodeSqueeze":
+        # Sigmoid: out = 1 / (1 + exp(-(v - c) * w))
+        v = _socket(node.inputs["Value"], props, material, obj_name,
+                    group_node_stack)
+        w = _socket(node.inputs["Width"], props, material, obj_name,
+                    group_node_stack)
+        c = _socket(node.inputs["Center"], props, material, obj_name,
+                    group_node_stack)
+        if not any(_is_textured(t) for t in (v, w, c)):
+            def _s(x):
+                return x[0] if isinstance(x, (list, tuple)) else x
+            try:
+                return 1.0 / (1.0 + math.exp(-(_s(v) - _s(c)) * _s(w)))
+            except OverflowError:
+                return 0.0
+        d = _tex_binary("subtract", v, c, luxcore_name + "_d", props)
+        x = _tex_binary("scale", d, w, luxcore_name + "_x", props)
+        nx = _tex_binary("scale", x, -1.0, luxcore_name + "_nx", props)
+        e = _tex_mathfunc("exp", nx, None, luxcore_name + "_e", props)
+        den = _tex_binary("add", 1.0, e, luxcore_name + "_den", props)
+        return _tex_binary("divide", 1.0, den, luxcore_name, props)
     else:
         note = _UNSUPPORTED_NODE_NOTES.get(node.bl_idname)
         LuxCoreErrorLog.add_warning(

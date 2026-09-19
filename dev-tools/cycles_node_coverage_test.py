@@ -392,6 +392,37 @@ def test_vmath_sine_textured():
           f"types={types}")
 
 
+def test_squeeze_const():
+    mat, nt, out = new_tree()
+    sq = nt.nodes.new("ShaderNodeSqueeze")
+    sq.inputs["Value"].default_value = 0.0
+    sq.inputs["Width"].default_value = 1.0
+    sq.inputs["Center"].default_value = 0.0
+    em = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(sq.outputs[0], em.inputs["Strength"])
+    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+    props = convert(mat)
+    # sigmoid(0) = 0.5 — emission strength is scalar, check any prop = 0.5
+    check("squeeze(0)=0.5 folded", has_vec3_texture(props, (0.5, 0.5, 0.5)),
+          f"emission={emission_value(props)}")
+
+
+def test_squeeze_textured():
+    mat, nt, out = new_tree()
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    sq = nt.nodes.new("ShaderNodeSqueeze")
+    nt.links.new(tc.outputs["Generated"], sq.inputs["Value"])
+    sq.inputs["Width"].default_value = 2.0
+    sq.inputs["Center"].default_value = 0.5
+    em = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(sq.outputs[0], em.inputs["Strength"])
+    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+    props = convert(mat)
+    types = emitted_texture_types(props)
+    check("squeeze textured -> mathfunc exp chain", "mathfunc" in types,
+          f"types={types}")
+
+
 def test_gabor_specific_warning():
     LuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()

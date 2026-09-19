@@ -108,7 +108,7 @@ with no LuxCore equivalent additionally carry a specific reason via
 | ShaderNodeRGB / Value | mapped | constfloat3/constfloat1 |
 | ShaderNodeBlackbody | mapped | blackbody |
 | ShaderNodeWavelength | mapped | lampspectrum |
-| ShaderNodeSqueeze | warn | Freestyle |
+| ShaderNodeSqueeze | mapped | sigmoid 1/(1+exp(-(v-c)*w)) via `mathfunc` exp + arithmetic |
 
 ## Shading-graph utility nodes
 
