@@ -363,6 +363,20 @@ def _combine3(x, y, z, name, props):
     return [f(x), f(y), f(z)]
 
 
+def _v3_mathfunc(op, vec, name, props):
+    """Elementwise mathfunc on a vector value or texture (folds consts)."""
+    if not _is_textured(vec):
+        v = list(vec)[:3] if isinstance(vec, (list, tuple)) else [vec] * 3
+        try:
+            return [_MATHFUNC_FOLD[op](x) for x in v]
+        except (ValueError, OverflowError):
+            pass
+    comps = [_tex_mathfunc(op, _split_chan(vec, c, f"{name}_c{c}", props),
+                           None, f"{name}_f{c}", props)
+             for c in range(3)]
+    return _combine3(comps[0], comps[1], comps[2], name, props)
+
+
 def _const_mat_mul_vec(mat_rows, vec, name, props):
     """
     Apply a constant 3x3 matrix (3 rows of 3 floats) to a vector value or
@@ -2141,9 +2155,14 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "texture": vector1,
                 "increment": vector2,
             }
+        elif operation in {"SINE", "COSINE", "TANGENT"}:
+            # Elementwise trig via mathfunc (matches Cycles' per-component
+            # semantics); constants fold to plain vectors
+            op = {"SINE": "sin", "COSINE": "cos", "TANGENT": "tan"}[operation]
+            return _v3_mathfunc(op, vector1, luxcore_name, props)
         else:
-            # Unsupported ops (WRAP, FLOORMOD, DIVIDE modes, SINE/COSINE/
-            # TANGENT, REFRACT, ...): pass through instead of blacking out
+            # Unsupported ops (WRAP, FLOORMOD, DIVIDE modes, REFRACT, ...):
+            # pass through instead of blacking out
             if vector_out:
                 return _warn_unsupported(
                     node, f"vector math operation '{operation}' is not supported, "

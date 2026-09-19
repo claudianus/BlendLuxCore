@@ -91,7 +91,7 @@ with no LuxCore equivalent additionally carry a specific reason via
 | Node | Status | Notes |
 |---|---|---|
 | ShaderNodeMath | mapped | SINE/COSINE/TANGENT/ARCSINE/ARCCOSINE/ARCTANGENT/ARCTAN2/EXPONENT/LOGARITHM via LuxCore `mathfunc` texture (log_b(x)=ln(x)/ln(b)); SQRT/MIN/MAX/FLOOR/CEIL/TRUNC/FRACT/PINGPONG/SIGN/COMPARE/WRAP/SNAP/MULTIPLY_ADD/RADIANS/DEGREES composed from existing textures; remaining ops warn + passthrough |
-| ShaderNodeVectorMath | approx | ADD/SUBTRACT/MULTIPLY/DIVIDE/DOT/CROSS/REFLECT/PROJECT/FACEFORWARD/MULTIPLY_ADD/LENGTH/DISTANCE/NORMALIZE/SCALE/ABSOLUTE/MODULO/MIN/MAX mapped; SNAP→nearest-multiple approx; WRAP/FLOORMOD/SINE/COSINE/TANGENT/REFRACT→warn passthrough |
+| ShaderNodeVectorMath | approx | ADD/SUBTRACT/MULTIPLY/DIVIDE/DOT/CROSS/REFLECT/PROJECT/FACEFORWARD/MULTIPLY_ADD/LENGTH/DISTANCE/NORMALIZE/SCALE/ABSOLUTE/MODULO/MIN/MAX mapped; SNAP→nearest-multiple approx; SINE/COSINE/TANGENT→elementwise `mathfunc`; WRAP/FLOORMOD/REFRACT→warn passthrough |
 | ShaderNodeVectorRotate | const-only | rotation composed as constant 3x3 matrix over texture channels; textured axis/angle/euler → warn passthrough |
 | ShaderNodeVectorTransform | approx | world/object/camera matrices composed per object; per-instance object space not expressible (base object matrix used); unresolvable → warn passthrough |
 | ShaderNodeMixRGB / Mix | approx | direct blend modes; exotic blends → mix + warn |

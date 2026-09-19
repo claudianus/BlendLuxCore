@@ -366,6 +366,32 @@ def test_math_sine_textured():
           f"types={types}")
 
 
+def test_vmath_sine_const():
+    mat, nt, out = new_tree()
+    vm = nt.nodes.new("ShaderNodeVectorMath")
+    vm.operation = "SINE"
+    vm.inputs[0].default_value = (1.5707963267948966, 0.0, 0.0)
+    emit_color_via(nt, out, vm.outputs["Vector"])
+    props = convert(mat)
+    check("vmath sin const fold (1,0,0)",
+          has_vec3_texture(props, (1.0, 0.0, 0.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_vmath_sine_textured():
+    mat, nt, out = new_tree()
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    vm = nt.nodes.new("ShaderNodeVectorMath")
+    vm.operation = "SINE"
+    nt.links.new(tc.outputs["Normal"], vm.inputs[0])
+    emit_color_via(nt, out, vm.outputs["Vector"])
+    props = convert(mat)
+    types = emitted_texture_types(props)
+    check("vmath sine textured -> mathfunc x3 + makefloat3",
+          types.count("mathfunc") == 3 and "makefloat3" in types,
+          f"types={types}")
+
+
 def test_gabor_specific_warning():
     LuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
