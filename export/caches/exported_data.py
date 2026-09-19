@@ -8,8 +8,13 @@ class ExportedPart:
 
 
 class ExportedMesh:
-    def __init__(self, mesh_definitions):
+    def __init__(self, mesh_definitions, vert_sig=None):
         self.mesh_definitions = mesh_definitions
+        # Deformation motion blur (E9): export-time topology signature
+        # (vertex_count, loop_vertex_indices). The per-step sampler in
+        # motion_blur.py re-checks it so a mid-shutter topology change
+        # falls back to static instead of corrupting the vertex series.
+        self.vert_sig = vert_sig
 
 
 class ExportedData:
@@ -34,6 +39,14 @@ class ExportedObject(ExportedData):
         self.pc_motion_times = None
         self.pc_steps_n = 0
         self.pc_prefix = None
+        # Deformation motion blur (E9): the ExportedMesh this object was
+        # built from plus the mesh_key used for per-step deduplication,
+        # and whether any part's final shape is a wrapper (subdiv etc.)
+        # around the base mesh — wrappers create new meshes that would
+        # silently drop a vertex series set on the base shape.
+        self.exported_mesh = None
+        self.vert_mesh_key = None
+        self.has_shape_wrapper = False
 
         for (shape_name, mat_index), mat_name in zip(mesh_definitions, mat_names):
             obj_name = lux_name_base + str(mat_index)

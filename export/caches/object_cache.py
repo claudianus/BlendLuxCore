@@ -1075,6 +1075,17 @@ class ObjectCache2:
             # replacement cannot rewire.
             base_list = list(exported_mesh.mesh_definitions)
             base_names = {name for name, _m in base_list}
+            # Deformation motion blur (E9): let motion_blur.convert()
+            # re-evaluate this object's mesh per shutter step and attach
+            # a vertex series to the base shapes. Objects whose final
+            # shape is a wrapper (subdiv etc.) are excluded — the wrapper
+            # mesh is a new mesh that would drop the base series anyway.
+            exported_obj.exported_mesh = exported_mesh
+            exported_obj.vert_mesh_key = mesh_key
+            exported_obj.has_shape_wrapper = any(
+                part.lux_shape not in base_names
+                for part in exported_obj.parts
+            )
             self.obj_geo_meta[obj_key] = (
                 obj.original.data.as_pointer() if obj.original.data else 0,
                 mesh_key,

@@ -6,12 +6,14 @@ import pyluxcore
 from .. import utils
 from .caches.exported_data import ExportedObject, ExportedLight
 from .caches.object_cache import _instance_key, _dupli_motion_enabled
+from .mesh_converter import get_ndarray
 from .pointcloud import _read_pointcloud_data, _point_matrices
 
 
 # TODO fix motion blur of area lights, they get a wrong transformation
 
-def convert(context, engine, scene, depsgraph, exported_objects, instances=None):
+def convert(context, engine, scene, depsgraph, exported_objects,
+            luxcore_scene=None, instances=None):
     assert scene.camera
     motion_blur = scene.camera.data.luxcore.motion_blur
     assert motion_blur.enable and (motion_blur.object_blur or motion_blur.camera_blur)
@@ -26,13 +28,21 @@ def convert(context, engine, scene, depsgraph, exported_objects, instances=None)
     dupli_steps = (
         [dict() for _ in range(steps)] if instances is not None else None
     )
+    # Per-step deforming-mesh vertex samples for vertex motion blur (E9):
+    # {mesh_key: {"mesh": ExportedMesh, "data": [arr|None]*steps,
+    #             "ok": bool}}
+    vert_steps = {} if luxcore_scene is not None else None
     matrices = _get_matrices(context, engine, scene, steps, frame_offsets,
-                             depsgraph, exported_objects, instances, dupli_steps)
+                             depsgraph, exported_objects, instances,
+                             dupli_steps, vert_steps)
 
     if dupli_steps is not None:
         _build_dupli_motion(instances, dupli_steps, frame_offsets, steps)
 
     _build_pointcloud_motion(exported_objects, matrices, frame_offsets, steps)
+
+    if vert_steps is not None:
+        _build_vertex_motion(vert_steps, frame_offsets, luxcore_scene)
 
     # Find and delete entries of non-moving objects (where all matrices are equal)
     for prefix, matrix_steps in list(matrices.items()):
@@ -68,7 +78,8 @@ def _calc_frame_offsets(shutter, steps):
 
 
 def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
-                  exported_objects, instances=None, dupli_steps=None):
+                  exported_objects, instances=None, dupli_steps=None,
+                  vert_steps=None):
     motion_blur = scene.camera.data.luxcore.motion_blur
     matrices = {}  # {prefix: [matrix1, matrix2, ...]}
 
@@ -90,7 +101,7 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
         if motion_blur.object_blur:
             _append_object_matrices(
                 depsgraph, exported_objects, matrices, step,
-                instances, dupli_steps,
+                instances, dupli_steps, vert_steps,
             )
 
         if motion_blur.camera_blur and not context:
@@ -109,7 +120,8 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
 
 
 def _append_object_matrices(depsgraph, exported_objects, matrices, step,
-                            instances=None, dupli_steps=None):
+                            instances=None, dupli_steps=None,
+                            vert_steps=None):
     for dg_obj_instance in depsgraph.object_instances:
         obj = dg_obj_instance.parent if dg_obj_instance.is_instance else dg_obj_instance.object
         # A5: opt-in is enable_motion_blur on the instanced object OR the
@@ -146,6 +158,10 @@ def _append_object_matrices(depsgraph, exported_objects, matrices, step,
                     matrix = _collect_pointcloud_step(
                         exported_thing, dg_obj_instance, step
                     )
+                _collect_vertex_step(
+                    vert_steps, exported_thing, dg_obj_instance.object,
+                    depsgraph, step,
+                )
                 for part in exported_thing.parts:
                     prefix = "scene.objects." + part.lux_obj + "."
                     _append_matrix(matrices, prefix, matrix, step)
@@ -295,3 +311,91 @@ def _build_dupli_motion(instances, dupli_steps, frame_offsets, steps):
             "transform (particle born/died mid-shutter); center-frame "
             "transform was used for those steps." % total_missing
         )
+
+
+def _collect_vertex_step(vert_steps, exported_thing, eval_obj, depsgraph, step):
+    """Deformation motion blur (E9): sample this object's evaluated mesh
+    at the current shutter step and keep the loop-expanded vertex
+    positions if the topology still matches the exported mesh. Samples
+    are deduplicated per mesh_key so objects sharing an instanced mesh
+    evaluate it only once per step.
+    """
+    if vert_steps is None:
+        return
+    exported_mesh = exported_thing.exported_mesh
+    mesh_key = exported_thing.vert_mesh_key
+    if (
+        exported_mesh is None
+        or exported_mesh.vert_sig is None
+        or exported_thing.has_shape_wrapper
+    ):
+        return
+
+    rec = vert_steps.get(mesh_key)
+    if rec is None:
+        rec = {"mesh": exported_mesh, "data": {}, "ok": True}
+        vert_steps[mesh_key] = rec
+    if step in rec["data"] or not rec["ok"]:
+        return
+
+    positions = _sample_loop_points(eval_obj, depsgraph, exported_mesh.vert_sig)
+    if positions is None:
+        rec["ok"] = False
+        print(
+            "Motion blur: topology of mesh '%s' changed mid-shutter; "
+            "vertex motion disabled for it (rendering static)." % mesh_key
+        )
+    else:
+        rec["data"][step] = positions
+
+
+def _sample_loop_points(eval_obj, depsgraph, vert_sig):
+    """Re-run the mesh_converter vertex pipeline on the evaluated object
+    and return loop-expanded (N,3) float32 positions, or None when the
+    topology differs from the export-time signature (vert_count,
+    loop_vertex_indices).
+    """
+    vert_count, loop_vertices_ref = vert_sig
+    object_eval = None
+    mesh = None
+    try:
+        object_eval = eval_obj.evaluated_get(depsgraph)
+        mesh = object_eval.to_mesh()
+        if mesh is None:
+            return None
+        mesh.calc_loop_triangles()
+        mesh.split_faces()
+        if len(mesh.vertices) != vert_count or len(mesh.loops) != len(
+            loop_vertices_ref
+        ):
+            return None
+        loop_vertices = get_ndarray(mesh.loops, "vertex_index", 0, np.uint32)
+        if not np.array_equal(loop_vertices, loop_vertices_ref):
+            return None
+        vertex_points = get_ndarray(mesh.vertices, "co", 3, np.float32)
+        return np.ascontiguousarray(vertex_points[loop_vertices])
+    except Exception:
+        return None
+    finally:
+        if object_eval is not None and mesh is not None:
+            object_eval.to_mesh_clear()
+
+
+def _build_vertex_motion(vert_steps, frame_offsets, luxcore_scene):
+    """Attach the collected per-step vertex buffers to every base shape
+    of each sampled mesh via Scene.SetMeshVertexMotion. The shutter
+    times are the same frame_offsets used by the transform motion props,
+    so a single schedule drives both. Meshes that failed a topology
+    check or never moved stay static.
+    """
+    times = np.asarray(frame_offsets, dtype=np.float32)
+    for mesh_key, rec in vert_steps.items():
+        data = rec["data"]
+        if not rec["ok"] or len(data) != len(frame_offsets):
+            continue
+        steps_data = [data[s] for s in range(len(frame_offsets))]
+        if all(np.array_equal(s, steps_data[0]) for s in steps_data[1:]):
+            # Mesh does not deform — no vertex series needed
+            continue
+        for shape_name, _mat in rec["mesh"].mesh_definitions:
+            luxcore_scene.SetMeshVertexMotion(shape_name, times, steps_data)
