@@ -8,6 +8,7 @@ from .caches.exported_data import ExportedObject, ExportedLight
 from .caches.object_cache import _instance_key, _dupli_motion_enabled
 from .mesh_converter import get_ndarray
 from .pointcloud import _read_pointcloud_data, _point_matrices
+from .hair import _read_curves_points
 
 
 # TODO fix motion blur of area lights, they get a wrong transformation
@@ -32,9 +33,13 @@ def convert(context, engine, scene, depsgraph, exported_objects,
     # {mesh_key: {"mesh": ExportedMesh, "data": [arr|None]*steps,
     #             "ok": bool}}
     vert_steps = {} if luxcore_scene is not None else None
+    # Per-step strand control-point samples for hair/curve motion blur
+    # (E9): {strand_mesh_name: {"rec": strand_rec, "data": {...},
+    # "ok": bool}}
+    strand_steps = {} if luxcore_scene is not None else None
     matrices = _get_matrices(context, engine, scene, steps, frame_offsets,
                              depsgraph, exported_objects, instances,
-                             dupli_steps, vert_steps)
+                             dupli_steps, vert_steps, strand_steps)
 
     if dupli_steps is not None:
         _build_dupli_motion(instances, dupli_steps, frame_offsets, steps)
@@ -43,6 +48,9 @@ def convert(context, engine, scene, depsgraph, exported_objects,
 
     if vert_steps is not None:
         _build_vertex_motion(vert_steps, frame_offsets, luxcore_scene)
+
+    if strand_steps is not None:
+        _build_strand_motion(strand_steps, frame_offsets, luxcore_scene)
 
     # Find and delete entries of non-moving objects (where all matrices are equal)
     for prefix, matrix_steps in list(matrices.items()):
@@ -79,7 +87,7 @@ def _calc_frame_offsets(shutter, steps):
 
 def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
                   exported_objects, instances=None, dupli_steps=None,
-                  vert_steps=None):
+                  vert_steps=None, strand_steps=None):
     motion_blur = scene.camera.data.luxcore.motion_blur
     matrices = {}  # {prefix: [matrix1, matrix2, ...]}
 
@@ -101,7 +109,7 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
         if motion_blur.object_blur:
             _append_object_matrices(
                 depsgraph, exported_objects, matrices, step,
-                instances, dupli_steps, vert_steps,
+                instances, dupli_steps, vert_steps, strand_steps,
             )
 
         if motion_blur.camera_blur and not context:
@@ -121,7 +129,7 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
 
 def _append_object_matrices(depsgraph, exported_objects, matrices, step,
                             instances=None, dupli_steps=None,
-                            vert_steps=None):
+                            vert_steps=None, strand_steps=None):
     for dg_obj_instance in depsgraph.object_instances:
         obj = dg_obj_instance.parent if dg_obj_instance.is_instance else dg_obj_instance.object
         # A5: opt-in is enable_motion_blur on the instanced object OR the
@@ -160,6 +168,10 @@ def _append_object_matrices(depsgraph, exported_objects, matrices, step,
                     )
                 _collect_vertex_step(
                     vert_steps, exported_thing, dg_obj_instance.object,
+                    depsgraph, step,
+                )
+                _collect_strand_step(
+                    strand_steps, exported_thing, dg_obj_instance.object,
                     depsgraph, step,
                 )
                 for part in exported_thing.parts:
@@ -399,3 +411,108 @@ def _build_vertex_motion(vert_steps, frame_offsets, luxcore_scene):
             continue
         for shape_name, _mat in rec["mesh"].mesh_definitions:
             luxcore_scene.SetMeshVertexMotion(shape_name, times, steps_data)
+
+
+def _collect_strand_step(strand_steps, exported_thing, eval_obj, depsgraph, step):
+    """Strand deformation motion blur (E9): sample the object's strand
+    control points at the current shutter step. The sample must match
+    the raw strand layout recorded at export time (per-strand point
+    counts for hair curves, particle range/counts for particle hair);
+    LuxCore re-filters the raw points through the stored source map, so
+    this returns raw (unfiltered) positions in the same space the base
+    export stored them.
+    """
+    if strand_steps is None:
+        return
+    for rec in exported_thing.strand_recs:
+        if rec["wrapped"]:
+            # A shape wrapper (subdiv, pointiness, ...) created a new
+            # mesh off the base strands; motion set on the base mesh
+            # would not propagate to it.
+            continue
+        key = rec["mesh"]
+        entry = strand_steps.get(key)
+        if entry is None:
+            entry = {"rec": rec, "data": {}, "ok": True}
+            strand_steps[key] = entry
+        if step in entry["data"] or not entry["ok"]:
+            continue
+
+        points = _sample_strand_points(rec, eval_obj, depsgraph)
+        if points is None:
+            entry["ok"] = False
+            print(
+                "Motion blur: strand layout of '%s' changed mid-shutter; "
+                "strand motion disabled for it (rendering static)." % key
+            )
+        else:
+            entry["data"][step] = points
+
+
+def _sample_strand_points(rec, eval_obj, depsgraph):
+    """Re-read the object's strand control points on the evaluated
+    object and return a (P,3) float32 array in the stored strand space,
+    or None when the strand layout differs from the export-time
+    signature.
+    """
+    kind, sig = rec["kind"], rec["sig"]
+    object_eval = None
+    try:
+        object_eval = eval_obj.evaluated_get(depsgraph)
+        if kind == "curves":
+            points_per_strand, points = _read_curves_points(
+                object_eval.data.curves
+            )
+            if tuple(int(c) for c in points_per_strand) != sig["pps"]:
+                return None
+        else:
+            # Particle hair: identical to convert_hair's co_hair loop.
+            psys = object_eval.particle_systems.get(sig["psys_name"])
+            if (
+                psys is None
+                or len(psys.particles) != sig["num_parents"]
+                or len(psys.child_particles) != sig["num_children"]
+            ):
+                return None
+            co_hair = psys.co_hair
+            points = np.fromiter(
+                (
+                    elem
+                    for pindex in range(sig["start"], sig["dupli_count"])
+                    for s in range(sig["pps"])
+                    for elem in co_hair(
+                        object=object_eval, particle_no=pindex, step=s
+                    )
+                ),
+                dtype=np.float32,
+            )
+        points = points.reshape(-1, 3)
+        space_matrix = rec["space_matrix"]
+        if space_matrix is not None:
+            # The binding applied this transform to the stored strand
+            # points (world -> object space); step samples must match.
+            m = np.asarray(space_matrix, dtype=np.float32)
+            points = points @ m[:3, :3].T + m[:3, 3]
+        return np.ascontiguousarray(points, dtype=np.float32)
+    except Exception:
+        return None
+
+
+def _build_strand_motion(strand_steps, frame_offsets, luxcore_scene):
+    """Attach the collected per-step strand control-point buffers to
+    each strand mesh via Scene.SetStrandsVertexMotion. LuxCore
+    re-tessellates every step through the strand motion recipe stored
+    at definition time, so the exported strand layout only needs to
+    match in raw input space. Strands that failed a layout check or
+    never moved stay static.
+    """
+    times = np.asarray(frame_offsets, dtype=np.float32)
+    for mesh_name, entry in strand_steps.items():
+        data = entry["data"]
+        if not entry["ok"] or len(data) != len(frame_offsets):
+            continue
+        steps_data = [data[s] for s in range(len(frame_offsets))]
+        if all(np.array_equal(s, steps_data[0]) for s in steps_data[1:]):
+            # Strands do not deform — no point series needed
+            continue
+        luxcore_scene.SetStrandsVertexMotion(mesh_name, times, steps_data)

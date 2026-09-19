@@ -47,6 +47,11 @@ class ExportedObject(ExportedData):
         self.exported_mesh = None
         self.vert_mesh_key = None
         self.has_shape_wrapper = False
+        # Strand deformation motion blur (E9): records of strand meshes
+        # (hair curves or particle hair) exported by this object. Each
+        # entry is a dict {"mesh", "kind", "sig", "space_matrix",
+        # "wrapped"} consumed by motion_blur's per-step strand sampler.
+        self.strand_recs = []
 
         for (shape_name, mat_index), mat_name in zip(mesh_definitions, mat_names):
             obj_name = lux_name_base + str(mat_index)

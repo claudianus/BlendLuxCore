@@ -353,7 +353,26 @@ def convert_hair(
             "[%s: %s] Hair export finished (%.3f s)"
             % (obj.name, psys.name, time_elapsed)
         )
-        return lux_shape_name
+        # Motion-blur step sampling re-reads co_hair for the same
+        # particle range, so the signature records the particle counts
+        # and strand range used here; a mismatch at any step falls back
+        # to a static strand mesh. space_matrix is the transform the
+        # binding applied to the stored strand points (world -> object
+        # for duplication/instancing, else none) — step samples must
+        # arrive in the same space.
+        strand_sig = {
+            "kind": "psys",
+            "psys_name": psys.name,
+            "num_parents": num_parents,
+            "num_children": num_children,
+            "start": start,
+            "dupli_count": dupli_count,
+            "pps": points_per_strand,
+            "space_matrix": (
+                obj.matrix_world.inverted_safe() if is_for_duplication else None
+            ),
+        }
+        return lux_shape_name, strand_sig
     except Exception as error:
         msg = "[%s: %s] %s" % (obj.name, psys.name, error)
         LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
@@ -415,6 +434,27 @@ def get_strand_seg(idx, strand):
         return strand.points[idx].position
 
 
+def _read_curves_points(curves):
+    """Read (points_per_strand, flat xyz points) from a Hair Curves
+    datablock, in the exact ordering DefineBlenderCurveStrands receives.
+    Shared by the base export and the motion-blur step sampler so the
+    raw strand layout stays identical between them.
+    """
+    points_per_strand = np.fromiter(
+        (strand.points_length for strand in curves), dtype=np.int32
+    )
+    points = np.fromiter(
+        (
+            elem
+            for strand in curves
+            for idx in range(strand.points_length)
+            for elem in strand.points[idx].position
+        ),
+        dtype=np.float32,
+    )
+    return points_per_strand, points
+
+
 # Code for Hair Curves in Blender 3.5
 def convert_hair_curves(
     exporter,
@@ -432,19 +472,7 @@ def convert_hair_curves(
 
     strands = obj.data.curves
 
-    points_per_strand = np.fromiter(
-        (strand.points_length for strand in strands), dtype=np.int32
-    )
-
-    points = np.fromiter(
-        (
-            elem
-            for strand in strands
-            for idx in range(strand.points_length)
-            for elem in strand.points[idx].position
-        ),
-        dtype=np.float32,
-    )
+    points_per_strand, points = _read_curves_points(strands)
 
     colors = np.empty(shape=0, dtype=np.float32)
     uvs = np.empty(shape=0, dtype=np.float32)
@@ -579,4 +607,19 @@ def convert_hair_curves(
 
     if exporter.stats:
         exporter.stats.export_time_hair.value += time_elapsed
-    return lux_shape_name
+    # The raw strand layout (per-strand counts in input order) is the
+    # signature motion-blur step samples must match — LuxCore filters
+    # invalid points internally and maps motion steps back through the
+    # recorded source indices. space_matrix is the transform the
+    # binding applied to the stored strand points: none when the
+    # transform lives on the LuxCore object, matrix_world when it was
+    # baked into the points.
+    strand_sig = {
+        "kind": "curves",
+        "pps": tuple(int(c) for c in points_per_strand),
+        "space_matrix": (
+            None if (is_for_duplication or matrix_world is None)
+            else matrix_world.copy()
+        ),
+    }
+    return lux_shape_name, strand_sig
