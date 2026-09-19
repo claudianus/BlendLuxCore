@@ -1,0 +1,290 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Cycles node-reader coverage test (non-render).
+#
+# For each newly supported node this builds a small Cycles node tree,
+# runs blendluxcore.export.cycles_node_reader.convert() on it and checks
+# the emitted LuxCore properties (texture types, folded constants,
+# material types).
+#
+# Run:
+#   /Applications/Blender.app/Contents/MacOS/Blender --background \
+#       --python dev-tools/cycles_node_coverage_test.py
+#
+# Exits 0 when all assertions pass.
+
+import os
+import sys
+
+import bpy
+
+# In --background mode Blender quits right after --python, before the
+# extension finishes registering — make the installed package importable
+# directly instead.
+_EXT_DIR = os.path.expanduser(
+    "~/Library/Application Support/Blender/5.2/extensions/user_default")
+if _EXT_DIR not in sys.path:
+    sys.path.insert(0, _EXT_DIR)
+
+import pyluxcore  # noqa: E402
+from blendluxcore.export import cycles_node_reader  # noqa: E402
+from blendluxcore.utils.errorlog import LuxCoreErrorLog  # noqa: E402
+
+
+RESULTS = []
+
+
+def check(name, ok, detail=""):
+    RESULTS.append((name, ok))
+    print(("PASS" if ok else "FAIL") + f" {name} {detail}")
+
+
+def new_tree():
+    """Fresh material with an empty node tree + material output."""
+    mat = bpy.data.materials.new("cov")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    return mat, nt, out
+
+
+def emit_color_via(nt, out, from_socket):
+    """Route an arbitrary output through an Emission Color socket."""
+    em = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(from_socket, em.inputs["Color"])
+    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+    return em
+
+
+def convert(mat, obj_name=""):
+    props = pyluxcore.Properties()
+    cycles_node_reader.convert(mat, props, "covmat", obj_name=obj_name)
+    return props
+
+
+def prop_str(props, name):
+    """Property value as a plain string ('name = v' -> 'v')."""
+    try:
+        raw = str(props.Get(name))
+    except Exception:
+        return None
+    return raw.split("=", 1)[-1].strip().strip('"') if "=" in raw else raw
+
+
+def all_prop_names(props):
+    try:
+        return [str(n) for n in props.GetAllNames()]
+    except Exception:
+        return []
+
+
+def emitted_texture_types(props):
+    return [prop_str(props, n) for n in all_prop_names(props)
+            if n.endswith(".type") and "textures." in n]
+
+
+def emission_value(props):
+    """Emission value for diagnostics (may be a texture name)."""
+    return prop_str(props, "scene.materials.covmat.emission")
+
+
+def has_vec3_texture(props, expected, eps=1e-3):
+    """True when some emitted property holds a vec3 matching `expected`
+    — folded constants land inline in texture operands (e.g. a scale
+    texture's texture2) or inside makefloat3/constfloat3 helpers."""
+    for n in all_prop_names(props):
+        raw = prop_str(props, n)
+        if raw is None:
+            continue
+        try:
+            vals = [float(x) for x in raw.split()]
+        except ValueError:
+            continue
+        if len(vals) >= 3 and all(abs(v - t) < eps
+                                  for v, t in zip(vals[:3], expected)):
+            return True
+    return False
+
+
+def test_cross_product_const():
+    mat, nt, out = new_tree()
+    vm = nt.nodes.new("ShaderNodeVectorMath")
+    vm.operation = "CROSS_PRODUCT"
+    vm.inputs[0].default_value = (1.0, 0.0, 0.0)
+    vm.inputs[1].default_value = (0.0, 1.0, 0.0)
+    emit_color_via(nt, out, vm.outputs["Vector"])
+    props = convert(mat)
+    check("cross const fold (0,0,1)",
+          has_vec3_texture(props, (0.0, 0.0, 1.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_reflect_const():
+    mat, nt, out = new_tree()
+    vm = nt.nodes.new("ShaderNodeVectorMath")
+    vm.operation = "REFLECT"
+    vm.inputs[0].default_value = (1.0, 0.0, -1.0)
+    vm.inputs[1].default_value = (0.0, 0.0, 1.0)
+    emit_color_via(nt, out, vm.outputs["Vector"])
+    props = convert(mat)
+    check("reflect const fold (1,0,1)",
+          has_vec3_texture(props, (1.0, 0.0, 1.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_project_const():
+    mat, nt, out = new_tree()
+    vm = nt.nodes.new("ShaderNodeVectorMath")
+    vm.operation = "PROJECT"
+    vm.inputs[0].default_value = (1.0, 1.0, 0.0)
+    vm.inputs[1].default_value = (0.0, 1.0, 0.0)
+    emit_color_via(nt, out, vm.outputs["Vector"])
+    props = convert(mat)
+    check("project const fold (0,1,0)",
+          has_vec3_texture(props, (0.0, 1.0, 0.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_cross_textured():
+    """Textured input -> splitfloat3/scale/subtract/makefloat3 composite."""
+    mat, nt, out = new_tree()
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    vm = nt.nodes.new("ShaderNodeVectorMath")
+    vm.operation = "CROSS_PRODUCT"
+    nt.links.new(tc.outputs["Normal"], vm.inputs[0])
+    vm.inputs[1].default_value = (0.0, 0.0, 1.0)
+    emit_color_via(nt, out, vm.outputs["Vector"])
+    props = convert(mat)
+    types = emitted_texture_types(props)
+    check("cross textured composite",
+          "makefloat3" in types and "splitfloat3" in types,
+          f"types={types}")
+
+
+def test_vector_rotate_z90():
+    mat, nt, out = new_tree()
+    vr = nt.nodes.new("ShaderNodeVectorRotate")
+    vr.rotation_type = "Z_AXIS"
+    vr.inputs["Angle"].default_value = 1.5707963267948966  # 90 deg
+    vr.inputs["Vector"].default_value = (1.0, 0.0, 0.0)
+    emit_color_via(nt, out, vr.outputs["Vector"])
+    props = convert(mat)
+    check("vector_rotate z90 -> (0,1,0)",
+          has_vec3_texture(props, (0.0, 1.0, 0.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_vector_rotate_axis_angle():
+    mat, nt, out = new_tree()
+    vr = nt.nodes.new("ShaderNodeVectorRotate")
+    vr.rotation_type = "AXIS_ANGLE"
+    vr.inputs["Axis"].default_value = (0.0, 0.0, 1.0)
+    vr.inputs["Angle"].default_value = 3.141592653589793  # 180 deg
+    vr.inputs["Vector"].default_value = (1.0, 0.0, 0.0)
+    emit_color_via(nt, out, vr.outputs["Vector"])
+    props = convert(mat)
+    check("vector_rotate 180deg -> (-1,0,0)",
+          has_vec3_texture(props, (-1.0, 0.0, 0.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_vector_transform_identity():
+    mat, nt, out = new_tree()
+    vt = nt.nodes.new("ShaderNodeVectorTransform")
+    vt.convert_from = "WORLD"
+    vt.convert_to = "WORLD"
+    vt.inputs["Vector"].default_value = (0.2, 0.3, 0.4)
+    emit_color_via(nt, out, vt.outputs["Vector"])
+    props = convert(mat)
+    check("vector_transform identity",
+          has_vec3_texture(props, (0.2, 0.3, 0.4)),
+          f"emission={emission_value(props)}")
+
+
+def test_vector_transform_object():
+    """world->object on a translated object folds correctly for a
+    constant point input."""
+    from mathutils import Matrix
+    obj = bpy.data.objects.new("xf_obj", None)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.matrix_world = Matrix.Translation((1.0, 2.0, 3.0))
+    mat, nt, out = new_tree()
+    vt = nt.nodes.new("ShaderNodeVectorTransform")
+    vt.convert_from = "WORLD"
+    vt.convert_to = "OBJECT"
+    vt.vector_type = "POINT"
+    vt.inputs["Vector"].default_value = (4.0, 5.0, 6.0)
+    emit_color_via(nt, out, vt.outputs["Vector"])
+    props = convert(mat, obj_name="xf_obj")
+    check("vector_transform point fold (3,3,3)",
+          has_vec3_texture(props, (3.0, 3.0, 3.0)),
+          f"emission={emission_value(props)}")
+    bpy.data.objects.remove(obj)
+
+
+def test_bsdf_hair():
+    mat, nt, out = new_tree()
+    hair = nt.nodes.new("ShaderNodeBsdfHair")
+    nt.links.new(hair.outputs["BSDF"], out.inputs["Surface"])
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    check("bsdf_hair -> hairmat", mt == "hairmat", f"type={mt}")
+
+
+def test_ray_portal():
+    mat, nt, out = new_tree()
+    portal = nt.nodes.new("ShaderNodeBsdfRayPortal")
+    nt.links.new(portal.outputs[0], out.inputs["Surface"])
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    check("ray_portal -> transparent", mt == "transparent", f"type={mt}")
+
+
+def test_eevee_specular():
+    mat, nt, out = new_tree()
+    sp = nt.nodes.new("ShaderNodeEeveeSpecular")
+    nt.links.new(sp.outputs["BSDF"], out.inputs["Surface"])
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    check("eevee_specular -> glossy2/glass", mt in {"glossy2", "glass"},
+          f"type={mt}")
+
+
+def test_point_info_random():
+    mat, nt, out = new_tree()
+    pi = nt.nodes.new("ShaderNodePointInfo")
+    em = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(pi.outputs["Random"], em.inputs["Strength"])
+    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+    props = convert(mat)
+    check("point_info random -> objectidnormalized",
+          "objectidnormalized" in emitted_texture_types(props),
+          f"types={emitted_texture_types(props)}")
+
+
+def test_gabor_specific_warning():
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    gabor = nt.nodes.new("ShaderNodeTexGabor")
+    em = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(gabor.outputs[0], em.inputs["Color"])
+    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+    convert(mat)
+    msgs = [w.message if hasattr(w, "message") else str(w)
+            for w in LuxCoreErrorLog.warnings]
+    check("gabor specific warning",
+          any("Gabor" in m for m in msgs), f"warns={msgs}")
+
+
+def main():
+    for fn in [v for k, v in sorted(globals().items())
+               if k.startswith("test_")]:
+        fn()
+    fails = [r for r in RESULTS if not r[1]]
+    print(f"\n{len(RESULTS) - len(fails)}/{len(RESULTS)} checks passed")
+    if fails:
+        sys.exit(1)
+
+
+main()

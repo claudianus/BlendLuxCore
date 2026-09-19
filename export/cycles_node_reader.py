@@ -10,6 +10,25 @@ from mathutils import Euler, Matrix, Vector
 ERROR_VALUE = 0
 MISSING_IMAGE_COLOR = [1, 0, 1]
 # Neutral fallbacks for unsupported outputs; never silently return black
+
+# Node types with no LuxCore equivalent — the generic fallback path uses
+# these to emit a specific reason instead of a bare "unsupported" warning.
+_UNSUPPORTED_NODE_NOTES = {
+    "ShaderNodeScript": "OSL scripts cannot be executed by LuxCore",
+    "ShaderNodeShaderToRGB": "shader-to-color requires an Eevee-style raster pass",
+    "ShaderNodeOutputAOV": "custom AOVs are written via LuxCore film outputs, not material nodes",
+    "ShaderNodeOutputLineStyle": "Freestyle line-style output has no LuxCore equivalent",
+    "ShaderNodeLightFalloff": "light falloff is configured on LuxCore light definitions",
+    "ShaderNodeCameraData": "view vector/depth is not available to LuxCore textures",
+    "ShaderNodeRaycast": "scene raycast queries are not available to LuxCore textures",
+    "ShaderNodeRadialTiling": "no polar/radial tiling texture in LuxCore",
+    "ShaderNodeTexGabor": "no Gabor texture in LuxCore",
+    "ShaderNodeTexIES": "IES profiles live on LuxCore light definitions, not material textures",
+    "ShaderNodeTexSky": "sky models exist as LuxCore lights (sky2/sun), not material textures",
+    "ShaderNodeSqueeze": "Freestyle squeeze value has no shading meaning",
+    "ShaderNodeUVAlongStroke": "Freestyle stroke UVs have no shading meaning",
+    "ShaderNodeBackground": "Background is a world-shader node; use Emission in materials",
+}
 FALLBACK_COLOR = [0.5, 0.5, 0.5]
 FALLBACK_FLOAT = 0.5
 FALLBACK_VECTOR = [0.0, 0.0, 0.0]
@@ -232,6 +251,75 @@ def _tex_mix(texture1, texture2, amount, name, props):
         "texture2": texture2,
         "amount": amount,
     })
+
+
+def _split_chan(value, channel, name, props):
+    """Extract one channel of a float3 value or texture (constants fold)."""
+    if _is_textured(value):
+        return _tex_helper(props, name, {
+            "type": "splitfloat3", "texture": value, "channel": channel})
+    if isinstance(value, (list, tuple)):
+        return list(value)[channel]
+    return value
+
+
+def _combine3(x, y, z, name, props):
+    """Reassemble three channel values into a float3 (constants fold)."""
+    if _is_textured(x) or _is_textured(y) or _is_textured(z):
+        return _tex_helper(props, name, {
+            "type": "makefloat3",
+            "texture1": x, "texture2": y, "texture3": z})
+    def f(v):
+        return v[0] if isinstance(v, (list, tuple)) else v
+    return [f(x), f(y), f(z)]
+
+
+def _const_mat_mul_vec(mat_rows, vec, name, props):
+    """
+    Apply a constant 3x3 matrix (3 rows of 3 floats) to a vector value or
+    texture. Rows emit scale/add/makefloat3 helper textures when vec is
+    texture-driven; constant vectors fold in Python.
+    """
+    if not _is_textured(vec):
+        v = list(vec)[:3] if isinstance(vec, (list, tuple)) else [vec] * 3
+        return [sum(mat_rows[r][c] * v[c] for c in range(3)) for r in range(3)]
+    comps = [_split_chan(vec, c, f"{name}_s{c}", props) for c in range(3)]
+    out = []
+    for r in range(3):
+        terms = [
+            _tex_binary("scale", comps[c], mat_rows[r][c], f"{name}_r{r}{c}", props)
+            for c in range(3) if mat_rows[r][c] != 0
+        ]
+        if not terms:
+            out.append(0.0)
+            continue
+        acc = terms[0]
+        for i, t in enumerate(terms[1:]):
+            acc = _tex_binary("add", acc, t, f"{name}_r{r}p{i}", props)
+        out.append(acc)
+    return _combine3(out[0], out[1], out[2], name + "_mat", props)
+
+
+def _vtransform_matrix(cfrom, cto, obj_name):
+    """
+    Constant world-space 4x4 matrix converting from coordinate space
+    `cfrom` to `cto` ("WORLD"/"OBJECT"/"CAMERA"), or None when a space
+    cannot be resolved (no object of that name, no scene camera).
+    """
+    def world_mat(space):
+        if space == "WORLD":
+            return Matrix.Identity(4)
+        if space == "CAMERA":
+            cam = bpy.context.scene.camera
+            return cam.matrix_world.copy() if cam else None
+        obj = bpy.data.objects.get(obj_name)
+        return obj.matrix_world.copy() if obj else None
+
+    m_from = world_mat(cfrom)
+    m_to = world_mat(cto)
+    if m_from is None or m_to is None:
+        return None
+    return m_to.inverted_safe() @ m_from
 
 
 def _blend_rgb(node, blend_type, fac, tex1, tex2, luxcore_name, props, obj_name):
@@ -1745,9 +1833,99 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "texture1": vector1,
                 "texture2": length,
             }
+        elif operation == "CROSS_PRODUCT":
+            a = [_split_chan(vector1, i, luxcore_name + f"_a{i}", props)
+                 for i in range(3)]
+            b = [_split_chan(vector2, i, luxcore_name + f"_b{i}", props)
+                 for i in range(3)]
+
+            def _mul(t1, t2, tag):
+                return _tex_binary("scale", t1, t2, luxcore_name + tag, props)
+
+            cross = [
+                _tex_binary("subtract", _mul(a[1], b[2], "_x0p"),
+                            _mul(a[2], b[1], "_x0m"), luxcore_name + "_cx", props),
+                _tex_binary("subtract", _mul(a[2], b[0], "_x1p"),
+                            _mul(a[0], b[2], "_x1m"), luxcore_name + "_cy", props),
+                _tex_binary("subtract", _mul(a[0], b[1], "_x2p"),
+                            _mul(a[1], b[0], "_x2m"), luxcore_name + "_cz", props),
+            ]
+            return _combine3(cross[0], cross[1], cross[2],
+                             luxcore_name + "_cross", props)
+        elif operation == "REFLECT":
+            # r = i - 2 (i . n) n
+            dot = _tex_binary("dotproduct", vector1, vector2,
+                              luxcore_name + "_dot", props)
+            two_dot = _tex_binary("scale", dot, 2.0, luxcore_name + "_2d", props)
+            scaled_n = _tex_binary("scale", vector2, two_dot,
+                                   luxcore_name + "_sn", props)
+            return _tex_binary("subtract", vector1, scaled_n,
+                               luxcore_name + "_refl", props)
+        elif operation == "PROJECT":
+            # proj of a onto b = b * (a . b) / (b . b)
+            dot = _tex_binary("dotproduct", vector1, vector2,
+                              luxcore_name + "_dot", props)
+            len2 = _tex_binary("dotproduct", vector2, vector2,
+                               luxcore_name + "_len2", props)
+            frac = _tex_binary("divide", dot, len2, luxcore_name + "_fr", props)
+            return _tex_binary("scale", vector2, frac,
+                               luxcore_name + "_proj", props)
+        elif operation == "FACEFORWARD":
+            # Blender: returns n if dot(i, nref) < 0 else -n, i.e.
+            # n * (2*lt(dot,0) - 1). Inputs: Vector, Incident, Reference.
+            incident = _socket(node.inputs[1], props, material, obj_name,
+                               group_node_stack)
+            reference = _socket(node.inputs[2], props, material, obj_name,
+                                group_node_stack)
+            dot = _tex_binary("dotproduct", incident, reference,
+                              luxcore_name + "_dot", props)
+            lt = _tex_helper(props, luxcore_name + "_lt", {
+                "type": "lessthan", "texture1": dot, "texture2": 0.0})
+            sign = _tex_binary("subtract",
+                               _tex_binary("scale", lt, 2.0,
+                                           luxcore_name + "_lt2", props),
+                               1.0, luxcore_name + "_sgn", props)
+            return _tex_binary("scale", vector1, sign,
+                               luxcore_name + "_ff", props)
+        elif operation == "MULTIPLY_ADD":
+            # a * b + c (elementwise)
+            vector3 = _socket(node.inputs[2], props, material, obj_name,
+                              group_node_stack)
+            prod = _tex_binary("scale", vector1, vector2,
+                               luxcore_name + "_mp", props)
+            return _tex_binary("add", prod, vector3,
+                               luxcore_name + "_madd", props)
+        elif operation in {"MINIMUM", "MAXIMUM"}:
+            # min(a,b) = b + lt(a,b)*(a-b);  max(a,b) = a + lt(a,b)*(b-a)
+            lt = _tex_helper(props, luxcore_name + "_lt", {
+                "type": "lessthan", "texture1": vector1, "texture2": vector2})
+            if operation == "MINIMUM":
+                diff = _tex_binary("subtract", vector1, vector2,
+                                   luxcore_name + "_df", props)
+                sel = _tex_binary("scale", diff, lt, luxcore_name + "_sl", props)
+                return _tex_binary("add", vector2, sel,
+                                   luxcore_name + "_min", props)
+            else:
+                diff = _tex_binary("subtract", vector2, vector1,
+                                   luxcore_name + "_df", props)
+                sel = _tex_binary("scale", diff, lt, luxcore_name + "_sl", props)
+                return _tex_binary("add", vector1, sel,
+                                   luxcore_name + "_max", props)
+        elif operation == "SNAP":
+            # Approximation: LuxCore's rounding texture snaps to the nearest
+            # multiple of the increment; Blender's SNAP floors to it. The
+            # difference is at most half an increment per component.
+            _warn_unsupported(
+                node, "'Snap' approximated by round-to-nearest-multiple "
+                "(Blender floors to the increment)", None, obj_name)
+            definitions = {
+                "type": "rounding",
+                "texture": vector1,
+                "increment": vector2,
+            }
         else:
-            # Unsupported ops (CROSS_PRODUCT, PROJECT, REFLECT, MINIMUM, SNAP,
-            # SINE, ...): pass through the first input instead of blacking out
+            # Unsupported ops (WRAP, FLOORMOD, DIVIDE modes, SINE/COSINE/
+            # TANGENT, REFRACT, ...): pass through instead of blacking out
             if vector_out:
                 return _warn_unsupported(
                     node, f"vector math operation '{operation}' is not supported, "
@@ -2458,8 +2636,188 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             "max": _socket(node.inputs["Max"], props, material, obj_name,
                            group_node_stack),
         }
+    elif node.bl_idname == "ShaderNodeVectorRotate":
+        vector = _socket(node.inputs["Vector"], props, material, obj_name,
+                         group_node_stack)
+        center = _socket(node.inputs["Center"], props, material, obj_name,
+                         group_node_stack)
+        rtype = getattr(node, "rotation_type", "AXIS_ANGLE")
+
+        # LuxCore has no vector-rotate texture, but a rotation about a
+        # constant axis/euler is just a constant 3x3 matrix, which composes
+        # out of splitfloat3/scale/add/makefloat3 (see _const_mat_mul_vec).
+        rot_mat = None
+        if rtype == "AXIS_ANGLE":
+            axis = _socket(node.inputs["Axis"], props, material, obj_name,
+                           group_node_stack)
+            angle = _socket(node.inputs["Angle"], props, material, obj_name,
+                            group_node_stack)
+            if not _is_textured(axis) and not _is_textured(angle):
+                try:
+                    rot_mat = Matrix.Rotation(
+                        angle, 3, Vector(list(axis)[:3]).normalized())
+                except (ValueError, TypeError):
+                    rot_mat = Matrix.Identity(3)
+        elif rtype in {"X_AXIS", "Y_AXIS", "Z_AXIS"}:
+            angle = _socket(node.inputs["Angle"], props, material, obj_name,
+                            group_node_stack)
+            if not _is_textured(angle):
+                rot_mat = Matrix.Rotation(angle, 3, rtype[0])
+        else:  # EULER
+            rot = _socket(node.inputs["Rotation"], props, material, obj_name,
+                          group_node_stack)
+            if not _is_textured(rot):
+                rot_mat = Euler(list(rot)[:3]).to_matrix()
+
+        if rot_mat is None:
+            return _warn_unsupported(
+                node, "texture-driven axis/angle/rotation inputs are not "
+                "supported; passing through the vector", vector, obj_name)
+
+        if getattr(node, "invert", False):
+            rot_mat = rot_mat.transposed()
+
+        # v' = R (v - center) + center
+        shifted = vector if _is_zero(center) else _tex_binary(
+            "subtract", vector, center, luxcore_name + "_sh", props)
+        rotated = _const_mat_mul_vec([list(r) for r in rot_mat], shifted,
+                                     luxcore_name + "_rot", props)
+        if _is_zero(center):
+            return rotated
+        return _tex_binary("add", rotated, center,
+                           luxcore_name + "_rotc", props)
+    elif node.bl_idname == "ShaderNodeVectorTransform":
+        vector = _socket(node.inputs["Vector"], props, material, obj_name,
+                         group_node_stack)
+        cfrom, cto = node.convert_from, node.convert_to
+        if cfrom == cto:
+            return vector
+
+        # The from->to matrix is constant per material instance, so the
+        # transform composes out of the same linear-map helpers as
+        # VectorRotate. Note: for dupli/instanced objects the base object's
+        # matrix is used (per-instance object spaces are not expressible).
+        mat = _vtransform_matrix(cfrom, cto, obj_name)
+        if mat is None:
+            return _warn_unsupported(
+                node, f"cannot resolve the {cfrom.lower()} -> {cto.lower()} "
+                "transform (missing object/camera); passing through the "
+                "vector", vector, obj_name)
+
+        vtype = getattr(node, "vector_type", "VECTOR")
+        if vtype == "NORMAL":
+            # Normals transform by the inverse-transpose
+            lin = mat.inverted_safe().transposed().to_3x3()
+            trans = None
+        else:
+            lin = mat.to_3x3()
+            trans = [mat[0][3], mat[1][3], mat[2][3]] if vtype == "POINT" else None
+
+        transformed = _const_mat_mul_vec([list(r) for r in lin], vector,
+                                         luxcore_name + "_xf", props)
+        if trans is not None and any(t != 0 for t in trans):
+            return _tex_binary("add", transformed, trans,
+                               luxcore_name + "_xft", props)
+        return transformed
+    elif node.bl_idname == "ShaderNodeBsdfHair":
+        # Legacy Cycles hair BSDF (pre-Principled). Map onto the Marschner
+        # "hairmat" like ShaderNodeBsdfHairPrincipled; the Reflection/
+        # Transmission lobe split cannot be expressed.
+        prefix = "scene.materials."
+        component = getattr(node, "component", "Reflection")
+        _warn_unsupported(
+            node, f"legacy Hair BSDF approximated by hairmat (the "
+            f"'{component}' lobe weighting is not separable)", None, obj_name)
+
+        offset_sock = node.inputs.get("Offset")
+        offset = _socket(offset_sock, props, material, obj_name,
+                         group_node_stack) if offset_sock is not None else 0.0
+        if offset_sock is not None and offset_sock.is_linked \
+                and offset != ERROR_VALUE:
+            alpha = luxcore_name + "offset_to_deg"
+            props.Set(utils.luxutils.create_props(
+                "scene.textures." + alpha + ".", {
+                    "type": "scale",
+                    "texture1": offset,
+                    "texture2": 57.29577951308232,
+                }))
+        else:
+            alpha = offset * 57.29577951308232
+
+        def _hair_sock(name, fallback):
+            s = node.inputs.get(name)
+            return _socket(s, props, material, obj_name, group_node_stack) \
+                if s is not None else fallback
+
+        definitions = {
+            "type": "hairmat",
+            "eta": 1.55,
+            "beta_m": _hair_sock("RoughnessU", 0.1),
+            "beta_n": _hair_sock("RoughnessV", 0.1),
+            "alpha": alpha,
+            "color": _hair_sock("Color", [0.5, 0.5, 0.5]),
+        }
+    elif node.bl_idname == "ShaderNodeBsdfRayPortal":
+        # No portal BSDF in LuxCore; transparent is the closest match (rays
+        # continue through the surface unaltered)
+        prefix = "scene.materials."
+        _warn_unsupported(
+            node, "Ray Portal BSDF has no LuxCore equivalent; approximated "
+            "by transparent", None, obj_name)
+        definitions = {
+            "type": "transparent",
+            "kt": _socket(node.inputs.get("Color"), props, material, obj_name,
+                          group_node_stack)
+                  if node.inputs.get("Color") is not None else 1.0,
+        }
+    elif node.bl_idname == "ShaderNodeEeveeSpecular":
+        # Legacy Eevee-only specular BSDF; approximate with glossy2.
+        # Cycles' Specular input scales F0 by 0.08.
+        prefix = "scene.materials."
+        _warn_unsupported(
+            node, "Eevee Specular BSDF approximated by glossy2", None,
+            obj_name)
+
+        def _eevee_sock(name, fallback):
+            s = node.inputs.get(name)
+            return _socket(s, props, material, obj_name, group_node_stack) \
+                if s is not None else fallback
+
+        spec = _eevee_sock("Specular", 0.0)
+        ks = _tex_binary("scale", spec, 0.08, luxcore_name + "_f0", props) \
+            if spec != 0 else [0.0, 0.0, 0.0]
+        roughness = _eevee_sock("Roughness", 0.0)
+        definitions = {
+            "type": "glossy2" if roughness != 0 else "glass",
+            "kd": _eevee_sock("Base Color", [0.8, 0.8, 0.8]),
+            "ks": ks,
+            "interiorior": 1.46,
+        }
+        if roughness != 0:
+            definitions["uroughness"] = roughness
+            definitions["vroughness"] = roughness
+    elif node.bl_idname == "ShaderNodePointInfo":
+        prefix = "scene.textures."
+        if output_socket.name == "Position":
+            _warn_unsupported(
+                node, "'Position' is approximated by the hit position on the "
+                "instanced sphere (the point's surface, not its center)",
+                None, obj_name)
+            definitions = {"type": "position"}
+        elif output_socket.name == "Random":
+            # Points are exported as per-point instances, so the per-object
+            # normalized id doubles as a stable per-point random
+            definitions = {"type": "objectidnormalized"}
+        else:  # Radius
+            return _warn_unsupported(
+                node, "'Radius' has no per-instance texture channel in "
+                "LuxCore; using 1.0", 1.0, obj_name)
     else:
-        LuxCoreErrorLog.add_warning(f"Unsupported node type: {node.name}", obj_name=obj_name)
+        note = _UNSUPPORTED_NODE_NOTES.get(node.bl_idname)
+        LuxCoreErrorLog.add_warning(
+            f"Unsupported node type: {node.name}"
+            + (f" ({node.bl_idname}): {note}" if note else ""),
+            obj_name=obj_name)
 
         # TODO do this for unsupported mixRGB and math modes, too
         # Try to skip this node by looking at its internal links (the same that are used when the node is muted)
