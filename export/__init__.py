@@ -316,6 +316,37 @@ class Exporter(object):
         print("Export took %.1f s" % export_time)
         if stats:
             stats.export_time.value = export_time
+            # Stage breakdown so export bottlenecks are visible in the log
+            # instead of guessed (A6).
+            stages = [
+                ("camera", stats.export_time_camera),
+                ("objects", stats.export_time_objects),
+                ("  pointcloud", stats.export_time_pointcloud),
+                ("  volumes", stats.export_time_volumes),
+                ("  lights", stats.export_time_lights),
+                ("  meshes", stats.export_time_meshes),
+                ("  hair", stats.export_time_hair),
+                ("motion_blur", stats.export_time_motionblur),
+                ("world", stats.export_time_world),
+                ("scene_parse", stats.export_time_scene_parse),
+                ("instancing", stats.export_time_instancing),
+                ("config", stats.export_time_config),
+            ]
+            breakdown = " | ".join(
+                "%s=%.2fs" % (name, stat.value)
+                for name, stat in stages
+                if stat.value > 0.001
+            )
+            if breakdown:
+                print("Export stages:", breakdown)
+            if stats.instance_count.value:
+                print(
+                    "Export counts: objects=%d instances=%d"
+                    % (
+                        stats.exported_object_count.value,
+                        stats.instance_count.value,
+                    )
+                )
             self._init_stats(stats, config_props, scene)
 
         # Pre-compile CUDA or OpenCL kernels for viewport and final.
