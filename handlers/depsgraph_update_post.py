@@ -1,5 +1,6 @@
 import bpy
 from bpy.app.handlers import persistent
+from ..export.caches import persistent_scene
 
 @persistent
 def handler(scene):
@@ -11,3 +12,7 @@ def handler(scene):
 
         if node_tree and node_tree.name != mat.name:
             node_tree.name = mat.name
+
+    persistent_scene.on_depsgraph_update(
+        scene, bpy.context.evaluated_depsgraph_get()
+    )

@@ -23,12 +23,14 @@ from . import (
 )
 from .light import WORLD_BACKGROUND_LIGHT_NAME
 from .caches.object_cache import supports_live_transform
+from .caches import persistent_scene
 
 if _needs_reload:
     import importlib
 
     modules = (
         caches,
+        persistent_scene,
         camera,
         config,
         imagepipeline,
@@ -43,6 +45,30 @@ if _needs_reload:
     )
     for module in modules:
         importlib.reload(module)
+
+
+def _camera_spec(camera_props):
+    """
+    Camera signature for persistent-scene reuse: the full property
+    string minus keys that legitimately change every render (camera
+    position/direction, motion-blur steps, position-derived focus
+    distance). Anything else that differs (type, DoF, bokeh, clipping,
+    camera volume...) forces a scene rebuild because Parse cannot
+    delete properties that existed in the cached scene.
+    """
+    volatile = (
+        "scene.camera.lookat.",
+        "scene.camera.up ",
+        "scene.camera.motion.",
+        "scene.camera.focaldistance",
+        "scene.camera.shutteropen",
+        "scene.camera.shutterclose",
+    )
+    return "\n".join(
+        line
+        for line in str(camera_props).splitlines()
+        if not line.startswith(volatile)
+    )
 
 
 class Change:
@@ -138,20 +164,113 @@ class Exporter(object):
         image_resize_policy_props = (
             scene.luxcore.config.image_resize_policy.convert()
         )
-        luxcore_scene = pyluxcore.Scene(
-            pyluxcore.Properties(), image_resize_policy_props
-        )
         scene_props = pyluxcore.Properties()
+        is_viewport_render = context is not None
 
-        # Camera (needs to be parsed first because it is needed for hair
-        # tesselation)
+        # Camera and world are converted up-front: their signatures are
+        # part of the persistent-scene reuse decision below, and the
+        # properties themselves are still parsed into whichever scene
+        # ends up being used (Parse is required first because hair
+        # tesselation needs the camera).
         camera_start = time()
         self.camera_cache.diff(
             self, scene, depsgraph, context
         )  # Init camera cache
-        luxcore_scene.Parse(self.camera_cache.props)
+        camera_props = self.camera_cache.props
         if stats:
             stats.export_time_camera.value += time() - camera_start
+
+        world_start = time()
+        world_props = world.convert(self, depsgraph, scene, is_viewport_render)
+        if stats:
+            stats.export_time_world.value += time() - world_start
+        # Inititalize the world_cache
+        self.world_cache.world_name = scene.world.name_full if scene.world else None
+
+        # Persistent-scene reuse (A6-II): a final render can reuse the
+        # pyluxcore.Scene cached from the previous render of the same
+        # scene + view layer when the accumulated depsgraph dirty set
+        # allows it (see doc/incremental_export_design.md). The decision
+        # is made before scene creation because the camera has to be
+        # parsed into whichever scene ends up being used.
+        pkey = None
+        pentry = None
+        transform_deltas = set()
+        mb_sig = (False, 0)
+        camera_sig = None
+        world_sig = None
+        if not is_viewport_render and utils.is_valid_camera(scene.camera):
+            _blur = scene.camera.data.luxcore.motion_blur
+            _mb_enabled = (
+                _blur.enable
+                and (_blur.object_blur or _blur.camera_blur)
+                and _blur.shutter > 0
+            )
+            mb_sig = (_mb_enabled, _blur.steps if _mb_enabled else 0)
+            camera_sig = _camera_spec(camera_props)
+            world_sig = str(world_props)
+            # Per-object visibility snapshot: toggles that do not
+            # reliably dirty the depsgraph (hide_render etc.) are
+            # caught by comparing it at reuse time.
+            vis_sig = {
+                utils.make_key(o): (
+                    o.hide_render,
+                    o.luxcore.exclude_from_render,
+                    o.visible_camera,
+                    o.visible_diffuse,
+                    o.visible_glossy,
+                    o.visible_transmission,
+                    o.visible_volume_scatter,
+                    o.visible_shadow,
+                )
+                for o in scene.objects
+            }
+            if not (
+                _blur.enable and _blur.object_blur and _blur.shutter > 0
+            ):
+                # Object motion blur needs the per-frame instance data
+                # collected in first_run, so it always re-exports.
+                pkey = (
+                    depsgraph.scene.as_pointer(),
+                    view_layer.name if view_layer else "",
+                )
+                dirty = persistent_scene.take_dirty(
+                    depsgraph.scene.as_pointer()
+                )
+                pentry = persistent_scene.get(pkey)
+                if pentry is not None:
+                    if (
+                        pentry["mb_sig"] != mb_sig
+                        or pentry["camera_sig"] != camera_sig
+                        or pentry["world_sig"] != world_sig
+                    ):
+                        # Parse cannot remove properties once set, so a
+                        # changed camera spec (e.g. DoF toggled), world
+                        # (e.g. env light removed) or motion-blur
+                        # signature would leave stale definitions in the
+                        # cached scene: rebuild instead.
+                        pentry = None
+                    elif vis_sig != pentry["vis"] or set(
+                        vis_sig
+                    ) != pentry["members"]:
+                        # Visibility toggled or an object was
+                        # added/removed
+                        pentry = None
+                    else:
+                        _mode, transform_deltas = persistent_scene.classify(
+                            dirty, pentry, scene.camera
+                        )
+                        if _mode == "full":
+                            pentry = None
+
+        luxcore_scene = (
+            pentry["scene"]
+            if pentry is not None
+            else pyluxcore.Scene(
+                pyluxcore.Properties(), image_resize_policy_props
+            )
+        )
+        luxcore_scene.Parse(camera_props)
 
         if utils.is_valid_camera(scene.camera):
             blur_settings = scene.camera.data.luxcore.motion_blur
@@ -173,17 +292,41 @@ class Exporter(object):
             )
 
         # Objects and lights
-        is_viewport_render = context is not None
         objects_start = time()
-        instances = self.object_cache2.first_run(
-            self,
-            depsgraph,
-            view_layer,
-            engine,
-            luxcore_scene,
-            scene_props,
-            context,
-        )
+        if pentry is not None:
+            try:
+                self._apply_transform_deltas(
+                    pentry, transform_deltas, depsgraph, luxcore_scene
+                )
+                instances = {}
+                print(
+                    "[Exporter] Persistent scene reuse:"
+                    f" {len(transform_deltas)} transform delta(s),"
+                    f" {len(pentry['objects'])} objects kept"
+                )
+            except Exception:
+                # A delta that fails mid-way leaves the cached scene in
+                # an unknown state: discard it and rebuild from scratch.
+                print(
+                    "[Exporter] Persistent scene delta failed,"
+                    " falling back to full export"
+                )
+                pentry = None
+                luxcore_scene = pyluxcore.Scene(
+                    pyluxcore.Properties(), image_resize_policy_props
+                )
+                luxcore_scene.Parse(self.camera_cache.props)
+
+        if pentry is None:
+            instances = self.object_cache2.first_run(
+                self,
+                depsgraph,
+                view_layer,
+                engine,
+                luxcore_scene,
+                scene_props,
+                context,
+            )
         if stats:
             stats.export_time_objects.value += time() - objects_start
         if instances is None:
@@ -222,14 +365,8 @@ class Exporter(object):
                         time() - motion_blur_start
                     )
 
-        # World
-        world_start = time()
-        world_props = world.convert(self, depsgraph, scene, is_viewport_render)
+        # World (converted above the persistent-scene decision)
         scene_props.Set(world_props)
-        if stats:
-            stats.export_time_world.value += time() - world_start
-        # Inititalize the world_cache
-        self.world_cache.world_name = scene.world.name_full if scene.world else None
 
         if (
             scene.luxcore.debug.enabled
@@ -256,6 +393,25 @@ class Exporter(object):
         # Regularly check if we should abort the export (important in heavy scenes)
         if engine and engine.test_break():
             return None
+
+        # Store the fully exported scene for reuse by the next final
+        # render (skipped when this render already reused it).
+        if pkey is not None and pentry is None:
+            print(
+                "[Exporter] Caching scene for persistent reuse:"
+                f" {len(self.object_cache2.exported_objects)} objects"
+            )
+            persistent_scene.store(
+                pkey,
+                luxcore_scene,
+                self.object_cache2.exported_objects,
+                set(vis_sig),
+                self.object_cache2.bake_matrices,
+                mb_sig,
+                camera_sig,
+                world_sig,
+                vis_sig,
+            )
 
         # Convert config at last because all lightgroups and passes have to be
         # already defined
@@ -433,6 +589,50 @@ class Exporter(object):
         # Do not hold reference to temporary data
         self.scene = None
         return pyluxcore.RenderSession(renderconfig)
+
+    def _apply_transform_deltas(
+        self, pentry, transform_deltas, depsgraph, luxcore_scene
+    ):
+        """
+        Apply transform-only updates to a reused persistent scene.
+
+        For objects exported with a transformation on the LuxCore object
+        (instanced/shared/motion-blur exports) the new absolute matrix
+        replaces the old one. For objects with the transform baked into
+        the mesh vertices, UpdateObjectTransformation applies a relative
+        delta (new @ old.inverted()) to the world-space geometry.
+        """
+        if not transform_deltas:
+            return
+        eval_by_key = {utils.make_key(o): o for o in depsgraph.objects}
+        matrix_to_list = utils.luxutils.matrix_to_list
+        for key in transform_deltas:
+            exported = pentry["objects"][key]
+            eval_obj = eval_by_key.get(key)
+            if eval_obj is None:
+                # Should not happen: membership was checked against the
+                # same scene. Skip rather than corrupt the entry.
+                continue
+            new_matrix = eval_obj.matrix_world
+            if (
+                eval_obj.instance_type != "NONE"
+                or eval_obj.particle_systems
+            ):
+                # An instancer's transform also moves its dupli/particle
+                # instance set, which a per-object delta cannot update.
+                raise RuntimeError(
+                    f"instancer '{eval_obj.name}' needs full export"
+                )
+            if exported.transform is None:
+                delta = new_matrix @ pentry["bake"][key].inverted()
+            else:
+                delta = new_matrix
+            mat_list = matrix_to_list(delta)
+            for part in exported.parts:
+                luxcore_scene.UpdateObjectTransformation(
+                    part.lux_obj, mat_list
+                )
+            pentry["bake"][key] = new_matrix.copy()
 
     def get_viewport_changes(self, depsgraph, context=None):
         self.scene = depsgraph.scene_eval

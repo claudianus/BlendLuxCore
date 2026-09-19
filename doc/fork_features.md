@@ -90,6 +90,19 @@ gradients on CPU and Metal/OpenCL.
   static, base object included.
   Per-stage export timings (export time breakdown + instance/object
   counts) are exposed in render stats.
+- **Persistent scene reuse** (A6-II, `export/caches/persistent_scene.py`):
+  final renders of the same scene + view layer reuse the previous
+  `pyluxcore.Scene` instead of re-exporting every object. A
+  `depsgraph_update_post` handler accumulates dirty datablock ids
+  (keyed on `.original` pointers — `DepsgraphUpdate.id` is evaluated);
+  an empty/ignorable dirty set reuses the scene wholesale, a
+  transform-only update on a delta-safe object applies
+  `Scene.UpdateObjectTransformation` (absolute for instanced exports,
+  `new @ old.inverted()` for world-baked geometry), and anything else
+  — geometry/shading dirt, datablock dirt, membership changes,
+  instancers, lights, volumes, object motion blur, camera/world
+  signature changes — falls back to a full export and re-caches.
+  Design + rationale: `doc/incremental_export_design.md`.
 
 ## UX — Quick Setup + viewport stability
 

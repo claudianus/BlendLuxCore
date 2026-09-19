@@ -1,8 +1,10 @@
 # Incremental scene export — A6 phase 2 design
 
-Status: scoped. Roadmap item A6-II — reuse the exported LuxCore scene
-across renders instead of rebuilding it from scratch on every F12 /
-frame change.
+Status: phase 1+2 implemented (persistent cache + dirty tracking +
+transform deltas); per-object geometry deltas and instancer re-flush
+still fall back to full export. Roadmap item A6-II — reuse the
+exported LuxCore scene across renders instead of rebuilding it from
+scratch on every F12 / frame change.
 
 ## Problem and evidence
 
@@ -73,19 +75,43 @@ though most objects are static between frames.
 - **Dupli granularity**: engine-level `DuplicateObject` has no
   per-instance update op, so a dirty instancer re-exports its entire
   instance set — still a win vs full-scene export.
-- **RenderConfig ownership**: `RenderConfig` takes ownership of the
-  Scene it is given — the cache must hand over a *fresh* `Scene` clone
-  or re-fetch via `GetScene()` semantics; verify ownership transfer in
-  pyluxcore before implementation (worst case: keep one Scene per
-  render and rebuild the cache entry after each use).
+- **RenderConfig ownership**: *verified* — `RenderConfigImpl(props,
+  scn)` stores a non-owning reference (`sceneRef`), so a Python-owned
+  `pyluxcore.Scene` safely outlives each RenderConfig/session.
+- **Stale-property risk**: `Scene.Parse` cannot delete properties —
+  a toggled DoF, removed env light, or changed motion-blur step count
+  would leave stale definitions in a reused scene. Reuse therefore
+  requires matching camera spec (minus volatile position/motion keys),
+  world property string, and motion-blur signature, all stored in the
+  entry.
+- **Evaluated-vs-original pointers**: `DepsgraphUpdate.id` is the
+  *evaluated* datablock (`is_evaluated=True`) — its `as_pointer()`
+  does not match the `make_key` object keys, which use
+  `.original.as_pointer()`. Dirty records key on `.original`
+  accordingly.
+- **UpdateObjectTransformation semantics**: on instanced
+  (`ExtInstanceTriangleMesh`) objects it replaces the transform
+  (absolute); on world-baked meshes it applies the transform to the
+  vertices, so baked objects take a *delta* `new @ old.inverted()`.
+- **Instancer exclusion**: an instancer's transform moves its whole
+  dupli set — detected at delta time via `instance_type != "NONE" or
+  particle_systems` and forced to a full rebuild.
 
 ## Phasing
 
-1. Persistent-scene plumbing + fingerprint map + full-fallback safety
-   (no perf change yet — just reuse without deltas, proving the
-   lifecycle works).
-2. depsgraph_update_post dirty set + per-object delta export for
-   MESH objects (the common case).
+1. ~~Persistent-scene plumbing + fingerprint map + full-fallback
+   safety~~ — done: `export/caches/persistent_scene.py` holds the
+   Scene, exported-object map, membership set, bake matrices, and the
+   camera/world/motion-blur signatures per (scene, view layer).
+2. ~~depsgraph_update_post dirty set + per-object transform delta~~ —
+   done for transform-only changes on delta-safe types (MESH-family:
+   instanced exports get the absolute matrix, world-baked exports get
+   `new @ old.inverted()` via `UpdateObjectTransformation`). Geometry/
+   shading dirt, non-object datablock dirt, new/removed objects,
+   instancers, lights and volumes still take the full-export path.
+   Verified headless: repeated F12 reuses the scene (identical
+   image), a moved object applies one transform delta (image shows
+   the move), a bmesh edit triggers a full rebuild and re-cache.
 3. Extend to CURVES/POINTCLOUD/VOLUME and instancer re-flush.
 4. Validation: repeated F12 timing, animation-sequence render timing,
    correctness diff (same outputs as full export) on the A6 benchmark

@@ -405,6 +405,9 @@ class ObjectCache2:
         self.exported_meshes = {}
         self.exported_hair = {}
         self.pending_pointcloud_duplicates = []
+        # {obj_key: (baked matrix_world, delta-safe)} used by the
+        # persistent-scene cache for transform-only deltas (A6-II).
+        self.bake_matrices = {}
 
     def first_run(
         self,
@@ -918,6 +921,15 @@ class ObjectCache2:
         if exported_stuff:
             scene_props.Set(props)
             self.exported_objects[obj_key] = exported_stuff
+            # Transform deltas are only safe where the transform either
+            # sits on the LuxCore object or is world-baked into mesh
+            # verts. Volumes bake it into their grid mapping and
+            # pointclouds into per-point instance matrices, so those
+            # require a full re-export on any transform change.
+            self.bake_matrices[obj_key] = (
+                dg_obj_instance.matrix_world.copy(),
+                obj.type in MESH_OBJECTS,
+            )
 
         return exported_stuff
 
