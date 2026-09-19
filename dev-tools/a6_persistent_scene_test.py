@@ -7,6 +7,9 @@
 #   R4  mesh edited via bmesh   -> full rebuild (new Scene object)
 #   R5  unchanged re-render     -> new cache entry reused
 #   R6  hide_render toggled     -> visibility signature mismatch, rebuild
+#   R7  camera moved            -> same Scene reused (camera re-exported)
+#   R8  DoF toggled             -> camera signature mismatch, rebuild
+#   R9  world color changed     -> world signature mismatch, rebuild
 #
 # Run headless:
 #   blender --background --factory-startup \
@@ -227,9 +230,51 @@ cube.hide_render = True
 bpy.context.view_layer.update()
 render("r6")
 entry = entry_of(persistent_scene)
+scene_r6 = entry["scene"]
 check(
     "R6: hide_render toggle rebuilt the scene",
-    entry["scene"] is not scene_r4,
+    scene_r6 is not scene_r4,
+)
+
+# ---------- R7: camera move reuses the scene ----------
+# (camera is re-exported every render; only its datablock props are
+# part of the reuse signature, not the volatile transform)
+co.location = (-6, -2, 5)
+co.rotation_euler = (
+    mathutils.Vector((0, 0, 0.3)) - co.location
+).to_track_quat("-Z", "Y").to_euler()
+bpy.context.view_layer.update()
+render("r7")
+entry = entry_of(persistent_scene)
+scene_r7 = entry["scene"]
+check(
+    "R7: camera move keeps the cached scene",
+    scene_r7 is scene_r6,
+)
+
+# ---------- R8: DoF toggle -> camera signature rebuild ----------
+cd.dof.use_dof = True
+cd.dof.focus_object = plane
+cd.dof.aperture_fstop = 1.4
+bpy.context.view_layer.update()
+render("r8")
+entry = entry_of(persistent_scene)
+scene_r8 = entry["scene"]
+check(
+    "R8: DoF toggle rebuilt the scene (stale props unsafe)",
+    scene_r8 is not scene_r7,
+)
+
+# ---------- R9: world change -> world signature rebuild ----------
+w.node_tree.nodes["Background"].inputs[0].default_value = (
+    0.05, 0.02, 0.02, 1,
+)
+bpy.context.view_layer.update()
+render("r9")
+entry = entry_of(persistent_scene)
+check(
+    "R9: world change rebuilt the scene",
+    entry["scene"] is not scene_r8,
 )
 
 # ---------- image comparisons ----------
@@ -256,6 +301,14 @@ mean, frac = image_stats(p("r5"), p("r6"))
 check(
     "R5!=R6 images differ (cube hidden)",
     mean > 0.02 and frac > 0.05,
+    f"mean={mean:.4f} changed={frac:.3f}",
+)
+mean, frac = image_stats(p("r6"), p("r7"))
+check(
+    "R6!=R7 images differ (camera moved)",
+    # Cube is hidden here, so the frame is a near-featureless plane:
+    # a large camera move shifts shading subtly (noise floor ~0.002).
+    mean > 0.005,
     f"mean={mean:.4f} changed={frac:.3f}",
 )
 
