@@ -209,3 +209,12 @@ gradients on CPU and Metal/OpenCL.
 
 All adapter features are platform-neutral Python; the Metal backend option is
 Apple-only and falls back to CPU/OpenCL elsewhere.
+
+## Development workflow
+
+- `dev-tools/sync_dev_install.sh` — syncs a freshly built pyluxcore .so
+  (with @rpath→@loader_path/.dylibs rewrites + runtime dylibs), updates the
+  dev wheel the add-on installs from, points `blc_settings.json` at it
+  (LOCAL wheel source — the wheel must live outside `wheels/` because
+  luxloader backs that dir up before `pip download`), and rsyncs the
+  add-on Python sources. Smoke-imports under Blender's bundled Python.
