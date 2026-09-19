@@ -287,29 +287,44 @@ def _tex_greaterthan(t1, t2, name, props):
 _MATHFUNC_UNARY_OPS = {
     "SINE": "sin", "COSINE": "cos", "TANGENT": "tan",
     "ARCSINE": "asin", "ARCCOSINE": "acos", "ARCTANGENT": "atan",
+    "SINH": "sinh", "COSH": "cosh", "TANH": "tanh",
+    "INVERSE_SQRT": "invsqrt",
 }
+
+_MATHFUNC_BINARY_OPS = {
+    "ARCTAN2": "atan2", "FLOORED_MODULO": "floormod",
+}
+
+
+def _floormod_fold(a, b):
+    return 0.0 if b == 0.0 else a - b * math.floor(a / b)
+
 
 _MATHFUNC_FOLD = {
     "sin": math.sin, "cos": math.cos, "tan": math.tan,
     "asin": math.asin, "acos": math.acos, "atan": math.atan,
     "atan2": math.atan2, "exp": math.exp, "ln": math.log,
+    "sinh": math.sinh, "cosh": math.cosh, "tanh": math.tanh,
+    "invsqrt": lambda a: 1.0 / math.sqrt(max(a, 1e-9)),
+    "floormod": _floormod_fold,
 }
 
 
 def _tex_mathfunc(op, tex1, tex2, name, props):
-    """Emit a mathfunc texture (trig/exp/ln), folding constants."""
-    textured = _is_textured(tex1) or (op == "atan2" and _is_textured(tex2))
+    """Emit a mathfunc texture (trig/exp/log/mod), folding constants."""
+    binary = op in ("atan2", "floormod")
+    textured = _is_textured(tex1) or (binary and _is_textured(tex2))
     if not textured:
         def val(t):
             return t[0] if isinstance(t, (list, tuple)) else t
         try:
-            if op == "atan2":
+            if binary:
                 return _MATHFUNC_FOLD[op](val(tex1), val(tex2))
             return _MATHFUNC_FOLD[op](val(tex1))
-        except (ValueError, OverflowError):
+        except (ValueError, OverflowError, ZeroDivisionError):
             pass  # domain error at fold time — let the texture evaluate it
     definitions = {"type": "mathfunc", "op": op, "texture1": tex1}
-    if op == "atan2":
+    if binary:
         definitions["texture2"] = tex2
     return _tex_helper(props, name, definitions)
 
@@ -361,6 +376,30 @@ def _combine3(x, y, z, name, props):
     def f(v):
         return v[0] if isinstance(v, (list, tuple)) else v
     return [f(x), f(y), f(z)]
+
+
+def _smooth_min(a, b, k, name, props):
+    """
+    Polynomial smooth-min: h = clamp(0.5 + 0.5*(b-a)/k, 0, 1);
+    result = mix(b, a, h) - k*h*(1-h). Folds constants.
+    """
+    if not any(_is_textured(t) for t in (a, b, k)):
+        def _s(x):
+            return x[0] if isinstance(x, (list, tuple)) else x
+        va, vb, vk = _s(a), _s(b), max(_s(k), 1e-9)
+        h = min(1.0, max(0.0, 0.5 + 0.5 * (vb - va) / vk))
+        return vb * (1 - h) + va * h - vk * h * (1 - h)
+    d = _tex_binary("subtract", b, a, f"{name}_d", props)
+    hd = _tex_binary("divide", d, k, f"{name}_hd", props)
+    hh = _tex_binary("scale", hd, 0.5, f"{name}_hh", props)
+    hu = _tex_binary("add", 0.5, hh, f"{name}_hu", props)
+    h = _tex_helper(props, f"{name}_h", {
+        "type": "clamp", "texture": hu, "min": 0.0, "max": 1.0})
+    mixv = _tex_mix(b, a, h, f"{name}_mx", props)
+    one_h = _tex_binary("subtract", 1.0, h, f"{name}_1h", props)
+    hh1 = _tex_binary("scale", h, one_h, f"{name}_hh1", props)
+    corr = _tex_binary("scale", k, hh1, f"{name}_cr", props)
+    return _tex_binary("subtract", mixv, corr, f"{name}_r", props)
 
 
 def _v3_mathfunc(op, vec, name, props):
@@ -1309,8 +1348,26 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         elif node.operation in _MATHFUNC_UNARY_OPS:
             return _tex_mathfunc(_MATHFUNC_UNARY_OPS[node.operation],
                                  tex1, None, luxcore_name, props)
-        elif node.operation == "ARCTAN2":
-            return _tex_mathfunc("atan2", tex1, tex2, luxcore_name, props)
+        elif node.operation in _MATHFUNC_BINARY_OPS:
+            return _tex_mathfunc(_MATHFUNC_BINARY_OPS[node.operation],
+                                 tex1, tex2, luxcore_name, props)
+        elif node.operation in {"SMOOTH_MIN", "SMOOTH_MAX"}:
+            # Polynomial smooth-min/max: h = clamp(0.5 + 0.5*(b-a)/k, 0, 1);
+            # smin = mix(b, a, h) - k*h*(1-h), smax = -smin(-a, -b).
+            # Third input is the smoothing distance k.
+            tex3 = _socket(node.inputs[2], props, material, obj_name,
+                           group_node_stack)
+            if node.operation == "SMOOTH_MAX":
+                na = _tex_binary("scale", tex1, -1.0,
+                                 luxcore_name + "_na", props)
+                nb = _tex_binary("scale", tex2, -1.0,
+                                 luxcore_name + "_nb", props)
+                smin = _smooth_min(na, nb, tex3, luxcore_name + "_sm",
+                                   props)
+                return _tex_binary("scale", smin, -1.0,
+                                   luxcore_name + "_smax", props)
+            return _smooth_min(tex1, tex2, tex3, luxcore_name + "_smin",
+                               props)
         elif node.operation == "LOGARITHM":
             # log_b(x) = ln(x) / ln(b); Cycles' second input is the base
             num = _tex_mathfunc("ln", tex1, None, luxcore_name + "_num",

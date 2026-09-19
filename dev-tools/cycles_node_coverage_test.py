@@ -423,6 +423,49 @@ def test_squeeze_textured():
           f"types={types}")
 
 
+def test_math_sinh_const():
+    props = _math_const("SINH", 0.0)
+    check("math sinh(0)=0 folded", has_vec3_texture(props, (0.0, 0.0, 0.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_floormod_const():
+    props = _math_const("FLOORED_MODULO", -0.5, 1.0)
+    check("math floored_modulo(-0.5,1)=0.5 folded",
+          has_vec3_texture(props, (0.5, 0.5, 0.5)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_invsqrt_const():
+    props = _math_const("INVERSE_SQRT", 0.25)
+    check("math invsqrt(0.25)=2 folded",
+          has_vec3_texture(props, (2.0, 2.0, 2.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_smooth_min_const():
+    # smin(0, 0.4, k=0.5): h=clamp(0.5+0.5*0.4/0.5)=0.9; mix(0.4,0,0.9)=0.04;
+    # corr=0.5*0.9*0.1=0.045 -> -0.005
+    props = _math_const("SMOOTH_MIN", 0.0, 0.4, 0.5)
+    check("math smooth_min(0,0.4,0.5)=-0.005 folded",
+          has_vec3_texture(props, (-0.005, -0.005, -0.005), eps=0.01),
+          f"emission={emission_value(props)}")
+
+
+def test_math_floormod_textured():
+    mat, nt, out = new_tree()
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    m = nt.nodes.new("ShaderNodeMath")
+    m.operation = "FLOORED_MODULO"
+    nt.links.new(tc.outputs["Generated"], m.inputs[0])
+    m.inputs[1].default_value = 0.5
+    emit_color_via(nt, out, m.outputs["Value"])
+    props = convert(mat)
+    types = emitted_texture_types(props)
+    check("math floored_modulo textured -> mathfunc", "mathfunc" in types,
+          f"types={types}")
+
+
 def test_gabor_specific_warning():
     LuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
