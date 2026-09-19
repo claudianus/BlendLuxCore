@@ -81,6 +81,13 @@ gradients on CPU and Metal/OpenCL.
   reuse its center-frame matrix, and a dupli object whose ids collide
   falls back to static duplication. Transform interpolation only —
   vertex-level deformation blur is not supported by the engine.
+- **Point-cloud motion blur** (A5 follow-up): POINTCLOUD objects with
+  `enable_motion_blur` re-evaluate point positions/radii at every shutter
+  step and export per-point transform time series — point 0 rides the
+  base object's motion properties, the remaining points go through the
+  same motion-multi duplication path as duplis. If the point count
+  differs at any step (topology change) the whole cloud falls back to
+  static, base object included.
   Per-stage export timings (export time breakdown + instance/object
   counts) are exposed in render stats.
 

@@ -25,6 +25,15 @@ class ExportedObject(ExportedData):
         self.obj_id = obj_id
         # Number of "dupli" objects spawned per part (point cloud instancing)
         self.duplicate_count = 0
+        # Point cloud records: per-step matrices/motion buffers collected by
+        # motion_blur.convert() when the object opted into motion blur.
+        self.is_pointcloud = False
+        self.pc_step_data = []
+        self.pc_failed = False
+        self.pc_motion = None
+        self.pc_motion_times = None
+        self.pc_steps_n = 0
+        self.pc_prefix = None
 
         for (shape_name, mat_index), mat_name in zip(mesh_definitions, mat_names):
             obj_name = lux_name_base + str(mat_index)

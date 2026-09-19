@@ -638,10 +638,26 @@ class ObjectCache2:
 
     def _flush_pointcloud_duplicates(self, luxcore_scene):
         count = 0
-        for src_name, matrices, count_, object_ids in self.pending_pointcloud_duplicates:
-            luxcore_scene.DuplicateObject(
-                src_name, src_name + "dupli", count_, matrices, object_ids
-            )
+        for (
+            src_name, matrices, count_, object_ids, obj_key
+        ) in self.pending_pointcloud_duplicates:
+            exported = self.exported_objects.get(obj_key)
+            if exported is not None and exported.pc_motion is not None:
+                # Per-point motion blur: [instance][step] buffers built by
+                # motion_blur.convert() from re-evaluated point positions.
+                luxcore_scene.DuplicateObject(
+                    src_name,
+                    src_name + "dupli",
+                    count_,
+                    exported.pc_steps_n,
+                    exported.pc_motion_times,
+                    exported.pc_motion,
+                    object_ids,
+                )
+            else:
+                luxcore_scene.DuplicateObject(
+                    src_name, src_name + "dupli", count_, matrices, object_ids
+                )
             count += count_
         self.pending_pointcloud_duplicates.clear()
         return count
