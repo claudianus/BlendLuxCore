@@ -4,6 +4,7 @@ from .. import utils
 from ..utils import node as utils_node
 from ..utils.errorlog import LuxCoreErrorLog
 from .image import ImageExporter
+import math
 from math import degrees, log
 from mathutils import Euler, Matrix, Vector
 
@@ -281,6 +282,36 @@ def _tex_greaterthan(t1, t2, name, props):
         return 1.0 if t1 > t2 else 0.0
     return _tex_helper(props, name, {
         "type": "greaterthan", "texture1": t1, "texture2": t2})
+
+
+_MATHFUNC_UNARY_OPS = {
+    "SINE": "sin", "COSINE": "cos", "TANGENT": "tan",
+    "ARCSINE": "asin", "ARCCOSINE": "acos", "ARCTANGENT": "atan",
+}
+
+_MATHFUNC_FOLD = {
+    "sin": math.sin, "cos": math.cos, "tan": math.tan,
+    "asin": math.asin, "acos": math.acos, "atan": math.atan,
+    "atan2": math.atan2, "exp": math.exp, "ln": math.log,
+}
+
+
+def _tex_mathfunc(op, tex1, tex2, name, props):
+    """Emit a mathfunc texture (trig/exp/ln), folding constants."""
+    textured = _is_textured(tex1) or (op == "atan2" and _is_textured(tex2))
+    if not textured:
+        def val(t):
+            return t[0] if isinstance(t, (list, tuple)) else t
+        try:
+            if op == "atan2":
+                return _MATHFUNC_FOLD[op](val(tex1), val(tex2))
+            return _MATHFUNC_FOLD[op](val(tex1))
+        except (ValueError, OverflowError):
+            pass  # domain error at fold time — let the texture evaluate it
+    definitions = {"type": "mathfunc", "op": op, "texture1": tex1}
+    if op == "atan2":
+        definitions["texture2"] = tex2
+    return _tex_helper(props, name, definitions)
 
 
 def _tex_unary(op, tex, arg, name, props):
@@ -1138,10 +1169,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if early is not None:
             return early
     elif node.bl_idname == "ShaderNodeMath":
-        # TODO (in LuxCore):
-        #  "LOGARITHM", "SQRT", "MINIMUM", "MAXIMUM",
-        #  "FLOOR", "CEIL", "FRACT", "SINE", "COSINE", "TANGENT",
-        #  "ARCSINE", "ARCCOSINE", "ARCTANGENT", "ARCTAN2"]
+        # Trig/exp/log ops are backed by LuxCore's native "mathfunc"
+        # texture (requires a pyluxcore build with MATHFUNC_TEX).
 
         prefix = "scene.textures."
         definitions = {}
@@ -1181,9 +1210,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             return _tex_binary("power", tex1, 0.5, luxcore_name + "_sqrt",
                                props)
         elif node.operation == "EXPONENT":
-            # exp(x) = e^x — LuxCore's power texture takes texture bases
-            return _tex_binary("power", 2.718281828459045, tex1,
-                               luxcore_name + "_exp", props)
+            return _tex_mathfunc("exp", tex1, None, luxcore_name, props)
         elif node.operation in {"MINIMUM", "MAXIMUM"}:
             lt = _tex_lessthan(tex1, tex2, luxcore_name + "_lt", props)
             if node.operation == "MINIMUM":
@@ -1265,6 +1292,19 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                              None, luxcore_name + "_dev", props)
             return _tex_binary("subtract", tex2, dev,
                                luxcore_name + "_pp", props)
+        elif node.operation in _MATHFUNC_UNARY_OPS:
+            return _tex_mathfunc(_MATHFUNC_UNARY_OPS[node.operation],
+                                 tex1, None, luxcore_name, props)
+        elif node.operation == "ARCTAN2":
+            return _tex_mathfunc("atan2", tex1, tex2, luxcore_name, props)
+        elif node.operation == "LOGARITHM":
+            # log_b(x) = ln(x) / ln(b); Cycles' second input is the base
+            num = _tex_mathfunc("ln", tex1, None, luxcore_name + "_num",
+                                props)
+            den = _tex_mathfunc("ln", tex2, None, luxcore_name + "_den",
+                                props)
+            return _tex_binary("divide", num, den, luxcore_name + "_log",
+                               props)
         elif node.operation == "SIGN":
             lt0 = _tex_lessthan(tex1, 0.0, luxcore_name + "_lt0", props)
             gt0 = _tex_greaterthan(tex1, 0.0, luxcore_name + "_gt0", props)

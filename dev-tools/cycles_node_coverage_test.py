@@ -331,6 +331,41 @@ def test_math_wrap():
           f"emission={emission_value(props)}")
 
 
+def test_math_sine_const():
+    props = _math_const("SINE", 1.5707963267948966)
+    check("math sin(pi/2)=1 folded",
+          has_vec3_texture(props, (1.0, 1.0, 1.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_arctan2_const():
+    props = _math_const("ARCTAN2", 1.0, 1.0)
+    check("math atan2(1,1)=pi/4 folded",
+          has_vec3_texture(props, (0.785398, 0.785398, 0.785398)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_logarithm_const():
+    # log2(8) = ln(8)/ln(2) = 3
+    props = _math_const("LOGARITHM", 8.0, 2.0)
+    check("math log2(8)=3 folded", has_vec3_texture(props, (3.0, 3.0, 3.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_sine_textured():
+    """Textured input -> mathfunc texture is emitted."""
+    mat, nt, out = new_tree()
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    m = nt.nodes.new("ShaderNodeMath")
+    m.operation = "SINE"
+    nt.links.new(tc.outputs["Generated"], m.inputs[0])
+    emit_color_via(nt, out, m.outputs["Value"])
+    props = convert(mat)
+    types = emitted_texture_types(props)
+    check("math sine textured -> mathfunc", "mathfunc" in types,
+          f"types={types}")
+
+
 def test_gabor_specific_warning():
     LuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
