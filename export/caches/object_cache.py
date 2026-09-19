@@ -1,5 +1,6 @@
 import bpy
 from array import array
+from contextlib import contextmanager
 from functools import lru_cache
 from time import time
 
@@ -28,6 +29,19 @@ class TriAOVDataIndices:
 
 
 MAX_PARTICLES_FOR_LIVE_TRANSFORM = 2000
+
+
+@contextmanager
+def _timed(exporter, stat_name):
+    # Accumulates elapsed seconds into exporter.stats.<stat_name> when
+    # stats collection is active; zero-cost no-op otherwise (A6 stage
+    # instrumentation).
+    if exporter and exporter.stats:
+        start = time()
+        yield
+        getattr(exporter.stats, stat_name).value += time() - start
+    else:
+        yield
 
 
 def uses_pointiness(node_tree):
@@ -513,6 +527,10 @@ class ObjectCache2:
                     engine,
                 )
 
+        if exporter.stats:
+            exporter.stats.exported_object_count.value = len(
+                self.exported_objects
+            )
         # self._debug_info()
         return instances
 
@@ -524,8 +542,7 @@ class ObjectCache2:
         start_time = time()
 
         # Point clouds: one icosphere instance per point beyond the base object
-        self._flush_pointcloud_duplicates(luxcore_scene)
-
+        instance_count = self._flush_pointcloud_duplicates(luxcore_scene)
         for duplis in instances.values():
             if duplis is None:
                 # If duplis is None, then a non-exportable object like a curve with zero faces is being duplicated
@@ -534,6 +551,8 @@ class ObjectCache2:
             if duplis.get_count() == 0:
                 # Only one instance was created (and is already present in the luxcore_scene), nothing to duplicate
                 continue
+
+            instance_count += duplis.get_count()
 
             for part in duplis.exported_obj.parts:
                 src_name = part.lux_obj
@@ -553,13 +572,17 @@ class ObjectCache2:
 
         if stats:
             stats.export_time_instancing.value = time() - start_time
+            stats.instance_count.value = instance_count
 
     def _flush_pointcloud_duplicates(self, luxcore_scene):
-        for src_name, matrices, count, object_ids in self.pending_pointcloud_duplicates:
+        count = 0
+        for src_name, matrices, count_, object_ids in self.pending_pointcloud_duplicates:
             luxcore_scene.DuplicateObject(
-                src_name, src_name + "dupli", count, matrices, object_ids
+                src_name, src_name + "dupli", count_, matrices, object_ids
             )
+            count += count_
         self.pending_pointcloud_duplicates.clear()
+        return count
 
     def _debug_info(self):
         print("Objects in cache:", len(self.exported_objects))
@@ -694,44 +717,47 @@ class ObjectCache2:
                 if exported_stuff:
                     props = exported_stuff.get_props()
             elif obj.type == "POINTCLOUD":
-                exported_stuff = pointcloud.convert_pointcloud_obj(
-                    exporter,
-                    dg_obj_instance,
-                    obj,
-                    obj_key,
-                    depsgraph,
-                    luxcore_scene,
-                    scene_props,
-                    is_viewport_render,
-                    view_layer,
-                    self.pending_pointcloud_duplicates,
-                )
+                with _timed(exporter, "export_time_pointcloud"):
+                    exported_stuff = pointcloud.convert_pointcloud_obj(
+                        exporter,
+                        dg_obj_instance,
+                        obj,
+                        obj_key,
+                        depsgraph,
+                        luxcore_scene,
+                        scene_props,
+                        is_viewport_render,
+                        view_layer,
+                        self.pending_pointcloud_duplicates,
+                    )
                 if exported_stuff:
                     props = exported_stuff.get_props()
             elif obj.type == "VOLUME":
-                exported_stuff = volume.convert_volume_obj(
-                    exporter,
-                    dg_obj_instance,
-                    obj,
-                    obj_key,
-                    depsgraph,
-                    luxcore_scene,
-                    scene_props,
-                    is_viewport_render,
-                    view_layer,
-                )
+                with _timed(exporter, "export_time_volumes"):
+                    exported_stuff = volume.convert_volume_obj(
+                        exporter,
+                        dg_obj_instance,
+                        obj,
+                        obj_key,
+                        depsgraph,
+                        luxcore_scene,
+                        scene_props,
+                        is_viewport_render,
+                        view_layer,
+                    )
                 if exported_stuff:
                     props = exported_stuff.get_props()
             elif obj.type == "LIGHT":
-                props, exported_stuff = light.convert_light(
-                    exporter,
-                    obj,
-                    obj_key,
-                    depsgraph,
-                    luxcore_scene,
-                    dg_obj_instance.matrix_world.copy(),
-                    is_viewport_render,
-                )
+                with _timed(exporter, "export_time_lights"):
+                    props, exported_stuff = light.convert_light(
+                        exporter,
+                        obj,
+                        obj_key,
+                        depsgraph,
+                        luxcore_scene,
+                        dg_obj_instance.matrix_world.copy(),
+                        is_viewport_render,
+                    )
 
         # Convert hair
         for psys in obj.particle_systems:

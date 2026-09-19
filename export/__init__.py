@@ -144,10 +144,13 @@ class Exporter(object):
 
         # Camera (needs to be parsed first because it is needed for hair
         # tesselation)
+        camera_start = time()
         self.camera_cache.diff(
             self, scene, depsgraph, context
         )  # Init camera cache
         luxcore_scene.Parse(self.camera_cache.props)
+        if stats:
+            stats.export_time_camera.value += time() - camera_start
 
         if utils.is_valid_camera(scene.camera):
             blur_settings = scene.camera.data.luxcore.motion_blur
@@ -161,6 +164,7 @@ class Exporter(object):
 
         # Objects and lights
         is_viewport_render = context is not None
+        objects_start = time()
         instances = self.object_cache2.first_run(
             self,
             depsgraph,
@@ -170,6 +174,8 @@ class Exporter(object):
             scene_props,
             context,
         )
+        if stats:
+            stats.export_time_objects.value += time() - objects_start
         if instances is None:
             # Export was cancelled by user
             return None
@@ -182,6 +188,7 @@ class Exporter(object):
         # is the same on every frame
         if not context and utils.is_valid_camera(scene.camera):
             if self.motion_blur_enabled:
+                motion_blur_start = time()
                 motion_blur_props, cam_moving = motion_blur.convert(
                     context,
                     engine,
@@ -199,10 +206,17 @@ class Exporter(object):
                     motion_blur_props.Set(camera_props)
 
                 scene_props.Set(motion_blur_props)
+                if stats:
+                    stats.export_time_motionblur.value += (
+                        time() - motion_blur_start
+                    )
 
         # World
+        world_start = time()
         world_props = world.convert(self, depsgraph, scene, is_viewport_render)
         scene_props.Set(world_props)
+        if stats:
+            stats.export_time_world.value += time() - world_start
         # Inititalize the world_cache
         self.world_cache.world_name = scene.world.name_full if scene.world else None
 
@@ -217,7 +231,10 @@ class Exporter(object):
             )
             print(scene_props)
             print("-" * 50)
+        parse_start = time()
         luxcore_scene.Parse(scene_props)
+        if stats:
+            stats.export_time_scene_parse.value += time() - parse_start
         # We can only duplicate the instances *after* the scene_props were
         # parsed so the base objects are available for luxcore_scene
         self.object_cache2.duplicate_instances(instances, luxcore_scene, stats)
@@ -231,6 +248,7 @@ class Exporter(object):
 
         # Convert config at last because all lightgroups and passes have to be
         # already defined
+        config_start = time()
         config_props = config.convert(self, scene, context, engine)
         if str(config_props) == "":
             # Config props are empty: there was a critical error in config
@@ -253,6 +271,8 @@ class Exporter(object):
         halt_props = halt.convert(scene)
         self.halt_cache.diff(halt_props)
         config_props.Set(halt_props)
+        if stats:
+            stats.export_time_config.value += time() - config_start
 
         light_count = luxcore_scene.GetLightCount()
         if light_count > 1000:

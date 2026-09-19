@@ -42,12 +42,32 @@ class LuxCoreRenderStats:
                                        0, smaller_is_better, time_to_string, get_rounded)
         self.export_time_hair = Stat("    Hair Export Time", categories[-1],
                                      0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_pointcloud = Stat("    Pointcloud Export Time", categories[-1],
+                                           0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_volumes = Stat("    Volume Export Time", categories[-1],
+                                        0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_lights = Stat("    Light Export Time", categories[-1],
+                                       0, smaller_is_better, time_to_string, get_rounded)
         self.export_time_instancing = Stat("    Instancing Time", categories[-1],
                                            0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_objects = Stat("    Object Loop Time", categories[-1],
+                                        0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_motionblur = Stat("    Motion Blur Export Time", categories[-1],
+                                           0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_world = Stat("    World Export Time", categories[-1],
+                                      0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_scene_parse = Stat("    Scene Parse Time", categories[-1],
+                                            0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_config = Stat("    Config Export Time", categories[-1],
+                                       0, smaller_is_better, time_to_string, get_rounded)
+        self.export_time_camera = Stat("    Camera Export Time", categories[-1],
+                                       0, smaller_is_better, time_to_string, get_rounded)
         self.session_init_time = Stat("Session Init Time", categories[-1],
                                       0, smaller_is_better, time_to_string, get_rounded)
         categories.append("Scene")
         self.light_count = Stat("Lights", categories[-1], 0)
+        self.exported_object_count = Stat("Exported Objects", categories[-1], 0)
+        self.instance_count = Stat("Instances", categories[-1], 0)
         self.triangle_count = Stat("Triangles", categories[-1], 0, string_func=triangle_count_to_string)
         self.vram = Stat("VRAM", categories[-1], (0, 0), vram_better, vram_usage_to_string)
         categories.append("Settings")
