@@ -213,6 +213,12 @@ def _const_binary(op, value1, value2):
             return value1 * value2
         if op == "divide":
             return value1 / value2 if value2 != 0 else 0.0
+        if op == "power":
+            return value1 ** value2
+        if op == "lessthan":
+            return 1.0 if value1 < value2 else 0.0
+        if op == "greaterthan":
+            return 1.0 if value1 > value2 else 0.0
     except (TypeError, IndexError):
         pass
     return None
@@ -251,6 +257,58 @@ def _tex_mix(texture1, texture2, amount, name, props):
         "texture2": texture2,
         "amount": amount,
     })
+
+
+def _tex_lessthan(t1, t2, name, props):
+    """lessthan with constant folding (1 when t1 < t2)."""
+    if not _is_textured(t1) and not _is_textured(t2):
+        if isinstance(t1, (list, tuple)) or isinstance(t2, (list, tuple)):
+            a = list(t1)[:3] if isinstance(t1, (list, tuple)) else [t1] * 3
+            b = list(t2)[:3] if isinstance(t2, (list, tuple)) else [t2] * 3
+            return [1.0 if x < y else 0.0 for x, y in zip(a, b)]
+        return 1.0 if t1 < t2 else 0.0
+    return _tex_helper(props, name, {
+        "type": "lessthan", "texture1": t1, "texture2": t2})
+
+
+def _tex_greaterthan(t1, t2, name, props):
+    """greaterthan with constant folding."""
+    if not _is_textured(t1) and not _is_textured(t2):
+        if isinstance(t1, (list, tuple)) or isinstance(t2, (list, tuple)):
+            a = list(t1)[:3] if isinstance(t1, (list, tuple)) else [t1] * 3
+            b = list(t2)[:3] if isinstance(t2, (list, tuple)) else [t2] * 3
+            return [1.0 if x > y else 0.0 for x, y in zip(a, b)]
+        return 1.0 if t1 > t2 else 0.0
+    return _tex_helper(props, name, {
+        "type": "greaterthan", "texture1": t1, "texture2": t2})
+
+
+def _tex_unary(op, tex, arg, name, props):
+    """
+    Fold/emit single-input math textures: abs (arg=None),
+    rounding (arg=increment), modulo (arg=modulus).
+    """
+    if not _is_textured(tex) and (arg is None or not _is_textured(arg)):
+        def ap(f, v):
+            if isinstance(v, (list, tuple)):
+                return [f(x) for x in v[:3]]
+            return f(v)
+        if op == "abs":
+            return ap(abs, tex)
+        if op == "rounding":
+            inc = arg if arg else 1.0
+            return ap(lambda v: inc * round(v / inc) if inc else v, tex)
+        if op == "modulo":
+            return ap(lambda v: v % arg if arg else 0.0, tex)
+    if op == "abs":
+        return _tex_helper(props, name, {"type": "abs", "texture": tex})
+    if op == "rounding":
+        return _tex_helper(props, name, {
+            "type": "rounding", "texture": tex, "increment": arg})
+    if op == "modulo":
+        return _tex_helper(props, name, {
+            "type": "modulo", "texture": tex, "modulo": arg})
+    raise ValueError(op)
 
 
 def _split_chan(value, channel, name, props):
@@ -1119,6 +1177,128 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             definitions["type"] = "modulo"
             definitions["texture"] = tex1
             definitions["modulo"] = tex2
+        elif node.operation == "SQRT":
+            return _tex_binary("power", tex1, 0.5, luxcore_name + "_sqrt",
+                               props)
+        elif node.operation == "EXPONENT":
+            # exp(x) = e^x — LuxCore's power texture takes texture bases
+            return _tex_binary("power", 2.718281828459045, tex1,
+                               luxcore_name + "_exp", props)
+        elif node.operation in {"MINIMUM", "MAXIMUM"}:
+            lt = _tex_lessthan(tex1, tex2, luxcore_name + "_lt", props)
+            if node.operation == "MINIMUM":
+                diff = _tex_binary("subtract", tex1, tex2,
+                                   luxcore_name + "_df", props)
+                sel = _tex_binary("scale", diff, lt,
+                                  luxcore_name + "_sl", props)
+                return _tex_binary("add", tex2, sel,
+                                   luxcore_name + "_min", props)
+            else:
+                diff = _tex_binary("subtract", tex2, tex1,
+                                   luxcore_name + "_df", props)
+                sel = _tex_binary("scale", diff, lt,
+                                  luxcore_name + "_sl", props)
+                return _tex_binary("add", tex1, sel,
+                                   luxcore_name + "_max", props)
+        elif node.operation == "FLOOR":
+            # floor(x) = round_nearest(x - 0.5); differs from floor only at
+            # exact half-integers, where both agree anyway
+            shifted = _tex_binary("subtract", tex1, 0.5,
+                                  luxcore_name + "_sh", props)
+            return _tex_unary("rounding", shifted, 1.0,
+                              luxcore_name + "_floor", props)
+        elif node.operation == "CEIL":
+            # ceil(x) = -floor(-x)
+            neg = _tex_binary("scale", tex1, -1.0, luxcore_name + "_neg",
+                              props)
+            shifted = _tex_binary("subtract", neg, 0.5,
+                                  luxcore_name + "_sh", props)
+            rounded = _tex_unary("rounding", shifted, 1.0,
+                                 luxcore_name + "_r", props)
+            return _tex_binary("scale", rounded, -1.0,
+                               luxcore_name + "_ceil", props)
+        elif node.operation == "TRUNC":
+            # trunc(x) = sign(x) * floor(|x|)
+            lt0 = _tex_lessthan(tex1, 0.0, luxcore_name + "_lt0", props)
+            sgn = _tex_binary("subtract",
+                              _tex_binary("scale", lt0, 2.0,
+                                          luxcore_name + "_lt2", props),
+                              1.0, luxcore_name + "_sgn", props)
+            absv = _tex_unary("abs", tex1, None, luxcore_name + "_abs", props)
+            shifted = _tex_binary("subtract", absv, 0.5,
+                                  luxcore_name + "_sh", props)
+            fl = _tex_unary("rounding", shifted, 1.0,
+                            luxcore_name + "_fl", props)
+            return _tex_binary("scale", fl, sgn, luxcore_name + "_tr", props)
+        elif node.operation == "FRACT":
+            # fract(x) = x - floor(x)
+            shifted = _tex_binary("subtract", tex1, 0.5,
+                                  luxcore_name + "_sh", props)
+            fl = _tex_unary("rounding", shifted, 1.0,
+                            luxcore_name + "_fl", props)
+            return _tex_binary("subtract", tex1, fl,
+                               luxcore_name + "_fract", props)
+        elif node.operation == "RADIANS":
+            return _tex_binary("scale", tex1, 0.017453292519943295,
+                               luxcore_name + "_rad", props)
+        elif node.operation == "DEGREES":
+            return _tex_binary("scale", tex1, 57.29577951308232,
+                               luxcore_name + "_deg", props)
+        elif node.operation == "COMPARE":
+            # compare(a, b, eps) = 1 if |a-b| <= eps else 0;
+            # = gt(eps, |a-b|) using lessthan swapped
+            tex3 = _socket(node.inputs[2], props, material, obj_name,
+                           group_node_stack)
+            diff = _tex_binary("subtract", tex1, tex2,
+                               luxcore_name + "_df", props)
+            absd = _tex_unary("abs", diff, None, luxcore_name + "_ad", props)
+            return _tex_lessthan(absd, tex3, luxcore_name + "_cmp", props)
+        elif node.operation == "PINGPONG":
+            # pingpong(x, s) = s - |mod(x, 2s) - s|
+            two_s = _tex_binary("scale", tex2, 2.0, luxcore_name + "_2s",
+                                props)
+            mod = _tex_unary("modulo", tex1, two_s,
+                             luxcore_name + "_mod", props)
+            dev = _tex_unary("abs",
+                             _tex_binary("subtract", mod, tex2,
+                                         luxcore_name + "_sub", props),
+                             None, luxcore_name + "_dev", props)
+            return _tex_binary("subtract", tex2, dev,
+                               luxcore_name + "_pp", props)
+        elif node.operation == "SIGN":
+            lt0 = _tex_lessthan(tex1, 0.0, luxcore_name + "_lt0", props)
+            gt0 = _tex_greaterthan(tex1, 0.0, luxcore_name + "_gt0", props)
+            return _tex_binary("subtract", gt0, lt0,
+                               luxcore_name + "_sign", props)
+        elif node.operation == "MULTIPLY_ADD":
+            tex3 = _socket(node.inputs[2], props, material, obj_name,
+                           group_node_stack)
+            prod = _tex_binary("scale", tex1, tex2, luxcore_name + "_mp",
+                               props)
+            return _tex_binary("add", prod, tex3, luxcore_name + "_ma",
+                               props)
+        elif node.operation == "WRAP":
+            # wrap(x, min, max) = min + mod(x - min, max - min)
+            rng = _tex_binary("subtract",
+                              _socket(node.inputs[2], props, material,
+                                      obj_name, group_node_stack),
+                              tex2, luxcore_name + "_rng", props)
+            shifted = _tex_binary("subtract", tex1, tex2,
+                                  luxcore_name + "_sh", props)
+            mod = _tex_unary("modulo", shifted, rng,
+                             luxcore_name + "_mod", props)
+            return _tex_binary("add", tex2, mod, luxcore_name + "_wr", props)
+        elif node.operation == "SNAP":
+            # snap(x, s) = round(x / s) * s — nearest multiple like
+            # VectorMath SNAP (Blender floors; documented difference)
+            _warn_unsupported(
+                node, "'Snap' approximated by round-to-nearest-multiple "
+                "(Blender floors to the increment)", None, obj_name)
+            definitions = {
+                "type": "rounding",
+                "texture": tex1,
+                "increment": tex2,
+            }
         else:
             # Never silently black: pass through the first input
             return _warn_unsupported(
@@ -1879,8 +2059,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                                 group_node_stack)
             dot = _tex_binary("dotproduct", incident, reference,
                               luxcore_name + "_dot", props)
-            lt = _tex_helper(props, luxcore_name + "_lt", {
-                "type": "lessthan", "texture1": dot, "texture2": 0.0})
+            lt = _tex_lessthan(dot, 0.0, luxcore_name + "_lt", props)
             sign = _tex_binary("subtract",
                                _tex_binary("scale", lt, 2.0,
                                            luxcore_name + "_lt2", props),
@@ -1897,8 +2076,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                                luxcore_name + "_madd", props)
         elif operation in {"MINIMUM", "MAXIMUM"}:
             # min(a,b) = b + lt(a,b)*(a-b);  max(a,b) = a + lt(a,b)*(b-a)
-            lt = _tex_helper(props, luxcore_name + "_lt", {
-                "type": "lessthan", "texture1": vector1, "texture2": vector2})
+            lt = _tex_lessthan(vector1, vector2, luxcore_name + "_lt", props)
             if operation == "MINIMUM":
                 diff = _tex_binary("subtract", vector1, vector2,
                                    luxcore_name + "_df", props)

@@ -101,6 +101,8 @@ def has_vec3_texture(props, expected, eps=1e-3):
             vals = [float(x) for x in raw.split()]
         except ValueError:
             continue
+        if len(vals) == 1:
+            vals = vals * 3
         if len(vals) >= 3 and all(abs(v - t) < eps
                                   for v, t in zip(vals[:3], expected)):
             return True
@@ -261,6 +263,72 @@ def test_point_info_random():
     check("point_info random -> objectidnormalized",
           "objectidnormalized" in emitted_texture_types(props),
           f"types={emitted_texture_types(props)}")
+
+
+def _math_const(operation, v1, v2=None, v3=None):
+    mat, nt, out = new_tree()
+    m = nt.nodes.new("ShaderNodeMath")
+    m.operation = operation
+    m.inputs[0].default_value = v1
+    if v2 is not None:
+        m.inputs[1].default_value = v2
+    if v3 is not None and len(m.inputs) > 2:
+        m.inputs[2].default_value = v3
+    emit_color_via(nt, out, m.outputs["Value"])
+    return convert(mat)
+
+
+def test_math_sqrt():
+    props = _math_const("SQRT", 4.0)
+    check("math sqrt(4)=2", has_vec3_texture(props, (2.0, 2.0, 2.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_floor():
+    props = _math_const("FLOOR", 2.7)
+    check("math floor(2.7)=2", has_vec3_texture(props, (2.0, 2.0, 2.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_fract():
+    props = _math_const("FRACT", 2.25)
+    check("math fract(2.25)=0.25",
+          has_vec3_texture(props, (0.25, 0.25, 0.25)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_minimum():
+    props = _math_const("MINIMUM", 3.0, 1.5)
+    check("math min(3,1.5)=1.5", has_vec3_texture(props, (1.5, 1.5, 1.5)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_pingpong():
+    # pingpong(2.5, 2) = 2 - |mod(2.5,4) - 2| = 1.5
+    props = _math_const("PINGPONG", 2.5, 2.0)
+    check("math pingpong(2.5,2)=1.5", has_vec3_texture(props, (1.5, 1.5, 1.5)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_sign():
+    props = _math_const("SIGN", -7.5)
+    check("math sign(-7.5)=-1",
+          has_vec3_texture(props, (-1.0, -1.0, -1.0)),
+          f"emission={emission_value(props)}")
+
+
+def test_math_degrees():
+    props = _math_const("DEGREES", 3.141592653589793)
+    check("math degrees(pi)=180",
+          has_vec3_texture(props, (180.0, 180.0, 180.0), eps=0.01),
+          f"emission={emission_value(props)}")
+
+
+def test_math_wrap():
+    # wrap(6.5, 1, 4) = 1 + mod(5.5, 3) = 3.5
+    props = _math_const("WRAP", 6.5, 1.0, 4.0)
+    check("math wrap(6.5,1,4)=3.5", has_vec3_texture(props, (3.5, 3.5, 3.5)),
+          f"emission={emission_value(props)}")
 
 
 def test_gabor_specific_warning():
