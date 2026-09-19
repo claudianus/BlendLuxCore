@@ -390,6 +390,10 @@ class Duplis:
         self.motion_times = None
         self.motion_steps = 0
         self.motion_missing = 0
+        # Source object's luxcore.id, cached at Duplis creation: it is a
+        # per-object constant, so reading original.luxcore.id per instance
+        # would be a wasted 4-level RNA traversal in the hot loop.
+        self.luxcore_id = -1
 
     def get_count(self):
         return len(self.object_ids)
@@ -422,6 +426,10 @@ class ObjectCache2:
 
         # Particle system counts might have changed
         supports_live_transform.cache_clear()
+
+        # Hoisted out of the per-instance fast path below: one global
+        # lookup instead of an attribute chain per instance.
+        blender_mat_to_list = pyluxcore.BlenderMatrix4x4ToList
 
         for index, dg_obj_instance in enumerate(depsgraph.object_instances):
             obj = dg_obj_instance.object
@@ -473,7 +481,7 @@ class ObjectCache2:
                                 context.space_data
                             ):
                                 continue
-                        obj_id = dg_obj_instance.object.original.luxcore.id
+                        obj_id = duplis.luxcore_id
                         if obj_id == -1:
                             obj_id = dg_obj_instance.random_id & 0xFFFFFFFE
                         duplis.object_ids.append(obj_id)
@@ -484,7 +492,7 @@ class ObjectCache2:
                         # We need a copy of matrix_world here, not sure why, but if we don't
                         # make a copy, we only get an identity matrix in C++
                         duplis.matrices.extend(
-                            pyluxcore.BlenderMatrix4x4ToList(
+                            blender_mat_to_list(
                                 dg_obj_instance.matrix_world.copy()
                             )
                         )
@@ -537,6 +545,7 @@ class ObjectCache2:
                         # Note, the transformation matrix and object ID of this first instance is not added
                         # to the duplication list, since it already exists in the scene
                         new_duplis = Duplis(exported_obj)
+                        new_duplis.luxcore_id = obj.original.luxcore.id
                         if (
                             exporter.object_blur_enabled
                             and _dupli_motion_enabled(dg_obj_instance)
