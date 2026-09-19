@@ -98,14 +98,17 @@ gradients on CPU and Metal/OpenCL.
   an empty/ignorable dirty set reuses the scene wholesale, a
   transform-only update on a delta-safe object applies
   `Scene.UpdateObjectTransformation` (absolute for instanced exports,
-  `new @ old.inverted()` for world-baked geometry), and anything else
-  — geometry dirt, datablock dirt, membership changes, instancers,
-  lights, volumes, object motion blur, camera/world signature changes —
-  falls back to a full export and re-caches.
+  `new @ old.inverted()` for world-baked geometry); object-data dirt
+  resolves to per-object geometry deltas (in-place `DefineMesh` for
+  eligible meshes, delete + re-export otherwise), and anything else —
+  datablock dirt, membership changes, instancers, object motion blur,
+  camera/world signature changes — falls back to a full export and
+  re-caches.
   Frame changes are covered separately: `frame_set()` leaves no
   depsgraph updates, so per-member transform snapshots plus animation
-  classification decide between transform delta and rebuild, and
-  animated materials mark the scene for an in-place material refresh.
+  classification decide between transform delta, geometry re-export
+  (deforming meshes, moved lights) and rebuild, and animated materials
+  mark the scene for an in-place material refresh.
   **Material deltas** (A6-III): a dirty `Material` datablock re-exports
   all member materials into the cached scene via `Scene.Parse`
   re-definition (a first-class engine operation, including light-source
@@ -125,12 +128,25 @@ gradients on CPU and Metal/OpenCL.
   delta-safe, no wrapper shapes on the shared mesh, unchanged
   instancing decision, identical submesh set) and any failure falls
   back to a full export.
+  **Non-mesh geometry deltas** (delete + re-export): member objects
+  whose dirty data cannot be patched in place — hair curves, volumes,
+  pointclouds, legacy curves, shifted submesh sets, wrapped meshes —
+  are deleted from the cached scene and re-exported through the normal
+  conversion path (`Scene.Parse` re-definition); the same path carries
+  moved lights and other non-delta-safe members on frame changes, so
+  animation frames delta instead of rebuild. Dirty object-data
+  datablocks resolve to members through a `data_ptrs` map.
   Design + rationale: `doc/incremental_export_design.md`.
   Regression: `dev-tools/a6_persistent_scene_test.py` (headless;
-  covers reuse, transform/material/geometry deltas, signature-driven
-  rebuilds (visibility, camera, world, material rename, slot
-  topology, shape stack), animated transforms and animated
-  materials, with image-diff assertions).
+  covers reuse, transform/material/geometry deltas, curve/light/
+  hair-curves re-export deltas, deforming-mesh frame deltas,
+  signature-driven rebuilds (visibility, camera, world, material
+  rename, slot topology, shape stack), animated transforms and
+  animated materials, with image-diff assertions).
+  Benchmark: `dev-tools/a6_benchmark.py` — on a 1202-object ~2M-tri
+  scene, reuse/transform/geometry deltas run at ~20% and material
+  deltas at ~30% of full-export time (measured on export-stage
+  timings, not render wall time).
 
 ## UX — Quick Setup + viewport stability
 

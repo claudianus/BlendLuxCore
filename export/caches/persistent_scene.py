@@ -69,6 +69,26 @@ _IGNORABLE_TYPES = tuple(
     if t is not None
 )
 
+# Object-data datablock types (besides Mesh, which is handled in the
+# Mesh/NodeTree branch above) whose geometry updates can be resolved to
+# member objects via data_ptrs: hair curves, legacy curves, metaballs,
+# volumes and pointclouds. Mesh-bearing types may take the in-place
+# DefineMesh delta; the rest are re-exported via delete + re-add.
+_GEO_DATA_TYPES = tuple(
+    t
+    for t in (
+        getattr(bpy.types, name, None)
+        for name in (
+            "Curve",
+            "Curves",
+            "MetaBall",
+            "Volume",
+            "PointCloud",
+        )
+    )
+    if t is not None
+)
+
 # {original scene pointer: {id pointer: [flags, kind]}}
 _dirty = {}
 
@@ -119,6 +139,16 @@ def on_depsgraph_update(scene, depsgraph):
                 kind = _KIND_GEOMETRY
             else:
                 kind = _KIND_REBUILD
+        elif isinstance(id_block, _GEO_DATA_TYPES):
+            if not flags & ~FLAG_SHADING:
+                # Shading-only flag: same material-edit echo as Mesh.
+                kind = _KIND_MATERIAL_ECHO
+            else:
+                # Non-mesh object data (curves, volume, pointcloud):
+                # resolve to member objects like Mesh; objects without
+                # mesh-delta eligibility take the delete + re-export
+                # path instead of a full rebuild.
+                kind = _KIND_GEOMETRY
         else:
             kind = _KIND_REBUILD
         # DepsgraphUpdate.id is the *evaluated* datablock: the original
@@ -148,7 +178,8 @@ def get(key):
 
 def store(key, luxcore_scene, exported_objects, member_keys,
           bake_matrices, member_mats, mb_sig, camera_sig, world_sig,
-          vis_sig, frame, mat_sig, slot_sig, geo_meta, shape_sig):
+          vis_sig, frame, mat_sig, slot_sig, geo_meta, shape_sig,
+          data_ptrs):
     _entries[key] = {
         "scene": luxcore_scene,
         # frame at export time: frame_set() moves animated objects
@@ -196,6 +227,10 @@ def store(key, luxcore_scene, exported_objects, member_keys,
         # wrapper shapes (displacement, pointiness...) that neither a
         # material delta nor slot signatures can see
         "shape_sig": shape_sig,
+        # {obj_key: original data pointer} for every member with data —
+        # dirty object-data datablocks (Mesh, Curves, Volume, ...) are
+        # resolved to their member objects through this map
+        "data_ptrs": data_ptrs,
     }
 
 
@@ -248,12 +283,15 @@ def classify(dirty, entry, camera_obj=None):
             material_echo = True
             continue
         if kind == _KIND_GEOMETRY:
-            # A Mesh datablock changed geometry: resolve to the member
-            # objects that source it. No user -> unexportable change.
+            # An object-data datablock changed geometry: resolve to the
+            # member objects that source it. Mesh members may take the
+            # in-place DefineMesh delta; everything else is re-exported
+            # via delete + re-add at apply time. No user -> the change
+            # cannot be attributed -> hard rebuild.
             users = {
                 key
-                for key, meta in entry["geo_meta"].items()
-                if meta[0] == ptr
+                for key, dptr in entry["data_ptrs"].items()
+                if dptr == ptr
             }
             if not users:
                 return "full", set(), False, set()
@@ -454,31 +492,49 @@ def frame_change(entry, eval_by_key, camera_key):
     """
     Classify a reuse candidate after scene.frame_current changed.
 
-    Returns (rebuild_needed, transform_keys, material_dirty):
-    transform_keys holds the delta-safe member objects whose
-    matrix_world differs from the stored export-time matrix (animated
-    or silently moved); material_dirty asks for a member-material
-    refresh when a material is animated. Anything animated beyond that
-    — geometry animation of any kind, or a transform change on an
-    object that cannot be patched in place — forces a full rebuild.
+    Returns (rebuild_needed, transform_keys, geometry_keys,
+    material_dirty): transform_keys holds the delta-safe member objects
+    whose matrix_world differs from the stored export-time matrix
+    (animated or silently moved); geometry_keys holds objects whose
+    *geometry* is animated — they are re-exported at the current frame
+    (in-place mesh replace or delete + re-add); material_dirty asks for
+    a member-material refresh when a material is animated. Anything
+    animated beyond that — non-transform/non-geometry animation, or a
+    transform change on an object that cannot be patched or re-exported
+    in place — forces a full rebuild.
     """
     transform_keys = set()
+    geometry_keys = set()
     material_dirty = False
     for key, eval_obj in eval_by_key.items():
         if key == camera_key or key not in entry["members"]:
             continue
         original = getattr(eval_obj, "original", None) or eval_obj
-        if _animation_kind(original) == "other" or _geometry_animated(
-            original
-        ):
-            return True, set(), False
+        if _animation_kind(original) == "other":
+            return True, set(), set(), False
+        if _geometry_animated(original):
+            # Deforming mesh / hair / point data at a new frame: the
+            # object is re-exported below, which also picks up any
+            # transform it gained.
+            geometry_keys.add(key)
+            continue
         if _material_animated(original):
             material_dirty = True
         base = entry["bake"].get(key) or entry["member_mats"].get(key)
         if base is not None and eval_obj.matrix_world != base:
             if key not in entry["delta_safe"]:
-                # A light, instancer or other unpatchable object moved
-                # between frames.
-                return True, set(), False
+                # An unpatchable object moved between frames: a member
+                # with an exported entry can be re-exported in place
+                # (delete + re-add picks up its new transform too) —
+                # except instancers, whose transform also moves their
+                # dupli set, which the re-export cannot reach.
+                if (
+                    key in entry["objects"]
+                    and eval_obj.instance_type == "NONE"
+                    and not eval_obj.particle_systems
+                ):
+                    geometry_keys.add(key)
+                    continue
+                return True, set(), set(), False
             transform_keys.add(key)
-    return False, transform_keys, material_dirty
+    return False, transform_keys, geometry_keys, material_dirty

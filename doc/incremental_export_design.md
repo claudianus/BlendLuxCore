@@ -176,6 +176,22 @@ though most objects are static between frames.
   World-baked meshes re-export with the current `matrix_world`, so
   their transform delta is subsumed; instanced exports keep the
   object transform and still take `UpdateObjectTransformation`.
+- **Non-mesh geometry deltas use delete + re-export** — member
+  objects whose dirty data cannot be patched by `DefineMesh` in place
+  (hair curves, volumes, pointclouds, legacy curves, shifted submesh
+  sets, wrapped meshes) are deleted from the cached scene and
+  re-exported through the normal `_convert_obj` path into a scratch
+  `Properties`, then `Scene.Parse` defines them fresh. The path also
+  covers moved lights and non-delta-safe members on frame changes
+  (an animated light is re-defined via `DeleteLight` + `Parse` —
+  `frame_change()` routes it to the geometry-delta set instead of
+  rebuilding). Dirty data datablocks resolve to members through
+  `data_ptrs` ({obj_key: original data pointer}) rather than
+  `geo_meta`, so every object-data type is covered; `geo_meta`
+  remains the in-place `DefineMesh` eligibility record. Caveat:
+  `DepsgraphObjectInstance` wrappers die with their iterator, so the
+  re-export rebuilds a `SimpleNamespace` shim from snapshotted
+  (object, show_self, matrix) values.
 
 ## Phasing
 
@@ -187,9 +203,10 @@ though most objects are static between frames.
    done for transform-only changes on delta-safe types (MESH-family:
    instanced exports get the absolute matrix, world-baked exports get
    `new @ old.inverted()` via `UpdateObjectTransformation`).
-   Non-object datablock dirt, new/removed objects, instancers,
-   lights and volumes still take the full-export path; geometry and
-   shading dirt gained dedicated delta paths in items 3–4.
+   Non-object datablock dirt, new/removed objects and instancers
+   still take the full-export path; geometry and shading dirt gained
+   dedicated delta paths in items 3–5, including lights via the
+   delete + re-export path.
    Verified headless: repeated F12 reuses the scene (identical
    image), a moved object applies one transform delta (image shows
    the move), a bmesh edit updates the mesh in place.
@@ -212,7 +229,26 @@ though most objects are static between frames.
    material edits that add/remove `scene.shapes.*` wrappers. Verified
    headless (R4, M5): a bmesh edit keeps the Scene and changes the
    image; adding a Displacement link rebuilds.
-5. Extend to CURVES/POINTCLOUD/VOLUME and instancer re-flush.
-5. Validation: repeated F12 timing, animation-sequence render timing,
+5. ~~CURVES/POINTCLOUD/VOLUME geometry deltas~~ — done via the
+   delete + re-export fallback inside `_apply_geometry_deltas`:
+   non-mesh object data (Curve/Curves/MetaBall/Volume/PointCloud)
+   and in-place-ineligible members are deleted and re-exported
+   through `_convert_obj` + `Scene.Parse`, with per-entry records
+   (geo_meta, shape_sig, slot_sig, data_ptrs, bake) refreshed.
+   `frame_change()` additionally routes geometry-animated members
+   (shape keys, deform modifiers, Scene-Time GN) and moved
+   non-delta-safe members (e.g. lights) to the same path, so
+   animation frames now delta instead of rebuild. Verified headless
+   (C1/F70/L80/L90/H1 in `dev-tools/a6_persistent_scene_test.py`):
+   curve bevel edit, shape-keyed mesh across frames, keyframed light
+   and a quick_fur hair-curves object all keep the Scene and change
+   the image. Remaining: instancer *set* re-flush (a dirty/moved
+   instancer still rebuilds — its dupli objects are separate scene
+   entries the per-object delta cannot reach).
+6. Validation: repeated F12 timing, animation-sequence render timing,
    correctness diff (same outputs as full export) on the A6 benchmark
-   scenes (500k duplis, 1M-strand hair, classroom).
+   scenes (500k duplis, 1M-strand hair, classroom). First numbers:
+   `dev-tools/a6_benchmark.py` on a 1202-object ~2M-tri scene —
+   reuse/transform/geometry deltas at ~20% of full-export time,
+   material delta ~30% (camera/world/config re-export + signatures
+   are the floor).

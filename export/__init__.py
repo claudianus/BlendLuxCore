@@ -1,4 +1,5 @@
 from time import time
+import types
 
 _needs_reload = "bpy" in locals()
 
@@ -342,6 +343,7 @@ class Exporter(object):
                             (
                                 _rebuild,
                                 _moved,
+                                _geo_keys,
                                 _mat_dirty,
                             ) = persistent_scene.frame_change(
                                 pentry, eval_by_key, _camera_key
@@ -350,6 +352,7 @@ class Exporter(object):
                                 pentry = None
                             else:
                                 transform_deltas |= _moved
+                                geometry_keys |= _geo_keys
                                 material_dirty |= _mat_dirty
 
         luxcore_scene = (
@@ -391,7 +394,7 @@ class Exporter(object):
                     transform_deltas -= (
                         self._apply_geometry_deltas(
                             pentry, geometry_keys, depsgraph,
-                            luxcore_scene
+                            luxcore_scene, view_layer, engine
                         )
                     )
                 self._apply_transform_deltas(
@@ -413,6 +416,9 @@ class Exporter(object):
             except Exception:
                 # A delta that fails mid-way leaves the cached scene in
                 # an unknown state: discard it and rebuild from scratch.
+                import traceback
+
+                traceback.print_exc()
                 print(
                     "[Exporter] Persistent scene delta failed,"
                     " falling back to full export"
@@ -528,6 +534,15 @@ class Exporter(object):
                 )
                 for k, meta in _geo_meta.items()
             }
+            # Original data pointer per member object — dirty data
+            # datablocks (Mesh, Curves, Volume, ...) resolve to member
+            # objects through this map at reuse time.
+            _data_ptrs = {
+                k: o.original.data.as_pointer()
+                for k, o in _eval_shape.items()
+                if k in vis_sig
+                and getattr(o.original, "data", None) is not None
+            }
             persistent_scene.store(
                 pkey,
                 luxcore_scene,
@@ -544,6 +559,7 @@ class Exporter(object):
                 slot_sig,
                 _geo_meta,
                 _shape_sig,
+                _data_ptrs,
             )
 
         # Convert config at last because all lightgroups and passes have to be
@@ -769,94 +785,262 @@ class Exporter(object):
                 )
             pentry["bake"][key] = new_matrix.copy()
 
+    def _mesh_inplace_safe(self, pentry, key, geo_meta, eval_by_key):
+        """
+        Eligibility for the in-place ``DefineMesh`` geometry delta: a
+        mesh object whose exported mesh can be re-defined under the
+        same name without leaving stale definitions behind.
+        """
+        meta = geo_meta.get(key)
+        exported = pentry["objects"].get(key)
+        if meta is None or exported is None:
+            return False
+        (
+            _src_ptr,
+            mesh_key,
+            use_instancing,
+            base_list,
+            wrapped,
+        ) = meta
+        if (
+            wrapped
+            or getattr(exported, "duplicate_count", 0)
+            or key not in pentry["delta_safe"]
+        ):
+            return False
+        # Every object sharing this mesh_key must be wrapper-free,
+        # or its wrapper keeps a dangling source-mesh pointer.
+        for key2, meta2 in geo_meta.items():
+            if key2 != key and meta2[1] == mesh_key and meta2[4]:
+                return False
+        obj = eval_by_key.get(key)
+        if obj is None or obj.type != "MESH":
+            return False
+        # The instancing decision must match export time, or the
+        # recomputed mesh_key/shape names would not line up.
+        cur_instancing = (
+            utils.can_share_mesh(obj.original)
+            or uses_displacement(obj)
+            or (
+                self.motion_blur_enabled
+                and obj.luxcore.enable_motion_blur
+            )
+        )
+        return cur_instancing == use_instancing
+
     def _apply_geometry_deltas(
-        self, pentry, geometry_keys, depsgraph, luxcore_scene
+        self,
+        pentry,
+        geometry_keys,
+        depsgraph,
+        luxcore_scene,
+        view_layer,
+        engine,
     ):
         """
-        Re-export the meshes of member objects whose geometry changed.
+        Re-export the geometry of member objects whose data changed.
 
-        ``Scene.DefineMesh`` replaces a named mesh in place and rewires
-        every scene object referencing it — including triangle lights —
-        so a geometry delta is just a mesh re-export; object
-        definitions and material bindings stay untouched.
+        Mesh objects that pass the eligibility check take the cheap
+        path: ``Scene.DefineMesh`` replaces a named mesh in place and
+        rewires every scene object referencing it — including triangle
+        lights — so object definitions and material bindings stay
+        untouched. Everything else (hair curves, volumes, pointclouds,
+        objects whose shape stack changed) is deleted and re-exported
+        through the normal conversion path, which also picks up the
+        current transform.
 
-        Returns the keys whose transform delta is subsumed (world-baked
-        meshes re-export with the current matrix). Raises on any
-        ineligible case, which the caller turns into a full rebuild —
-        importantly *before* deciding, since a re-defined base mesh
-        leaves wrapper shapes (displacement/pointiness/...) holding a
-        dangling source-mesh pointer.
+        Returns the keys whose transform delta is subsumed (all
+        re-exports carry the current matrix). Raises on any failure,
+        which the caller turns into a full rebuild.
         """
         eval_by_key = {
             utils.make_key(o): o for o in depsgraph.objects
         }
         geo_meta = pentry["geo_meta"]
         subsumed = set()
-        for key in geometry_keys:
-            meta = geo_meta.get(key)
-            exported = pentry["objects"].get(key)
-            if meta is None or exported is None:
-                raise ValueError(f"no geometry meta for {key}")
-            (
-                _src_ptr,
-                mesh_key,
-                use_instancing,
-                base_list,
-                wrapped,
-            ) = meta
-            if (
-                wrapped
-                or getattr(exported, "duplicate_count", 0)
-                or key not in pentry["delta_safe"]
-            ):
-                raise ValueError(
-                    f"{key}: wrappers/duplicates unsafe for mesh delta"
-                )
-            # Every object sharing this mesh_key must be wrapper-free,
-            # or its wrapper keeps a dangling source-mesh pointer.
-            for key2, meta2 in geo_meta.items():
-                if key2 != key and meta2[1] == mesh_key and meta2[4]:
-                    raise ValueError(
-                        f"{key}: shared-mesh user {key2} has wrappers"
-                    )
-            obj = eval_by_key.get(key)
-            if obj is None or obj.type != "MESH":
-                raise ValueError(f"{key}: not a mesh object")
-            # The instancing decision must match export time, or the
-            # recomputed mesh_key/shape names would not line up.
-            cur_instancing = (
-                utils.can_share_mesh(obj.original)
-                or uses_displacement(obj)
-                or (
-                    self.motion_blur_enabled
-                    and obj.luxcore.enable_motion_blur
-                )
+        reexport_keys = []
+        for key in sorted(geometry_keys):
+            inplace = self._mesh_inplace_safe(
+                pentry, key, geo_meta, eval_by_key
             )
-            if cur_instancing != use_instancing:
-                raise ValueError(f"{key}: instancing decision changed")
-            new_mesh = mesh_converter.convert(
-                obj,
-                mesh_key,
+            if inplace:
+                (
+                    _src_ptr,
+                    mesh_key,
+                    use_instancing,
+                    base_list,
+                    _wrapped,
+                ) = geo_meta[key]
+                obj = eval_by_key[key]
+                try:
+                    new_mesh = mesh_converter.convert(
+                        obj,
+                        mesh_key,
+                        depsgraph,
+                        luxcore_scene,
+                        False,
+                        use_instancing,
+                        obj.matrix_world,
+                        self,
+                    )
+                    if {n for n, _m in new_mesh.mesh_definitions} != {
+                        n for n, _m in base_list
+                    }:
+                        # A slot became (un)used — part names shifted,
+                        # so the scene holds stale object definitions;
+                        # fall through to the delete + re-export path.
+                        raise ValueError(f"{key}: submesh set changed")
+                except Exception:
+                    inplace = False
+                else:
+                    self.object_cache2.exported_meshes[
+                        mesh_key
+                    ] = new_mesh
+                    if not use_instancing:
+                        # The re-export already baked the current
+                        # matrix into the mesh verts — no separate
+                        # transform delta needed.
+                        pentry["bake"][key] = obj.matrix_world.copy()
+                        subsumed.add(key)
+            if not inplace:
+                # Delete + re-export carries the current transform too.
+                reexport_keys.append(key)
+                subsumed.add(key)
+        if reexport_keys:
+            self._reexport_objects(
+                pentry, reexport_keys, depsgraph, luxcore_scene,
+                view_layer, engine
+            )
+        return subsumed
+
+    def _reexport_objects(
+        self,
+        pentry,
+        keys,
+        depsgraph,
+        luxcore_scene,
+        view_layer,
+        engine,
+    ):
+        """
+        Delete + re-export member objects whose geometry changed but
+        cannot be patched by a bare ``DefineMesh`` (hair curves,
+        volumes, pointclouds, shifted submesh sets, wrapped meshes).
+
+        ``ExportedObject.delete`` removes the object's parts, its
+        pointcloud dupis and any triangle lights; the normal
+        ``_convert_obj`` path then re-defines shapes (in-place mesh /
+        strand replacement under the same names) and object props,
+        which ``Scene.Parse`` applies as a fresh definition. Per-entry
+        records are refreshed so later deltas see the new state.
+        """
+        # DepsgraphObjectInstance wrappers are only valid while the
+        # instance iterator is alive — holding them in a map turns them
+        # into dangling StructRNA references. Snapshot the fields
+        # _convert_obj needs (evaluated object, show_self, matrix) as
+        # plain values and rebuild a shim below.
+        inst_info = {}
+        for dg_inst in depsgraph.object_instances:
+            if not dg_inst.is_instance:
+                inst_info[utils.make_key_from_instance(dg_inst)] = (
+                    dg_inst.object,
+                    dg_inst.show_self,
+                    dg_inst.matrix_world.copy(),
+                )
+        cache = self.object_cache2
+        for key in keys:
+            info = inst_info.get(key)
+            if info is None:
+                raise ValueError(
+                    f"{key}: no base instance in depsgraph"
+                )
+            eval_obj, show_self, matrix = info
+            dg_inst = types.SimpleNamespace(
+                object=eval_obj,
+                is_instance=False,
+                show_self=show_self,
+                parent=None,
+                persistent_id=None,
+                random_id=0,
+                matrix_world=matrix,
+            )
+            exported = pentry["objects"].get(key)
+            if exported is not None:
+                exported.delete(luxcore_scene)
+                # The instancer/pointcloud "dupli" object is a single
+                # scene object, not covered by the indexed names in
+                # delete(); drop it so the re-export can redefine it.
+                for part in getattr(exported, "parts", []):
+                    luxcore_scene.DeleteObject(part.lux_obj + "dupli")
+            # Drop stale cache entries so the re-export is fresh:
+            # mesh cache by mesh_key, hair cache by key prefix.
+            meta = pentry["geo_meta"].pop(key, None)
+            if meta is not None and meta[1]:
+                cache.exported_meshes.pop(meta[1], None)
+            for hkey in (
+                k
+                for k in cache.exported_hair
+                if k == key or k.startswith(key + "_")
+            ):
+                cache.exported_hair.pop(hkey, None)
+            scratch = pyluxcore.Properties()
+            new_exported = cache._convert_obj(
+                self,
+                dg_inst,
+                dg_inst.object,
                 depsgraph,
                 luxcore_scene,
+                scratch,
                 False,
-                use_instancing,
-                obj.matrix_world,
-                self,
+                view_layer,
+                engine,
             )
-            if {n for n, _m in new_mesh.mesh_definitions} != {
-                n for n, _m in base_list
-            }:
-                # A slot became (un)used — part names shifted, so the
-                # scene now holds stale object definitions.
-                raise ValueError(f"{key}: submesh set changed")
-            self.object_cache2.exported_meshes[mesh_key] = new_mesh
-            if not use_instancing:
-                # The re-export already baked the current matrix into
-                # the mesh verts — no separate transform delta needed.
-                subsumed.add(key)
-                pentry["bake"][key] = obj.matrix_world.copy()
-        return subsumed
+            if new_exported is None:
+                raise ValueError(f"{key}: re-export produced nothing")
+            luxcore_scene.Parse(scratch)
+            # Pointcloud dupis are staged for the post-Parse flush.
+            cache.duplicate_instances({}, luxcore_scene, None)
+            # Refresh the entry's per-object records. _convert_obj
+            # already wrote exported_objects and bake_matrices — those
+            # dicts are shared with the cache, while the entry keeps
+            # its own snapshots of the rest.
+            pentry["objects"][key] = new_exported
+            bake = cache.bake_matrices.get(key)
+            if bake is not None:
+                pentry["bake"][key] = bake[0]
+                if bake[1]:
+                    pentry["delta_safe"].add(key)
+                else:
+                    pentry["delta_safe"].discard(key)
+            pentry["member_mats"].pop(key, None)
+            new_meta = cache.obj_geo_meta.get(key)
+            if new_meta is not None:
+                pentry["geo_meta"][key] = new_meta
+                pentry["shape_sig"][key] = self._shape_stack_sig(
+                    dg_inst.object, depsgraph, new_meta[3]
+                )
+            else:
+                pentry["shape_sig"].pop(key, None)
+            obj_orig = dg_inst.object.original
+            pentry["data_ptrs"][key] = (
+                obj_orig.data.as_pointer()
+                if getattr(obj_orig, "data", None) is not None
+                else 0
+            )
+            # Slot bindings can shift when the re-export resolves a
+            # different material set.
+            slots = []
+            for slot in obj_orig.material_slots:
+                mat = slot.material
+                if mat is None:
+                    slots.append((None, slot.link))
+                    continue
+                mptr = str(mat.original.as_pointer())
+                slots.append((mptr, slot.link))
+                pentry["mat_sig"][mptr] = utils.get_luxcore_name(
+                    mat.original, False
+                )
+            pentry["slot_sig"][key] = tuple(slots)
 
     def _shape_stack_sig(self, obj, depsgraph, base_list):
         """
