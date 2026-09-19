@@ -319,7 +319,8 @@ def classify(dirty, entry, camera_obj=None):
             # using it must re-flush its dupli set (particle counts,
             # emission, dupli source bindings can all shift).
             users = {
-                k for k, sptr in entry["psys_map"].items()
+                okey
+                for sptr, okey in entry["psys_map"].items()
                 if sptr == ptr
             }
             if not users or (
