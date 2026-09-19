@@ -103,6 +103,9 @@ gradients on CPU and Metal/OpenCL.
   instancers, lights, volumes, object motion blur, camera/world
   signature changes — falls back to a full export and re-caches.
   Design + rationale: `doc/incremental_export_design.md`.
+  Regression: `dev-tools/a6_persistent_scene_test.py` (headless;
+  covers reuse, transform delta, geometry rebuild, re-cache, and
+  `hide_render` visibility fallback with image-diff assertions).
 
 ## UX — Quick Setup + viewport stability
 
