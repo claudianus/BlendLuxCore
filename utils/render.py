@@ -41,6 +41,7 @@ LIGHT_STRATEGY_TO_STR = {
     "UNIFORM": "Uniform",
     "DLS_CACHE": "Direct Light Cache",
     "RESTIR_DI": "ReSTIR DI",
+    "LIGHT_BVH": "Light BVH",
 }
 
 

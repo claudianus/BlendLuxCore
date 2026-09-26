@@ -108,6 +108,14 @@ DLSC_DESC = (
     "Only used during final render"
 )
 
+LIGHT_BVH_DESC = (
+    "Hierarchical light sampling (Estevez & Kulla 2018, the technique behind "
+    "Cycles' light tree): a BVH over the lights bounds each cluster's "
+    "contribution by distance, emission cone and surface orientation, so "
+    "bright/relevant lights are picked with O(log N) cost. Recommended for "
+    "scenes with many lights or high-poly mesh emitters"
+)
+
 LARGE_STEP_RATE_DESC = (
     "Probability of generating a large sample mutation. "
     "Low values cause the sampler to focus more on "
@@ -236,6 +244,32 @@ VERTEX_CONNECTION_POOL_DESC = (
     "to. Larger pools cover more of the caustic field per eye vertex; "
     "combine with a connect budget to keep the shadow-ray cost bounded. "
     "1 = the paired light task only"
+)
+
+VERTEX_CONNECTION_ADAPTIVE_DESC = (
+    "Scale the per-vertex connect budget by the measured efficiency of "
+    "the sample's screen-space tile (landed luminance per spent "
+    "connect ray). Tiles where connects keep landing receive a larger "
+    "share of the budget; the inclusion reweighting keeps every "
+    "allocation unbiased. Only applies when Connect Budget is above 0"
+)
+
+VERTEX_CONNECTION_MERGE_RADIUS_DESC = (
+    "Vertex merging radius as a fraction of the scene bounding sphere "
+    "(Georgiev et al. 2012 VCM). 0 disables merging. When above 0, "
+    "light vertices inside the radius of an eye vertex contribute a "
+    "density estimate weighted by the VM MIS terms - fills in "
+    "specular-diffuse-specular caustics pure connects cannot reach. "
+    "Larger radii blur caustics but converge faster"
+)
+
+VERTEX_CONNECTION_REUSE_DESC = (
+    "Temporal connect reuse (ReSTIR-style vertex replay): each eye task "
+    "keeps a copy of the highest-scoring light vertex it has connected "
+    "and replays it as one extra deterministic candidate on later "
+    "samples. The replay uses the same MIS weighting as fresh connects, "
+    "so it stays unbiased - it re-tests productive caustic vertices "
+    "instead of rediscovering them every sample"
 )
 
 ENVLIGHT_CACHE_DESC = (
@@ -502,6 +536,13 @@ class SuperLuxCoreConfigPath(PropertyGroup):
     vertex_connection_pool: IntProperty(name="Connect Pool", default=1,
                                     min=1, max=64,
                                     description=VERTEX_CONNECTION_POOL_DESC)
+    vertex_connection_adaptive: BoolProperty(name="Adaptive Budget", default=True,
+                                    description=VERTEX_CONNECTION_ADAPTIVE_DESC)
+    vertex_connection_merge_radius: FloatProperty(name="Merge Radius", default=0.0,
+                                    min=0.0, max=1.0, precision=5,
+                                    description=VERTEX_CONNECTION_MERGE_RADIUS_DESC)
+    vertex_connection_reuse: BoolProperty(name="Temporal Reuse", default=True,
+                                    description=VERTEX_CONNECTION_REUSE_DESC)
 
     use_clamping: BoolProperty(name="Clamp Output", default=False, description=CLAMPING_DESC)
     auto_clamping: BoolProperty(
@@ -1036,6 +1077,7 @@ class SuperLuxCoreConfig(PropertyGroup):
         ("POWER", "Power", POWER_DESC, 2),
         ("UNIFORM", "Uniform", UNIFORM_DESC, 3),
         ("RESTIR_DI", "ReSTIR DI (reservoir)", RESTIR_DI_DESC, 4),
+        ("LIGHT_BVH", "Light BVH", LIGHT_BVH_DESC, 5),
     ]
     light_strategy: EnumProperty(name="Light Strategy", items=light_strategy_items, default="AUTO",
                                   description="Decides how the lights in the scene are sampled")

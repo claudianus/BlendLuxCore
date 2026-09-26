@@ -608,6 +608,14 @@ def _convert_final_engine(scene, definitions, config):
         superluxcore_engine = "BIDIRCPU"
         definitions["light.maxdepth"] = config.bidir_light_maxdepth
         definitions["path.maxdepth"] = config.bidir_path_maxdepth
+        # Caustic focus cache (guided emission) on the light subpath;
+        # shares the PathTracer hotspot table (BIDIRVMCPU consumes the
+        # same props)
+        definitions["path.lighttracing.focus.enable"] = config.path.lighttracing_focus
+        definitions["path.lighttracing.focus.ratio"] = min(
+            config.path.lighttracing_focus_ratio / 100, 0.9
+        )
+        definitions["path.lighttracing.focus.radius"] = config.path.lighttracing_focus_radius
 
     # Sampler
     if config.engine == "PATH" and config.use_tiles:
@@ -757,6 +765,18 @@ def _convert_path(
             )
             definitions["path.vertexconnection.pool"] = (
                 path.vertex_connection_pool
+            )
+            # M7b: tile-efficiency-scaled connect budget; M7c: VCM
+            # vertex merging radius (scene-radius fraction, 0 = off)
+            definitions["path.vertexconnection.adaptive"] = (
+                path.vertex_connection_adaptive
+            )
+            definitions["path.vertexconnection.mergeradius"] = (
+                path.vertex_connection_merge_radius
+            )
+            # M7d: temporal vertex replay reservoir (per eye task)
+            definitions["path.vertexconnection.reuse"] = (
+                path.vertex_connection_reuse
             )
         else:
             partition_raw = path.hybridbackforward_lightpartition
