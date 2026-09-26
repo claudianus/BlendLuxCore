@@ -32,6 +32,28 @@ from collections import deque
 import pyluxcore
 
 
+def _uses_vulkan(config_props):
+    """True when opencl.devices.select picks a VULKAN_GPU device.
+
+    Position i of the selection string addresses opencl.device.<i> of
+    pyluxcore.GetOpenCLDeviceDescs() (same order the render engine sees:
+    OpenCL, CUDA, Metal, Vulkan).
+    """
+    try:
+        select = config_props.Get("opencl.devices.select").GetString()
+        if not select:
+            return False
+        descs = pyluxcore.GetOpenCLDeviceDescs()
+        for i, flag in enumerate(select):
+            if flag == "1" and descs.Get(
+                    "opencl.device." + str(i) + ".type"
+            ).GetString() == "VULKAN_GPU":
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def precompile_kernels(config_props, renderconfig, progress_cb=None):
     """Pre-compile GPU kernels so RenderSession.Start() doesn't stall.
 
@@ -56,6 +78,11 @@ def precompile_kernels(config_props, renderconfig, progress_cb=None):
         # Only pre-compile for tiled path if requested, since it's rarely
         # used
         engines.append("TILEPATHOCL")
+    if _uses_vulkan(config_props):
+        # A Vulkan cold compile is tens of minutes per engine variant
+        # (clspv + MoltenVK pipeline specialization) - fill only the
+        # engine the session will actually start instead of warming both.
+        engines = [renderengine_type]
     props.Set(
         pyluxcore.Property("kernelcachefill.renderengine.types", engines)
     )

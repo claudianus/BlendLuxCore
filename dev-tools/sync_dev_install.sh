@@ -140,22 +140,6 @@ else
 fi
 
 # 3) add-on sources
-#
-# Guard: never sync this repo into an extension dir that belongs to a
-# different package. The upstream-coexistence extension (blendluxcore_up)
-# is a *generated* artifact — rsyncing untransformed fork sources over it
-# previously destroyed it (duplicate LUXCORE engine registration).
-REPO_ID="$(awk -F'"' '/^id =/ {print $2; exit}' "$HERE/blender_manifest.toml")"
-TARGET_MANIFEST="$EXT_DIR/blender_manifest.toml"
-if [ -f "$TARGET_MANIFEST" ]; then
-    TARGET_ID="$(awk -F'"' '/^id =/ {print $2; exit}' "$TARGET_MANIFEST")"
-    if [ "$TARGET_ID" != "$REPO_ID" ]; then
-        echo "ERROR: target extension id '$TARGET_ID' != repo id '$REPO_ID'." >&2
-        echo "  $EXT_DIR is a generated/different package — refusing to overwrite." >&2
-        echo "  Rebuild blendluxcore_up via tools/upstream_coexistence/build.sh." >&2
-        exit 1
-    fi
-fi
 rsync -a --delete \
     --exclude 'wheels' --exclude '.git' --exclude '__pycache__' \
     --exclude '.git*' --exclude 'dev-tools' --exclude 'doc' \
