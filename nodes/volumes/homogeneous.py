@@ -21,9 +21,28 @@ DISTSAMP_DESC = (
 )
 
 
+PARAM_DESC = (
+    "Scattering parametrization. 'Coefficients' uses raw absorption/"
+    "scattering cross-sections. 'Albedo / Mean Free Path' takes the "
+    "diffuse surface albedo and the scattering mean free path (as in "
+    "OpenPBR subsurface) and derives sigma_a/sigma_s internally via the "
+    "d'Eon closed-form inversion - the physical choice for skin, wax, "
+    "marble and other subsurface materials"
+)
+
+
 class LuxCoreNodeVolHomogeneous(LuxCoreNodeVolume, bpy.types.Node):
     bl_label = "Homogeneous Volume"
     bl_width_default = 175
+
+    def _set_enabled(self, names, enabled):
+        for name in names:
+            self.inputs[self.inputs.find(name)].enabled = enabled
+
+    def update_parametrization(self, context):
+        albedo = self.parametrization == "albedo"
+        self._set_enabled(("Scattering", "Scattering Scale"), not albedo)
+        self._set_enabled(("Albedo", "Mean Free Path"), albedo)
 
     # TODO: get name, default, description etc. from super class or something
     priority: IntProperty(update=utils_node.force_viewport_update, name="Priority", default=0, min=0,
@@ -33,6 +52,12 @@ class LuxCoreNodeVolHomogeneous(LuxCoreNodeVolume, bpy.types.Node):
                                 description=COLORDEPTH_DESC)
     lightgroup: StringProperty(update=utils_node.force_viewport_update, name="Light Group", description=LIGHTGROUP_DESC)
 
+    parametrization: EnumProperty(update=update_parametrization, name="Parametrization", default="coefficients",
+                         items=[
+                             ("coefficients", "Coefficients", PARAM_DESC),
+                             ("albedo", "Albedo / Mean Free Path", PARAM_DESC),
+                         ],
+                         description=PARAM_DESC)
     multiscattering: BoolProperty(update=utils_node.force_viewport_update, name="Multiscattering", default=False)
     phase: EnumProperty(update=utils_node.force_viewport_update, name="Phase Function", default="schlick",
                          items=[
@@ -51,11 +76,14 @@ class LuxCoreNodeVolHomogeneous(LuxCoreNodeVolume, bpy.types.Node):
         self.add_common_inputs()
         self.add_input("LuxCoreSocketColor", "Scattering", (1, 1, 1))
         self.add_input("LuxCoreSocketFloatPositive", "Scattering Scale", 1.0)
+        self.add_input("LuxCoreSocketColor", "Albedo", (0.5, 0.5, 0.5), enabled=False)
+        self.add_input("LuxCoreSocketFloatPositive", "Mean Free Path", 0.1, enabled=False)
         self.add_input("LuxCoreSocketVolumeAsymmetry", "Asymmetry", (0, 0, 0))
 
         self.outputs.new("LuxCoreSocketVolume", "Volume")
 
     def draw_buttons(self, context, layout):
+        layout.prop(self, "parametrization")
         layout.prop(self, "multiscattering")
         layout.prop(self, "phase")
         layout.prop(self, "distance_sampling")
@@ -69,5 +97,8 @@ class LuxCoreNodeVolHomogeneous(LuxCoreNodeVolume, bpy.types.Node):
             "phase": self.phase,
             "distancesampling": self.distance_sampling,
         }
+        if self.parametrization == "albedo":
+            definitions["sssalbedo"] = self.inputs["Albedo"].export(exporter, depsgraph, props)
+            definitions["sssmfp"] = self.inputs["Mean Free Path"].export(exporter, depsgraph, props)
         self.export_common_inputs(exporter, depsgraph, props, definitions)
         return self.create_props(props, definitions, luxcore_name)
