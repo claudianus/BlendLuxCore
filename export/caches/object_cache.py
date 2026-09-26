@@ -1161,17 +1161,23 @@ class ObjectCache2:
 
         safe = re.sub(r"[^\w.-]", "_", obj.name)[:32]
         paths = {}
+        # Cluster stride from config — a signature component, so a
+        # stride change re-bakes (the file's residency unit changes).
+        config = getattr(getattr(scene, "luxcore", None), "config", None)
+        stride = int(getattr(config, "proxy_cluster_stride", 16))
         for shape_name, mat_index in exported.mesh_definitions:
             path = os.path.join(
-                proxy_dir, f"ap_{safe}_{sig}_s{mat_index}.lxm"
+                proxy_dir, f"ap_{safe}_{sig}_st{stride}_s{mat_index}.lxm"
             )
             if not os.path.isfile(path):
-                bake_scene.SaveMesh(shape_name, path)
+                bake_scene.SaveMeshClusterStride(shape_name, path, stride)
             paths[mat_index] = path
-        # Drop superseded bakes of this object (older signatures)
+        # Drop superseded bakes of this object (older signatures or
+        # a different cluster stride)
         prefix = f"ap_{safe}_"
+        tag = f"_{sig}_st{stride}_"
         for f in os.listdir(proxy_dir):
-            if f.startswith(prefix) and sig not in f:
+            if f.startswith(prefix) and tag not in f:
                 try:
                     os.remove(os.path.join(proxy_dir, f))
                 except OSError:

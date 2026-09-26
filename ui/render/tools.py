@@ -146,3 +146,4 @@ class LUXCORE_RENDER_PT_autoproxy(RenderButtonsPanel, Panel):
         )
         layout.label(text="via memory mapping — never re-converted.")
         layout.prop(config, "proxy_auto_mintris")
+        layout.prop(config, "proxy_cluster_stride")

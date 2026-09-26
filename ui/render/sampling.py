@@ -261,9 +261,11 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
             # RIS product guiding: resample K mixture candidates against
             # f*cos*Lhat (0 = plain one-sample mixture)
             col.prop(config, "guiding_ris_k")
-            # Caps the aperture-proposal share; only takes effect when a
-            # mesh object is flagged "Light Portal" (object properties).
-            col.prop(config, "portal_weight")
 
         if config.engine == "PATH":
+            # Light portals (M5): caps the aperture-proposal share; only
+            # takes effect when a mesh object is flagged "Light Portal"
+            # (object properties). Works with or without guiding - the
+            # adaptive share falls back to this fixed value.
+            col.prop(config, "portal_weight")
             col.prop(config, "spectral_enable")

@@ -57,3 +57,12 @@ def is_metal_build():
         .Get("compile.LUXRAYS_ENABLE_METAL")
         .GetBool()
     )
+
+
+def is_vulkan_build():
+    """Check if pyluxcore has been built with Vulkan support."""
+    return (
+        pyluxcore.GetPlatformDesc()
+        .Get("compile.LUXRAYS_ENABLE_VULKAN")
+        .GetBool()
+    )

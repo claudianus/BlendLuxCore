@@ -29,6 +29,36 @@ def main():
 
     print(f"[extrender] loading {bcf_path}", flush=True)
     config = pyluxcore.RenderConfig(bcf_path)
+
+    # external_render.py strips opencl.devices.select (the string is
+    # indexed over this process's own enumeration). Vulkan is opt-in in
+    # the engine, so without a selection it would never be picked —
+    # re-derive it here when the parent asked for a specific backend.
+    backend = os.environ.get("BLC_GPU_BACKEND")
+    if backend:
+        wanted = {
+            "OPENCL": "OPENCL_GPU",
+            "CUDA": "CUDA_GPU",
+            "METAL": "METAL_GPU",
+            "VULKAN": "VULKAN_GPU",
+        }[backend]
+        descs = pyluxcore.GetOpenCLDeviceDescs()
+        names = descs.GetAllUniqueSubNames("opencl.device")
+        select = "".join(
+            "1" if descs.Get(n + ".type").GetString() == wanted else "0"
+            for n in names
+        )
+        if "1" in select:
+            props = pyluxcore.Properties()
+            props.Set(
+                pyluxcore.Property("opencl.devices.select", select))
+            config.Parse(props)
+            print(f"[extrender] {backend} device selection: {select}",
+                  flush=True)
+        else:
+            print(f"[extrender] WARNING: no {backend} device found, "
+                  "using default device selection", flush=True)
+
     session = pyluxcore.RenderSession(config)
 
     session.Start()

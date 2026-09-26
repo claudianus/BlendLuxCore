@@ -63,6 +63,14 @@ def run(config_props, luxcore_scene, scene):
         [site_packages, env.get("PYTHONPATH", "")]
     )
 
+    # Vulkan is opt-in engine-side (never auto-selected by an empty
+    # opencl.devices.select), so the child must re-derive the selection
+    # string from its own enumeration — pass the wanted backend through.
+    from . import get_addon_preferences  # utils/__init__.py
+    gpu_backend = get_addon_preferences(bpy.context).gpu_backend
+    if gpu_backend == "VULKAN":
+        env["BLC_GPU_BACKEND"] = gpu_backend
+
     log_path = os.path.join(workdir, "render.log")
     log = open(log_path, "w")
     # Blender 5.x has no bpy.app.binary_path_python but sys.executable

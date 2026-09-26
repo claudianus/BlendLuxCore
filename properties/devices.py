@@ -64,7 +64,10 @@ class LuxCoreDeviceSettings(PropertyGroup):
 
             if device.type == "METAL_GPU" and preferences.gpu_backend != "METAL":
                 enabled = False
-            
+
+            if device.type == "VULKAN_GPU" and preferences.gpu_backend != "VULKAN":
+                enabled = False
+
             selection += "1" if enabled else "0"
 
         return selection
@@ -77,6 +80,8 @@ class LuxCoreDeviceSettings(PropertyGroup):
             return [device for device in self.devices if device.type == "CUDA_GPU"]
         elif gpu_backend == "METAL":
             return [device for device in self.devices if device.type == "METAL_GPU"]
+        elif gpu_backend == "VULKAN":
+            return [device for device in self.devices if device.type == "VULKAN_GPU"]
         else:
             raise Exception("Unknown GPU Backend")
 

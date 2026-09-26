@@ -63,6 +63,9 @@ ALLOWED_PREFIXES = (
     # The artist "Light Rays" toggle exports as hybridbackforward on
     # CPU (native light threads) and as the light-task fraction on GPU
     "path.lighttracing.",
+    # Vertex connection is exported on GPU only (the CPU side has no
+    # counterpart flag - BIDIRCPU is a separate engine there)
+    "path.vertexconnection.",
 )
 
 ALLOWED_EXACT = {
@@ -75,6 +78,18 @@ def allowed(key):
     if any(key.startswith(p) for p in ALLOWED_PREFIXES):
         return True
     return any(key.startswith(p) for p in ALLOWED_EXACT)
+
+
+def add_light_portal(scene):
+    """One quad flagged "Light Portal" -> path.portal.* on both sides
+    (M5; the GPU port shares the same properties)."""
+    mesh = bpy.data.meshes.new("portal")
+    mesh.from_pydata([(-1., 0., -1.), (1., 0., -1.),
+                      (1., 0., 1.), (-1., 0., 1.)], [], [(0, 1, 2, 3)])
+    mesh.update()
+    obj = bpy.data.objects.new("portal", mesh)
+    scene.collection.objects.link(obj)
+    obj.luxcore.is_light_portal = True
 
 
 # Artist profiles: (name, mutator). Each mutator configures
@@ -98,6 +113,12 @@ PROFILES = [
         "METROPOLIS")),
     ("denoiser", lambda c, s: setattr(
         s.luxcore.denoiser, "enabled", True)),
+    ("light_portal", lambda c, s: add_light_portal(s)),
+    # M6: vertex connection rides on the GPU light-task population; the
+    # mutator mimics the UI flow (Light Tracing panel + VC toggle)
+    ("vertex_connection", lambda c, s: (
+        setattr(c.path, "hybridbackforward_enable", True),
+        setattr(c.path, "vertex_connection", True))),
 ]
 
 

@@ -63,8 +63,13 @@ class LUXCORE_OT_bake_lxm_proxy(bpy.types.Operator, ExportHelper):
 
         mesh_name = exported.mesh_definitions[0][0]
         path = bpy.path.abspath(self.filepath)
+        stride = int(
+            getattr(
+                context.scene.luxcore.config, "proxy_cluster_stride", 16
+            )
+        )
         try:
-            scene.SaveMesh(mesh_name, path)
+            scene.SaveMeshClusterStride(mesh_name, path, stride)
         except RuntimeError as e:
             self.report({"ERROR"}, f"Proxy bake failed: {e}")
             return {"CANCELLED"}

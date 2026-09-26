@@ -70,6 +70,12 @@ class LuxCoreAddonPreferences(AddonPreferences):
             "Use Metal for GPU acceleration (Apple silicon native backend)",
             2,
         ),
+        (
+            "VULKAN",
+            "Vulkan",
+            "Use Vulkan for GPU acceleration (experimental, clspv-translated kernels)",
+            3,
+        ),
     ]
     gpu_backend: EnumProperty(items=gpu_backend_items,
                               # Metal is the primary GPU backend on Apple silicon
@@ -81,6 +87,7 @@ class LuxCoreAddonPreferences(AddonPreferences):
             "OPENCL": "OPENCL_GPU",
             "CUDA": "CUDA_GPU",
             "METAL": "METAL_GPU",
+            "VULKAN": "VULKAN_GPU",
         }
 
         devices = context.scene.luxcore.devices.devices

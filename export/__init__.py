@@ -976,6 +976,7 @@ class Exporter(object):
             use_instancing,
             base_list,
             wrapped,
+            _proxy_sig,
         ) = meta
         if (
             wrapped

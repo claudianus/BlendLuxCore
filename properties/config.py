@@ -214,6 +214,14 @@ LIGHTTRACING_FOCUS_RADIUS_DESC = (
     "diffuse surfaces seen through glass already get a broad floor, so "
     "raise this only if a scene's productive surfaces stay under-covered"
 )
+VERTEX_CONNECTION_DESC = (
+    "Bidirectional connects: light-path vertices are cached on the GPU "
+    "and connected to eye-path vertices with the same MIS weighting as "
+    "the BIDIRCPU engine. Adds caustic and specular-indirect transport "
+    "that neither eye paths nor light splats alone can reach "
+    "(L S+ D E paths). GPU light tracing only; requires OpenCL task "
+    "count above 8192"
+)
 
 ENVLIGHT_CACHE_DESC = (
     "Enable in scenes where the world environment is only visible through small openings (e.g. a room with small windows). "
@@ -469,6 +477,10 @@ class LuxCoreConfigPath(PropertyGroup):
                                             description=LIGHTTRACING_FOCUS_RATIO_DESC)
     lighttracing_focus_radius: FloatProperty(name="Focus Radius", default=0.01, min=0.0001, max=1.0,
                                              description=LIGHTTRACING_FOCUS_RADIUS_DESC)
+    # path.vertexconnection.enable - GPU BDPT connects: cached light
+    # vertices are connected to eye vertices with BIDIRCPU-style MIS
+    vertex_connection: BoolProperty(name="Vertex Connection", default=False,
+                                    description=VERTEX_CONNECTION_DESC)
 
     use_clamping: BoolProperty(name="Clamp Output", default=False, description=CLAMPING_DESC)
     auto_clamping: BoolProperty(
@@ -736,6 +748,7 @@ class LuxCoreConfig(PropertyGroup):
                 "OPENCL": "OPENCL_GPU",
                 "CUDA": "CUDA_GPU",
                 "METAL": "METAL_GPU",
+                "VULKAN": "VULKAN_GPU",
             }.get(backend)
             if wanted is None:
                 return []
@@ -912,6 +925,14 @@ class LuxCoreConfig(PropertyGroup):
         default=250000, min=1000, soft_max=10000000,
         description="Meshes with at least this many triangles on the evaluated "
                     "mesh (after modifiers) are auto-proxied",
+    )
+    proxy_cluster_stride: IntProperty(
+        name="Proxy Cluster Stride",
+        default=16, min=1, soft_max=256,
+        description="Triangles per .lxm cluster — the ray-driven residency "
+                    "unit. Smaller = faster intersection and finer-grained "
+                    "paging, but more BVH leaves. 16 measured ~2.3x faster "
+                    "than 64 on a 717k-tri terrain",
     )
 
     def using_out_of_core(self):
