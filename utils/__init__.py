@@ -36,7 +36,7 @@ if _needs_reload:
     errorlog = importlib.reload(errorlog)
     misc = importlib.reload(misc)
 
-MESH_OBJECTS = {"MESH", "CURVES", "SURFACE", "META", "FONT"}
+MESH_OBJECTS = {"MESH", "CURVE", "CURVES", "SURFACE", "META", "FONT"}
 EXPORTABLE_OBJECTS = MESH_OBJECTS | {"LIGHT"}
 NON_DEFORMING_MODIFIERS = {
     "COLLISION",
