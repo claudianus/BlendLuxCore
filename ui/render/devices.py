@@ -30,9 +30,11 @@ def _show_openCL_device_warning(context):
 
 
 class SUPERLUXCORE_RENDER_PT_devices(RenderButtonsPanel, Panel):
+    """Performance: compute devices and memory behaviour — Cycles-style
+    grouping so artists find hardware settings in one place."""
     COMPAT_ENGINES = {"SUPERLUXCORE"}
-    bl_label = "Devices"
-    bl_order = 85
+    bl_label = "Performance"
+    bl_order = 40
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw_header(self, context):
@@ -160,3 +162,51 @@ class SUPERLUXCORE_RENDER_PT_cpu_devices(RenderButtonsPanel, Panel):
         sub = layout.column(align=True)
         sub.enabled = context.scene.render.threads_mode == "FIXED"
         sub.prop(context.scene.render, "threads")
+
+
+class SUPERLUXCORE_RENDER_PT_memory(RenderButtonsPanel, Panel):
+    """GPU/CPU memory behaviour: out-of-core rendering and texture
+    buffer handling — where big scenes are made to fit."""
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_label = "Memory"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_devices"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    @classmethod
+    def poll(cls, context):
+        simple = context.scene.superluxcore.config.simple
+        if simple.enabled and not simple.show_advanced:
+            return False
+        return context.scene.render.engine == "SUPERLUXCORE"
+
+    def draw(self, context):
+        layout = self.layout
+        config = context.scene.superluxcore.config
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        on_gpu = config.effective_device() == "OCL" and config.engine == "PATH"
+
+        col = layout.column(align=True)
+        col.active = on_gpu
+        col.prop(config, "out_of_core")
+        sub = col.column(align=True)
+        sub.active = on_gpu and config.out_of_core
+        sub.prop(config, "out_of_core_mode")
+        # stays editable when a low-VRAM GPU forces out-of-core on
+        if config.using_out_of_core():
+            col.prop(config, "out_of_core_supersampling")
+
+        if not on_gpu:
+            layout.label(
+                text="Out-of-core applies to GPU rendering",
+                icon=icons.INFO,
+            )
+        elif config.low_vram():
+            layout.label(
+                text="Low-VRAM GPU detected: out-of-core is forced on",
+                icon=icons.INFO,
+            )
+
+        layout.prop(config, "free_blender_image_buffers")

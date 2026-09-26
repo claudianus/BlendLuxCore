@@ -8,9 +8,9 @@ from ...properties.denoiser import SuperLuxCoreDenoiser
 
 class SUPERLUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
-    bl_label = "Denoiser"
+    bl_label = "Denoise"
     bl_options = {'DEFAULT_CLOSED'}
-    bl_order = 60
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_sampling"
 
     @classmethod
     def poll(cls, context):

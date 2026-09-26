@@ -32,7 +32,7 @@ class SuperLuxCoreLightProps(bpy.types.PropertyGroup):
             if self.is_laser:
                 context.light.shape = "SQUARE"
 
-    use_cycles_settings: BoolProperty(name="Use Cycles Settings", default=False)
+    use_cycles_settings: BoolProperty(name="Use Cycles Settings", default=True)
 
     ##############################################
     # SuperLuxCore specific properties needed to translate SuperLuxCore light concepts to Blender

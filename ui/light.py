@@ -7,6 +7,11 @@ from ..utils import ui as utils_ui
 from cycles.ui import panel_node_draw
 
 
+def _cycles_props(light):
+    """Cycles light settings; None when the Cycles addon is disabled."""
+    return getattr(light, "cycles", None)
+
+
 class SUPERLUXCORE_LIGHT_PT_context_light(DataButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Light"
@@ -49,7 +54,8 @@ class SUPERLUXCORE_LIGHT_PT_context_light(DataButtonsPanel, Panel):
         layout = self.layout
         light = context.light
         is_area_light = light.type == "AREA"
-        is_portal = is_area_light and light.cycles.is_portal
+        cycles_props = _cycles_props(light)
+        is_portal = is_area_light and cycles_props and cycles_props.is_portal
 
         layout.use_property_decorate = False
         layout.use_property_split = True
@@ -84,7 +90,7 @@ class SUPERLUXCORE_LIGHT_PT_context_light(DataButtonsPanel, Panel):
         if is_area_light and light.shape not in {"SQUARE", "RECTANGLE"}:
             layout.label(text="Unsupported shape", icon=icons.WARNING)
 
-        if not is_portal and not light.cycles.cast_shadow:
+        if not is_portal and cycles_props and not cycles_props.cast_shadow:
             layout.label(text="Cast Shadow is disabled, but unsupported by SuperLuxCore", icon=icons.WARNING)
 
         if light.type == "SPOT" and light.shadow_soft_size > 0:
@@ -455,7 +461,12 @@ class SUPERLUXCORE_LIGHT_PT_cycles_nodes(DataButtonsPanel, Panel):
     def poll(cls, context):
         if context.scene.render.engine != "SUPERLUXCORE" or not context.light:
             return False
-        is_portal = context.light.type == "AREA" and context.light.cycles.is_portal
+        cycles_props = _cycles_props(context.light)
+        is_portal = (
+            context.light.type == "AREA"
+            and cycles_props
+            and cycles_props.is_portal
+        )
         return context.light.superluxcore.use_cycles_settings and not is_portal
 
     def draw(self, context):

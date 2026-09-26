@@ -42,7 +42,7 @@ GROUND_COLOR_DESC = GROUND_ENABLE_DESC
 
 
 class SuperLuxCoreWorldProps(bpy.types.PropertyGroup):
-    use_cycles_settings: BoolProperty(name="Use Cycles Settings", default=False)
+    use_cycles_settings: BoolProperty(name="Use Cycles Settings", default=True)
 
     lights = [
         ("sky2", "Sky", "Hosek and Wilkie sky model", 0),

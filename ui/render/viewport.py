@@ -9,7 +9,7 @@ class SUPERLUXCORE_RENDER_PT_viewport_settings(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Viewport Render"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_order = 100
+    bl_order = 50
 
     @classmethod
     def poll(cls, context):

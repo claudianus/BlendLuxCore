@@ -4,7 +4,7 @@ from .. import icons
 from ..icons import icon_manager
 
 class SUPERLUXCORE_RENDERLAYER_PT_aovs(ViewLayerButtonsPanel, Panel):
-    bl_label = "SuperLuxCore AOVs"
+    bl_label = "Passes (AOVs)"
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_order = 2
 
@@ -67,6 +67,8 @@ class SUPERLUXCORE_RENDERLAYER_PT_aovs_material_object(ViewLayerButtonsPanel, Pa
 
         col = flow.column()
         col.prop(aovs, "object_id")
+        col.prop(aovs, "cryptomatte_object")
+        col.prop(aovs, "cryptomatte_material")
 
 
 class SUPERLUXCORE_RENDERLAYER_PT_aovs_light(ViewLayerButtonsPanel, Panel):

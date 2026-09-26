@@ -98,9 +98,11 @@ class SUPERLUXCORE_PT_context_material(MaterialButtonsPanel, Panel):
 
             if mat.use_nodes and mat.node_tree:
                 layout.prop(mat.superluxcore, "use_cycles_nodes")
-                # Principled BSDF -> material target also applies to the
-                # automatic Blender-first conversion (no SuperLuxCore node tree)
-                layout.prop(mat.superluxcore, "principled_target")
+                # Principled BSDF -> material target only matters when the
+                # Blender/Cycles node path is actually used (explicit toggle
+                # or automatic Blender-first conversion without a Lux tree)
+                if mat.superluxcore.use_cycles_nodes or not mat.superluxcore.node_tree:
+                    layout.prop(mat.superluxcore, "principled_target")
 
 
 class SUPERLUXCORE_PT_material_presets(MaterialButtonsPanel, Panel):

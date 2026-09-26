@@ -15,7 +15,7 @@ def question(layout, text, index=1):
 
 class SUPERLUXCORE_OT_render_settings_helper(bpy.types.Operator):
     bl_idname = "superluxcore.render_settings_helper"
-    bl_label = "Render Settings Helper"
+    bl_label = "Scene Setup Guide"
     bl_description = "Interactive render settings guide"
     bl_options = {"UNDO"}
 

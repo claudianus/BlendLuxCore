@@ -46,21 +46,21 @@ class SuperLuxCoreHaltConditions(bpy.types.PropertyGroup):
     # still terminate instead of running forever.
     enable: BoolProperty(name="Enable", default=True)
 
-    use_time: BoolProperty(name="Use Time", default=False)
+    use_time: BoolProperty(name="Time Limit", default=False)
     time: IntProperty(name="Time (s)", default=600, min=1)
 
-    use_samples: BoolProperty(name="Use Samples", default=True,
+    use_samples: BoolProperty(name="Render Samples", default=True,
                                description=USE_SAMPLES_DESC)
     samples: IntProperty(name="Samples", default=1024, min=2, soft_max=16384,
                           description=SAMPLES_DESC)
 
-    use_light_samples: BoolProperty(name="Use Light Path Samples", default=False,
+    use_light_samples: BoolProperty(name="Light Path Samples", default=False,
                                      description=USE_LIGHT_PATH_SAMPLES_DESC)
     light_samples: IntProperty(name="Light Path Samples", default=100, min=1,
                                 description=LIGHT_PATH_SAMPLES_DESC)
 
     # Noise threshold (on by default: convergence-based stop)
-    use_noise_thresh: BoolProperty(name="Use Noise Threshold", default=True,
+    use_noise_thresh: BoolProperty(name="Noise Threshold", default=True,
                                     description=USE_NOISE_THRESH_DESC)
     noise_thresh: IntProperty(name="Noise Threshold", default=5, min=0, soft_min=3, max=255,
                                description=NOISE_THRESH_DESC)

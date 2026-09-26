@@ -39,9 +39,9 @@ def draw_persistent_file_ui(context, layout, settings):
 
 class SUPERLUXCORE_RENDER_PT_caches(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
-    bl_label = "Caches"
+    bl_label = "Render Caches"
     bl_options = {'DEFAULT_CLOSED'}
-    bl_order = 80
+    bl_order = 30
 
     @classmethod
     def poll(cls, context):
@@ -269,7 +269,7 @@ class SUPERLUXCORE_RENDER_PT_caches_envlight_persistence(RenderButtonsPanel, Pan
 
 class SUPERLUXCORE_RENDER_PT_caches_DLSC(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
-    bl_label = "Direct Light Sampling Cache"
+    bl_label = "Many-Light Cache (DLSC)"
     bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches"
     bl_options = {'DEFAULT_CLOSED'}
 

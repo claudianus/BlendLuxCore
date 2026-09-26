@@ -26,6 +26,12 @@ class SuperLuxCoreAOVSettings(PropertyGroup):
     object_id: BoolProperty(name="Object ID", default=False,
                        description="Object ID (1 value per object, use the ID Mask Node "
                                    "in compositing nodes to extract a mask)")
+    cryptomatte_object: BoolProperty(name="Cryptomatte Object", default=False,
+                       description="Cryptomatte matte by object name (EXR, use the Cryptomatte "
+                                   "node in compositing)")
+    cryptomatte_material: BoolProperty(name="Cryptomatte Material", default=False,
+                       description="Cryptomatte matte by material name (EXR, use the Cryptomatte "
+                                   "node in compositing)")
 
     # Light Information
     emission: BoolProperty(name="Emission", default=False,

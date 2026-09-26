@@ -4,10 +4,10 @@ from ... import icons
 from ...icons import icon_manager
 
 class SUPERLUXCORE_RENDER_PT_tools(Panel, RenderButtonsPanel):
-    bl_label = "SuperLuxCore Tools"
+    bl_label = "Utilities"
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_options = {"DEFAULT_CLOSED"}
-    bl_order = 999
+    bl_order = 60
 
     @classmethod
     def poll(cls, context):
@@ -38,7 +38,7 @@ class SUPERLUXCORE_RENDER_PT_tools(Panel, RenderButtonsPanel):
 
 class SUPERLUXCORE_RENDER_PT_filesaver(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
-    bl_label = "SuperLuxCore Filesaver"
+    bl_label = "Scene Export (Filesaver)"
     bl_options = {"DEFAULT_CLOSED"}
     bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
 
@@ -55,7 +55,7 @@ class SUPERLUXCORE_RENDER_PT_filesaver(RenderButtonsPanel, Panel):
         layout.use_property_decorate = False
 
         layout.enabled = config.use_filesaver
-        layout.label(text="Only write SuperLuxCore scene to disk", icon=icons.INFO)
+        layout.label(text="Only export the scene to disk, do not render", icon=icons.INFO)
 
         col = layout.column(align=True)
         col.prop(config, "filesaver_format")
@@ -99,7 +99,7 @@ class SUPERLUXCORE_RENDER_PT_geospill(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Out-of-Core Spilling"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_devices"
 
     def draw_header(self, context):
         layout = self.layout
@@ -126,7 +126,7 @@ class SUPERLUXCORE_RENDER_PT_autoproxy(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Automatic Mesh Proxy"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_devices"
 
     def draw_header(self, context):
         layout = self.layout

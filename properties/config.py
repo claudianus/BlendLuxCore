@@ -10,7 +10,7 @@ from .. import utils
 
 
 PATH_DESC = (
-    'Traces rays from the camera (and from lights, if "Add Light Tracing" or caustics cache are used).\n'
+    'Traces rays from the camera (and from lights, if Light Tracing or the caustics cache are used).\n'
     'Suited for almost all scene types and lighting scenarios.\n'
     'Can run on the CPU, GPU or both.\n'
     'Supports several caches to accelerate indirect light, environment light sampling and many-light sampling.\n'
@@ -35,8 +35,8 @@ RANDOM_DESC = (
 )
 
 TILED_DESCRIPTION = (
-    'Use the special "Tiled Path" engine, which is slower than the regular Path engine, but uses less memory. '
-    'Does not support the "Add Light Tracing" option'
+    'Render in tiles with the special "Tiled Path" engine: slower than the regular Path engine, but uses much less memory. '
+    'Does not support Light Tracing'
 )
 TILE_SIZE_DESC = (
     "Note that OpenCL devices will automatically render multiple tiles if it increases performance"
@@ -304,7 +304,7 @@ class SuperLuxCoreConfigSimple(PropertyGroup):
     """
     enabled: BoolProperty(
         name="Quick Setup",
-        default=False,
+        default=True,
         description="Show a simplified interface with a single quality slider. "
                     "Hide the advanced render settings panels",
     )
@@ -372,6 +372,7 @@ class SuperLuxCoreConfigSimple(PropertyGroup):
             (config.path, "use_clamping"), (config.path, "clamping"),
             (config, "sobol_adaptive_strength"), (config, "guiding_enable"),
             (halt, "enable"), (halt, "samples"),
+            (scene.superluxcore.denoiser, "enabled"),
             (config.photongi, "enabled"), (config.photongi, "caustic_enabled"),
             (config.photongi, "caustic_periodic_update"),
             (config.photongi, "caustic_updatespp"),
@@ -473,9 +474,11 @@ class SuperLuxCoreConfigSimple(PropertyGroup):
                 config.path.hybridbackforward_lightpartition = 20
 
     def apply_halt(self, scene):
-        """Map quality onto halt conditions (samples per pixel)."""
+        """Map quality onto halt conditions (samples per pixel) and the
+        Denoise checkbox onto the final denoiser."""
         scene.superluxcore.halt.enable = True
         scene.superluxcore.halt.samples = self.quality_map()["halt_samples"]
+        scene.superluxcore.denoiser.enabled = self.denoise
 
 
 class SuperLuxCoreConfigPath(PropertyGroup):
@@ -485,7 +488,8 @@ class SuperLuxCoreConfigPath(PropertyGroup):
     """
     # TODO: helpful descriptions
     # path.pathdepth.total
-    depth_total: IntProperty(name="Total Path Depth", default=12, min=1, soft_max=128)
+    depth_total: IntProperty(name="Total", default=12, min=1, soft_max=128,
+                             description="Maximum number of bounces a light path can take")
     # path.pathdepth.diffuse
     depth_diffuse: IntProperty(name="Diffuse", default=4, min=1, soft_max=128)
     # path.pathdepth.glossy
@@ -493,13 +497,13 @@ class SuperLuxCoreConfigPath(PropertyGroup):
     # path.pathdepth.specular
     depth_specular: IntProperty(name="Specular", default=12, min=1, soft_max=128)
 
-    hybridbackforward_enable: BoolProperty(name="Add Light Tracing", default=False,
+    hybridbackforward_enable: BoolProperty(name="Light Tracing", default=False,
                                            description=HYBRID_BACKFORWARD_DESC)
-    hybridbackforward_lightpartition: FloatProperty(name="Light Rays", default=20, min=0, max=100,
+    hybridbackforward_lightpartition: FloatProperty(name="Light Ray Share", default=20, min=0, max=100,
                                                     subtype="PERCENTAGE",
                                                     description=HYBRID_BACKFORWARD_LIGHTPART_DESC)
     # Separate property so we can use a different default that makes more sense for OpenCL
-    hybridbackforward_lightpartition_opencl: FloatProperty(name="Light Rays", default=25, min=0, max=100,
+    hybridbackforward_lightpartition_opencl: FloatProperty(name="Light Ray Share", default=25, min=0, max=100,
                                                     subtype="PERCENTAGE",
                                                     description=HYBRID_BACKFORWARD_LIGHTPART_OPENCL_DESC)
     hybridbackforward_glossinessthresh: FloatProperty(name="Glossiness Threshold", default=0.049, min=0, max=1,
@@ -729,13 +733,13 @@ class SuperLuxCoreConfigNoiseEstimation(PropertyGroup):
 
 
 class SuperLuxCoreConfigImageResizePolicy(PropertyGroup):
-    enabled: BoolProperty(name="Use Image Resizing", default=False, description="")
+    enabled: BoolProperty(name="Use Image Resizing", default=True, description="")
     types = [
         ("MIPMAPMEM", "Auto-Scale to MipMaps", MIPMAPMEM_DESC, 0),
         ("MINMEM", "Auto-Scale to Lowest Size", MINMEM_DESC, 1),
         ("FIXED", "Uniform Scale", FIXED_DESC, 2),
     ]
-    type: EnumProperty(name="Type", items=types, default="MIPMAPMEM", description="How to resize images")
+    type: EnumProperty(name="Type", items=types, default="MINMEM", description="How to resize images")
     scale: FloatProperty(name="Scale", default=100, min=0, soft_max=100, precision=1, subtype="PERCENTAGE",
                          description="Scale factor. For example, with scale = 50%, a 3000x2000 pixel image is scaled to 1500x1000. "
                                      "When using auto-scaling, this value acts as a multiplier for the automatic scale")
@@ -768,7 +772,7 @@ class SuperLuxCoreConfig(PropertyGroup):
         ("PATH", "Pathtracing", PATH_DESC, 0),
         ("BIDIR", "Bidirectional", BIDIR_DESC, 1),
     ]
-    engine: EnumProperty(name="Lighting integrator", items=engines, default="PATH")
+    engine: EnumProperty(name="Integrator", items=engines, default="PATH")
 
     # Only available when tiled rendering is off (because it uses a special tiled sampler)
     samplers = [
@@ -927,7 +931,7 @@ class SuperLuxCoreConfig(PropertyGroup):
         ("EVERYTHING", "Everything", "The film, image textures, meshes and other data are stored in CPU RAM if GPU RAM is not sufficient", 1),
     ]
     out_of_core_mode: EnumProperty(name="Mode", items=out_of_core_modes, default="EVERYTHING")
-    out_of_core: BoolProperty(name="Out of Core", default=False, 
+    out_of_core: BoolProperty(name="Out-of-Core Memory", default=False,
                               description="Enable storage of image pixels, meshes and other data in CPU RAM if GPU RAM is not sufficient. "
                                           "Enabling this option causes the scene to use more CPU RAM")
     free_blender_image_buffers: BoolProperty(
@@ -952,7 +956,7 @@ class SuperLuxCoreConfig(PropertyGroup):
     )
     spill_geometry: BoolProperty(
         name="Spill Geometry",
-        default=False,
+        default=True,
         description="Out-of-core geometry: mesh buffers larger than the threshold "
                     "are written to disk and accessed through file mappings, so the "
                     "OS can evict cold pages under memory pressure instead of "
@@ -1036,7 +1040,7 @@ class SuperLuxCoreConfig(PropertyGroup):
     bidir_device: EnumProperty(name="Device", items=devices, default="CPU",
                                description="Bidir is only available on CPU. Switch to the Path engine if you want to render on the GPU")
 
-    use_tiles: BoolProperty(name="Use Tiled Path (slower)", default=False, description=TILED_DESCRIPTION)
+    use_tiles: BoolProperty(name="Tiled Rendering", default=False, description=TILED_DESCRIPTION)
     
     def using_tiled_path(self):
         return self.engine == "PATH" and self.use_tiles
@@ -1053,7 +1057,7 @@ class SuperLuxCoreConfig(PropertyGroup):
     bidir_path_maxdepth: IntProperty(name="Eye Depth", default=10, min=1, soft_max=16)
 
     # Pixel filter
-    filter_enabled: BoolProperty(name="Enable Pixel Filtering", default=False, description=FILTER_DESC)
+    filter_enabled: BoolProperty(name="Enable Pixel Filtering", default=True, description=FILTER_DESC)
     filters = [
         ("BLACKMANHARRIS", "Blackman-Harris", "Default, usually the best option", 0),
         ("MITCHELL_SS", "Mitchell", "Sharp, but can produce black ringing artifacts around bright pixels", 1),
@@ -1113,7 +1117,7 @@ class SuperLuxCoreConfig(PropertyGroup):
                                               "with reconnection shift + visibility test")
 
     # MNEE (specular chain direct light sampling)
-    mnee_enable: BoolProperty(name="MNEE Specular Caustics", default=False,
+    mnee_enable: BoolProperty(name="Specular Caustics (MNEE)", default=False,
                                   description="Direct light through delta specular surfaces (mirrors, glass) via manifold next event estimation. Fix dark caustics from point/spot lights behind mirrors or glass")
     mnee_maxspecular: IntProperty(name="Max Specular Vertices", default=1, min=1, max=4,
                                   description="Chain length for multi-specular transport (closed glass slabs need 2+). "
@@ -1129,7 +1133,7 @@ class SuperLuxCoreConfig(PropertyGroup):
                                               "result and only adds recovered caustic energy")
 
     # Path guiding (P1-3): learned incident-radiance field steers glossy bounces
-    guiding_enable: BoolProperty(name="Path Guiding", default=False,
+    guiding_enable: BoolProperty(name="Path Guiding", default=True,
                                  description="Learn where the light comes from while rendering and steer "
                                              "glossy bounces toward it (one-sample MIS vs BSDF, unbiased). "
                                              "Helps indirect and glossy transport; needs some passes to warm up")
@@ -1176,17 +1180,22 @@ class SuperLuxCoreConfig(PropertyGroup):
     envlight_cache: PointerProperty(type=SuperLuxCoreConfigEnvLightCache)
 
     # FILESAVER options
-    use_filesaver: BoolProperty(name="Only write SuperLuxCore scene", default=False)
+    use_filesaver: BoolProperty(
+        name="Export Scene Only",
+        default=False,
+        description="Only write the exported SuperLuxCore scene to disk "
+                    "(.scn/.cfg text or .bcf binary) instead of rendering",
+    )
     filesaver_format_items = [
         ("TXT", "Text", "Save as .scn and .cfg text files", 0),
         ("BIN", "Binary", "Save as .bcf binary file", 1),
     ]
-    filesaver_format: EnumProperty(name="", items=filesaver_format_items, default="TXT")
+    filesaver_format: EnumProperty(name="", items=filesaver_format_items, default="BIN")
     filesaver_path: StringProperty(name="", subtype="DIR_PATH", description="Output path where the scene is saved")
 
     # Seed
     seed: IntProperty(name="Seed", default=1, min=1, description=SEED_DESC)
-    use_animated_seed: BoolProperty(name="Animated Seed", default=False, description=ANIM_SEED_DESC)
+    use_animated_seed: BoolProperty(name="Animated Seed", default=True, description=ANIM_SEED_DESC)
 
     # Min. epsilon settings (drawn in ui/units.py)
     show_min_epsilon: BoolProperty(name="Advanced SuperLuxCore Settings", default=False,
