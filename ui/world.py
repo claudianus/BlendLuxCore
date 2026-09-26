@@ -167,6 +167,7 @@ class LUXCORE_WORLD_PT_infinite(WorldButtonsPanel, Panel):
         world.luxcore.image_user.draw(sub, context.scene)
         sub.prop(world.luxcore, "rotation")
         sub.prop(world.luxcore, "sampleupperhemisphereonly")
+        sub.prop(world.luxcore, "cdfdim")
         sub.label(text="For free transformation use a sun light", icon=icons.INFO)
         sub.operator("luxcore.create_sun_hemi")
 

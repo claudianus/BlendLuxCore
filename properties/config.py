@@ -903,15 +903,15 @@ class LuxCoreConfig(PropertyGroup):
                     "LuxCore keeps the geometry file-backed (demand-paged, "
                     "reclaimable by the OS) and the Blender mesh is never "
                     "converted again. Excluded: instanced-duplicate sources, "
-                    "displacement and deformation motion blur. Count-preserving "
-                    "mesh edits between renders may not trigger a re-bake — "
-                    "restart Blender or disable the option to force it",
+                    "displacement and deformation motion blur. Mesh edits are "
+                    "detected via a sampled vertex hash — count-preserving "
+                    "edits of unsampled vertices may not re-bake",
     )
     proxy_auto_mintris: IntProperty(
         name="Proxy Threshold (tris)",
         default=250000, min=1000, soft_max=10000000,
-        description="Meshes with at least this many triangles (evaluated on the "
-                    "base data-block, before modifiers) are auto-proxied",
+        description="Meshes with at least this many triangles on the evaluated "
+                    "mesh (after modifiers) are auto-proxied",
     )
 
     def using_out_of_core(self):
@@ -1057,6 +1057,15 @@ class LuxCoreConfig(PropertyGroup):
                                       description="Optional path guiding table file to warm-start the "
                                                   "learned field (empty = train from scratch). Written by "
                                                   "previous runs or external tools")
+    # RIS product guiding (M4b, path.guiding.risk): resample K candidates
+    # from the BSDF/guide mixture against f*|cos|*Lhat - the proposal
+    # learns the product, not just the incident field. 0 = plain mixture.
+    guiding_ris_k: IntProperty(name="RIS Candidates", default=0,
+                               min=0, max=8,
+                               description="Product-guiding resampling candidates per guided bounce "
+                                           "(0 = off, 1 degenerates to the plain mixture). Values >1 "
+                                           "resample toward f*cos*incident-radiance - better on glossy "
+                                           "paths at the cost of extra BSDF evaluations")
 
     # Light portals (M5): caps the one-sample MIS share of the aperture
     # proposal. Only used when at least one mesh object is flagged as a

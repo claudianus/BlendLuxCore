@@ -258,6 +258,9 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
             # Optional warm-start table; empty trains inline (GPU engines
             # refine it through the record drain loop)
             col.prop(config, "guiding_tablefile")
+            # RIS product guiding: resample K mixture candidates against
+            # f*cos*Lhat (0 = plain one-sample mixture)
+            col.prop(config, "guiding_ris_k")
             # Caps the aperture-proposal share; only takes effect when a
             # mesh object is flagged "Light Portal" (object properties).
             col.prop(config, "portal_weight")

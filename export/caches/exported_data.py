@@ -61,6 +61,10 @@ class ExportedObject(ExportedData):
         # {part.lux_obj: absolute .lxm path}: proxied parts are emitted
         # as "scene.objects.X.ply" file references instead of ".shape".
         self.proxy_paths = None
+        # ((path, mtime_ns, size), ...) of the proxy files at export
+        # time — the viewport update path re-stats these to detect an
+        # externally re-baked .lxm.
+        self.proxy_sig = ()
         # Strand deformation motion blur (E9): records of strand meshes
         # (hair curves or particle hair) exported by this object. Each
         # entry is a dict {"mesh", "kind", "sig", "space_matrix",

@@ -6,7 +6,7 @@ from bpy.types import SpaceView3D, SpaceImageEditor
 
 from . import (
     depsgraph_update_post, draw_imageeditor,
-    exit, frame_change_pre, load_post,
+    exit, frame_change_pre, load_post, proxy_watch,
 )
 
 if _needs_reload:
@@ -17,6 +17,7 @@ if _needs_reload:
         exit,
         frame_change_pre,
         load_post,
+        proxy_watch,
     )
     for module in modules:
         importlib.reload(module)
@@ -31,6 +32,7 @@ def register():
     bpy.app.handlers.depsgraph_update_post.append(depsgraph_update_post.handler)
     bpy.app.handlers.frame_change_pre.append(frame_change_pre.handler)
     bpy.app.handlers.load_post.append(load_post.handler)
+    proxy_watch.register()
 
     args = ()
     draw_imageeditor.handle = SpaceImageEditor.draw_handler_add(draw_imageeditor.handler,
@@ -41,4 +43,5 @@ def unregister():
     bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_post.handler)
     bpy.app.handlers.frame_change_pre.remove(frame_change_pre.handler)
     bpy.app.handlers.load_post.remove(load_post.handler)
+    proxy_watch.unregister()
     SpaceImageEditor.draw_handler_remove(draw_imageeditor.handle, 'WINDOW')

@@ -101,6 +101,12 @@ class LuxCoreWorldProps(bpy.types.PropertyGroup):
                                              description=SAMPLEUPPERHEMISPHEREONLY_DESCRIPTION)
     rotation: FloatProperty(name="Z Axis Rotation", default=0,
                              subtype="ANGLE", unit="ROTATION")
+    cdfdim: IntProperty(
+        name="Max CDF Resolution", default=4096, min=0,
+        description="Caps the environment importance-sampling table "
+                    "resolution (block-summed, stays unbiased). A 16k HDRI "
+                    "otherwise builds a ~1GB CDF. 0 = unlimited",
+    )
 
     # sky2, sun, infinite, constantinfinite
     visibility_indirect_diffuse: BoolProperty(name="Diffuse", default=True, description=VIS_INDIRECT_DIFFUSE_DESC)

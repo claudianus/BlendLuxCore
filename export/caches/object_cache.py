@@ -36,17 +36,32 @@ class TriAOVDataIndices:
 MAX_PARTICLES_FOR_LIVE_TRANSFORM = 2000
 
 # Shared per-Blender-session so auto-proxy bakes survive ObjectCache
-# re-creation between renders (module state lives as long as bpy does).
+# re-creation between renders. A fixed temp dir (not mkdtemp) keeps
+# one location even if the module is reloaded mid-session; files are
+# signature-named so concurrent Blender instances cannot collide, and
+# the per-object stale sweep keeps the dir bounded.
 # {signature: (mesh_key, {mat_index: path})}
-_auto_proxy_dir = None
 _auto_proxies = {}
+_auto_proxy_dir_swept = False
 
 
 def _get_auto_proxy_dir():
-    global _auto_proxy_dir
-    if _auto_proxy_dir is None:
-        _auto_proxy_dir = tempfile.mkdtemp(prefix="luxcore_autoproxy_")
-    return _auto_proxy_dir
+    d = os.path.join(tempfile.gettempdir(), "luxcore_autoproxy")
+    os.makedirs(d, exist_ok=True)
+    # Once per process: drop orphans left by crashed/killed sessions.
+    global _auto_proxy_dir_swept
+    if not _auto_proxy_dir_swept:
+        _auto_proxy_dir_swept = True
+        cutoff = time() - 86400
+        for f in os.listdir(d):
+            if f.startswith("ap_"):
+                fp = os.path.join(d, f)
+                try:
+                    if os.path.getmtime(fp) < cutoff:
+                        os.remove(fp)
+                except OSError:
+                    pass
+    return d
 
 
 def _instance_key(dg_obj_instance):
@@ -1351,15 +1366,29 @@ class ObjectCache2:
                 part.lux_shape not in base_names
                 for part in exported_obj.parts
             )
+            # File signature of referenced .lxm proxies
+            # ((path, mtime_ns, size), ...) — the persistent-scene
+            # delta and the viewport update path stat these to catch
+            # external file changes the depsgraph cannot see. Empty
+            # for converted meshes.
+            proxy_file_sig = tuple(
+                sorted(
+                    (p, os.stat(p).st_mtime_ns, os.stat(p).st_size)
+                    for p in (exported_mesh.proxy_paths or {}).values()
+                )
+            )
+            exported_obj.proxy_sig = proxy_file_sig
             self.obj_geo_meta[obj_key] = (
                 obj.original.data.as_pointer() if obj.original.data else 0,
                 mesh_key,
                 use_instancing,
                 base_list,
-                any(
+                has_proxy
+                or any(
                     part.lux_shape not in base_names
                     for part in exported_obj.parts
                 ),
+                proxy_file_sig,
             )
             return exported_obj
 
@@ -1458,7 +1487,33 @@ class ObjectCache2:
                             # .lxm proxy objects never read their mesh
                             # datablock — a mesh-edit flag changes
                             # nothing (the proxy file is the source).
-                            mesh_key = None
+                            # But an externally re-baked file must
+                            # force a full re-export so the new data
+                            # reaches the .ply reference.
+                            obj_key = utils.make_key(obj)
+                            exported = self.exported_objects.get(obj_key)
+                            try:
+                                st = os.stat(
+                                    bpy.path.abspath(
+                                        obj.luxcore.proxy_filepath
+                                    )
+                                )
+                                cur_sig = (
+                                    (
+                                        bpy.path.abspath(
+                                            obj.luxcore.proxy_filepath
+                                        ),
+                                        st.st_mtime_ns,
+                                        st.st_size,
+                                    ),
+                                )
+                            except OSError:
+                                cur_sig = ()
+                            if exported and exported.proxy_sig != cur_sig:
+                                exported.delete(luxcore_scene)
+                                del self.exported_objects[obj_key]
+                            else:
+                                mesh_key = None
                         else:
                             mesh_key = self._get_mesh_key(obj, use_instancing)
 

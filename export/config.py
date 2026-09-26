@@ -319,6 +319,8 @@ def convert(exporter, scene, context=None, engine=None):
                 definitions["path.guiding.tablefile"] = (
                     bpy.path.abspath(config.guiding_tablefile)
                 )
+            if config.guiding_ris_k:
+                definitions["path.guiding.risk"] = config.guiding_ris_k
 
         # Light portals (M5): quad faces of objects flagged
         # "Light Portal" become aperture rects for the portal bounce

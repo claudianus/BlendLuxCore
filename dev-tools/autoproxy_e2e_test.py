@@ -101,9 +101,11 @@ def build_scene():
 
 
 def baked_files():
-    tmp = os.environ.get("TMPDIR", "/tmp")
+    import tempfile
     return sorted(
-        glob.glob(os.path.join(tmp, "luxcore_autoproxy_*", "ap_*.lxm"))
+        glob.glob(os.path.join(
+            tempfile.gettempdir(), "luxcore_autoproxy", "ap_*.lxm"
+        ))
     )
 
 
@@ -139,6 +141,18 @@ def main():
     assert files2 == files, f"baked file set changed: {files2}"
     for f, t in zip(files2, mtimes):
         assert os.path.getmtime(f) == t, f"re-baked unexpectedly: {f}"
+
+    # --- pass 4: edit the mesh -> signature changes -> rebake ---
+    for i, v in enumerate(floor.data.vertices):
+        if i % 10 == 0:
+            v.co.z += 0.05
+    floor.data.update_tag()
+    print("[AutoProxy] Rendering after mesh edit (rebake check) ...")
+    bpy.ops.render.render(write_still=True)
+    files3 = baked_files()
+    assert len(files3) == 2, f"expected 2 .lxm after edit, got {files3}"
+    assert files3 != files, f"stale proxy reused after edit: {files3}"
+    print(f"[AutoProxy] rebaked: {files3}")
 
     print("[AutoProxy] DONE")
 

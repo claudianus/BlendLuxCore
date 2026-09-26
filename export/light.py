@@ -483,6 +483,7 @@ def _convert_cycles_world(exporter, scene, world, is_viewport_render):
                         definitions["type"] = "infinite"
                         definitions["file"] = filepath
                         definitions["gamma"] = 2.2 if image.colorspace_settings.name == "sRGB" else 1
+                        definitions["cdfdim"] = world.luxcore.cdfdim
 
                         # Transformation
                         mapping_node = utils_node.get_linked_node(color_node.inputs["Vector"])
@@ -668,6 +669,11 @@ def _convert_infinite(definitions, light_or_world, scene, transformation=None):
     definitions["file"] = filepath
     definitions["gamma"] = light_or_world.luxcore.gamma
     definitions["sampleupperhemisphereonly"] = light_or_world.luxcore.sampleupperhemisphereonly
+    # CDF resolution cap is a world-level control; plain lights reuse the
+    # same property name when they exist (guarded — light props lack it)
+    cdfdim = getattr(light_or_world.luxcore, "cdfdim", None)
+    if cdfdim is not None:
+        definitions["cdfdim"] = cdfdim
 
     if transformation:
         infinite_fix = Matrix.Scale(1.0, 4)

@@ -1,5 +1,6 @@
 from time import time
 from array import array
+import os
 import types
 
 _needs_reload = "bpy" in locals()
@@ -503,6 +504,28 @@ class Exporter(object):
                                 geometry_keys |= _geo_keys
                                 instancer_keys |= _inst_keys
                                 material_dirty |= _mat_dirty
+
+        if pentry is not None:
+            # .lxm proxy files are external state the depsgraph cannot
+            # see: stat each recorded proxy file and force a geometry
+            # delta when it changed (mtime/size) or vanished since the
+            # cached export.
+            for _key, _meta in pentry["geo_meta"].items():
+                _psig = _meta[5] if len(_meta) > 5 else ()
+                if not _psig:
+                    continue
+                _changed = False
+                for _p, _mt, _sz in _psig:
+                    try:
+                        _st = os.stat(_p)
+                        if (_st.st_mtime_ns, _st.st_size) != (_mt, _sz):
+                            _changed = True
+                            break
+                    except OSError:
+                        _changed = True
+                        break
+                if _changed:
+                    geometry_keys.add(_key)
 
         luxcore_scene = (
             pentry["scene"]
@@ -1051,6 +1074,7 @@ class Exporter(object):
                     use_instancing,
                     base_list,
                     _wrapped,
+                    _proxy_sig,
                 ) = geo_meta[key]
                 obj = eval_by_key[key]
                 try:
@@ -1125,6 +1149,7 @@ class Exporter(object):
             use_instancing,
             base_list,
             wrapped,
+            _proxy_sig,
         ) = meta
         if wrapped or not use_instancing:
             return False
