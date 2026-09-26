@@ -8,7 +8,7 @@ scratch on every F12 / frame change.
 
 ## Problem and evidence
 
-The A6 instrumentation (94d75b56, 2ecc73b8) measured the current
+The A6 instrumentation (10630c41a, 10630c41a) measured the current
 exporter: it is linear and already reasonable per-unit — ~0.9s Python +
 ~1.2s engine instancing for 500k duplis, ~0.5s for 1M hair roots. The
 remaining waste is *re*-export: a second F12 on an unchanged scene pays
