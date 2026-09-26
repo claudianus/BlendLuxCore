@@ -4,6 +4,7 @@ from .. import icons
 from ..icons import icon_manager
 from bpy.types import Panel
 from ..utils import ui as utils_ui
+from ..utils.misc import use_cycles_compat
 from cycles.ui import panel_node_draw
 
 
@@ -43,9 +44,7 @@ class SUPERLUXCORE_LIGHT_PT_context_light(DataButtonsPanel, Panel):
         row = layout.row(align=True)
         row.prop(light, "type", expand=True)
 
-        layout.prop(light.superluxcore, "use_cycles_settings")
-
-        if context.light.superluxcore.use_cycles_settings:
+        if use_cycles_compat(context.light.superluxcore):
             self.draw_cycles_settings(context)
         else:
             self.draw_superluxcore_settings(context)
@@ -251,7 +250,7 @@ class SUPERLUXCORE_LIGHT_PT_volume(DataButtonsPanel, Panel):
             return False
 
         light = context.light
-        if not light or light.superluxcore.use_cycles_settings:
+        if not light or use_cycles_compat(light.superluxcore):
             return False
         return True
 
@@ -298,7 +297,7 @@ class SUPERLUXCORE_LIGHT_PT_performance(DataButtonsPanel, Panel):
 
         layout.prop(light.superluxcore, "importance")
 
-        if not light.superluxcore.use_cycles_settings and light.type == "SUN" and light.superluxcore.light_type == "hemi":
+        if not use_cycles_compat(light.superluxcore) and light.type == "SUN" and light.superluxcore.light_type == "hemi":
             # infinite (with image) and constantinfinte lights
             draw_envlight_cache_ui(layout, context.scene, light)
 
@@ -316,7 +315,7 @@ class SUPERLUXCORE_LIGHT_PT_visibility(DataButtonsPanel, Panel):
             return False
 
         light = context.light
-        if not light or light.superluxcore.use_cycles_settings:
+        if not light or use_cycles_compat(light.superluxcore):
             return False
 
         # Visible for sky2, sun, infinite, constantinfinite, area
@@ -389,7 +388,7 @@ class SUPERLUXCORE_LIGHT_PT_ies_light(DataButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         light = context.light
-        return (light and not light.superluxcore.use_cycles_settings
+        return (light and not use_cycles_compat(light.superluxcore)
                 and light.type in {"AREA", "POINT"} and context.scene.render.engine == "SUPERLUXCORE")
 
     def draw_header(self, context):
@@ -436,7 +435,7 @@ class SUPERLUXCORE_LIGHT_PT_nodes(DataButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         light = context.light
-        return (light and not light.superluxcore.use_cycles_settings
+        return (light and not use_cycles_compat(light.superluxcore)
                 and light.type == "AREA" and context.scene.render.engine == "SUPERLUXCORE")
 
     def draw(self, context):
@@ -468,7 +467,7 @@ class SUPERLUXCORE_LIGHT_PT_cycles_nodes(DataButtonsPanel, Panel):
             and cycles_props
             and cycles_props.is_portal
         )
-        return context.light.superluxcore.use_cycles_settings and not is_portal
+        return use_cycles_compat(context.light.superluxcore) and not is_portal
 
     def draw(self, context):
         layout = self.layout

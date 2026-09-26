@@ -54,10 +54,6 @@ def superluxcore_render_draw(panel, context):
 
     row = layout.row()
     row.operator(
-        "superluxcore.use_cycles_settings",
-        icon_value=icon_manager.get_icon_id("link"),
-    )
-    row.operator(
         "superluxcore.render_settings_helper",
         icon_value=icon_manager.get_icon_id("help"),
     )

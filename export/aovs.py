@@ -62,6 +62,12 @@ def convert(exporter, scene, context=None, engine=None):
         if final:
             # This is the layer that is currently being exported, not the active layer in the UI!
             current_layer = utils_view_layer.get_current_view_layer(scene)
+            if current_layer is None:
+                # active_view_layer is only set by the final-render path;
+                # direct export calls (tests, external tools) have none —
+                # fall back to the first view layer instead of dropping
+                # every film output.
+                current_layer = scene.view_layers[0]
             aovs = current_layer.superluxcore.aovs
             # A Cycles-authored scene enables Blender's use_pass_*
             # flags instead of the SuperLuxCore AOV panel - map the
@@ -78,7 +84,7 @@ def convert(exporter, scene, context=None, engine=None):
         # from camera rays -> same result as transparent film.
         world_cam_invisible = (
             scene.world is not None
-            and scene.world.superluxcore.use_cycles_settings
+            and utils.misc.use_cycles_compat(scene.world.superluxcore)
             and cycles_compat.world_camera_invisible(scene.world)
         )
         use_transparent_film = (

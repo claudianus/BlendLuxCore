@@ -187,7 +187,7 @@ class Exporter(object):
         superluxcore_scene, config_props = result
 
         scene = depsgraph.scene_eval
-        renderengine_type = config_props.Get("renderengine.type").GetString()
+        renderengine_type = config_props.Get("renderengine.type", ["PATHCPU"]).GetString()
 
         # Inform about pre-computations that can take a long time to
         # complete, like caches
@@ -297,7 +297,14 @@ class Exporter(object):
         # We have to run the compatibility code before export because it could
         # be that the user has linked/appended assets with node trees from
         # previous versions of the addon since opening the .blend file.
-        utils_compatibility.run()
+        # It writes to ID data (node sockets, scene properties): in the
+        # viewport render/update contexts RNA writes are forbidden, so a
+        # RuntimeError there must not abort the export — load_post already
+        # ran the same upgrades in a permitted context.
+        try:
+            utils_compatibility.run()
+        except RuntimeError as error:
+            print("[Exporter] Compatibility update skipped:", error)
 
         # Fresh lightgroup set per session: the exporter (and its cache)
         # outlives single renders in the viewport, and stale groups would
@@ -1524,7 +1531,12 @@ class Exporter(object):
         changes = Change.NONE
 
         config_props = config.convert(self, self.scene, context)
-        if self.config_cache.diff(config_props):
+        if str(config_props) == "":
+            # Config export failed (the error is already in the error log).
+            # Never feed an empty config into the diff cache or the session
+            # worker — the engine would crash on a missing renderengine.type.
+            pass
+        elif self.config_cache.diff(config_props):
             changes |= Change.CONFIG
 
         if self.camera_cache.diff(self, self.scene, depsgraph, context):
@@ -1672,7 +1684,7 @@ class Exporter(object):
         return props
 
     def _init_stats(self, stats, config_props, scene):
-        render_engine = config_props.Get("renderengine.type").GetString()
+        render_engine = config_props.Get("renderengine.type", ["PATHCPU"]).GetString()
         stats.render_engine.value = utils_render.engine_to_str(render_engine)
         # Tiled engines always run a convergence test. On PATH/PATHOCL the
         # film-level test (batch.haltnoisethreshold, exported via the legacy
@@ -1685,7 +1697,7 @@ class Exporter(object):
             or config_props.Get("batch.haltthreshold", [-1]).GetFloat() > 0
         )
         stats.convergence.value = 0.0 if has_noise_test else -1.0
-        sampler = config_props.Get("sampler.type").GetString()
+        sampler = config_props.Get("sampler.type", ["SOBOL"]).GetString()
         stats.sampler.value = utils_render.sampler_to_str(sampler)
 
         config_settings = scene.superluxcore.config

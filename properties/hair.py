@@ -11,6 +11,7 @@ from bpy.props import (
 from bpy.types import PropertyGroup
 from .image_user import SuperLuxCoreImageUser
 from .light import GAMMA_DESCRIPTION
+from .legacy import LuxCoreLegacyBridge
 
 
 # def init():
@@ -249,7 +250,7 @@ class SuperLuxCoreHair(PropertyGroup):
     )
 
 
-class SuperLuxCoreParticlesProps(PropertyGroup):
+class SuperLuxCoreParticlesProps(LuxCoreLegacyBridge, PropertyGroup):
     hair: PointerProperty(type=SuperLuxCoreHair)
 
     @classmethod

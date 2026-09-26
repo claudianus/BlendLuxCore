@@ -3,13 +3,14 @@ from bpy.props import PointerProperty, IntProperty
 from . import (
     config, debug, denoiser, display, halt, lightgroups, devices, statistics, viewport,
 )
+from .legacy import LuxCoreLegacyBridge
 
 
 #def init():
 #    bpy.types.Scene.superluxcore = PointerProperty(type=SuperLuxCoreScene)
 
 
-class SuperLuxCoreScene(bpy.types.PropertyGroup):
+class SuperLuxCoreScene(LuxCoreLegacyBridge, bpy.types.PropertyGroup):
     config: PointerProperty(type=config.SuperLuxCoreConfig)
     denoiser: PointerProperty(type=denoiser.SuperLuxCoreDenoiser)
     halt: PointerProperty(type=halt.SuperLuxCoreHaltConditions)

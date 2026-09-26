@@ -79,8 +79,6 @@ classes = (
     camera.SUPERLUXCORE_OT_camera_show_volume_node_tree,
     debug.SUPERLUXCORE_OT_toggle_debug_options,
     debug.SUPERLUXCORE_OT_debug_restart,
-    general.SUPERLUXCORE_OT_use_cycles_settings,
-    general.SUPERLUXCORE_OT_use_cycles_nodes_everywhere,
     general.SUPERLUXCORE_OT_errorlog_clear,
     general.SUPERLUXCORE_OT_switch_texture_context,
     general.SUPERLUXCORE_OT_switch_space_data_context,

@@ -196,14 +196,14 @@ class SUPERLUXCORE_OT_material_show_nodetree(bpy.types.Operator):
         if not mat:
             return False
 
-        if mat.superluxcore.use_cycles_nodes:
+        if utils.misc.material_use_cycles_nodes(mat):
             return mat.node_tree
         else:
             return mat.superluxcore.node_tree
 
     def execute(self, context):
         mat = context.active_object.active_material
-        node_tree = mat.node_tree if mat.superluxcore.use_cycles_nodes else mat.superluxcore.node_tree
+        node_tree = mat.node_tree if utils.misc.material_use_cycles_nodes(mat) else mat.superluxcore.node_tree
 
         if show_nodetree(context, node_tree):
             return {"FINISHED"}

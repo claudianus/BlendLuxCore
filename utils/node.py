@@ -5,22 +5,69 @@ from .errorlog import SuperLuxCoreErrorLog
 from .. import icons
 
 
+def legacy_idname(name):
+    """Upstream BlendLuxCore spelling of a SuperLuxCore RNA identifier.
+
+    Files authored with the upstream addon store node trees, nodes and
+    sockets under LuxCore*/luxcore_* names. Alias classes registered at
+    addon init let that data load natively; this helper maps between the
+    two spellings so lookups work for both.
+    """
+    if name.startswith("SuperLuxCore"):
+        return "LuxCore" + name[len("SuperLuxCore"):]
+    if name.startswith("superluxcore"):
+        return "luxcore" + name[len("superluxcore"):]
+    return name
+
+
+def expand_legacy(bl_idnames):
+    """A set of bl_idnames plus each one's legacy LuxCore* spelling."""
+    out = set(bl_idnames)
+    for name in list(out):
+        out.add(legacy_idname(name))
+    return out
+
+
+def node_matches(node, bl_idname):
+    """bl_idname compare that also accepts the legacy LuxCore* name."""
+    actual = node.bl_idname
+    return actual == bl_idname or actual == legacy_idname(bl_idname)
+
+
+TREE_POINTER_NAMES = {"SuperLuxCoreNodeTreePointer", "LuxCoreNodeTreePointer"}
+
 OUTPUT_MAP = {
     "superluxcore_material_nodes": "SuperLuxCoreNodeMatOutput",
     "superluxcore_texture_nodes": "SuperLuxCoreNodeTexOutput",
     "superluxcore_volume_nodes": "SuperLuxCoreNodeVolOutput",
+    "luxcore_material_nodes": "LuxCoreNodeMatOutput",
+    "luxcore_texture_nodes": "LuxCoreNodeTexOutput",
+    "luxcore_volume_nodes": "LuxCoreNodeVolOutput",
 }
 
 TREE_TYPES = {
     "superluxcore_material_nodes",
     "superluxcore_texture_nodes",
     "superluxcore_volume_nodes",
+    "luxcore_material_nodes",
+    "luxcore_texture_nodes",
+    "luxcore_volume_nodes",
+}
+
+# Canonical (superluxcore_*) tree type for each registered tree
+TREE_TYPE_CANONICAL = {
+    "luxcore_material_nodes": "superluxcore_material_nodes",
+    "luxcore_texture_nodes": "superluxcore_texture_nodes",
+    "luxcore_volume_nodes": "superluxcore_volume_nodes",
 }
 
 TREE_ICONS = {
     "superluxcore_material_nodes": icons.NTREE_MATERIAL,
     "superluxcore_texture_nodes": icons.NTREE_TEXTURE,
     "superluxcore_volume_nodes": icons.NTREE_VOLUME,
+    "luxcore_material_nodes": icons.NTREE_MATERIAL,
+    "luxcore_texture_nodes": icons.NTREE_TEXTURE,
+    "luxcore_volume_nodes": icons.NTREE_VOLUME,
 }
 
 
@@ -140,7 +187,7 @@ def get_link(socket):
                 else:
                     return None
             else:
-                if not link.from_socket.bl_idname.startswith("SuperLuxCoreSocket") or not node.inputs:
+                if not link.from_socket.bl_idname.startswith(("SuperLuxCoreSocket", "LuxCoreSocket")) or not node.inputs:
                     return None
 
                 # We can't define internal_links, so try to make up a link that makes sense.
@@ -178,9 +225,10 @@ def get_linked_node(socket):
 
 def find_nodes(node_tree, bl_idname, follow_pointers):
     result = []
+    names = expand_legacy({bl_idname})
 
     for node in node_tree.nodes:
-        if follow_pointers and node.bl_idname == "SuperLuxCoreNodeTreePointer" and node.node_tree:
+        if follow_pointers and node.bl_idname in TREE_POINTER_NAMES and node.node_tree:
             try:
                 result += find_nodes(node.node_tree, bl_idname, follow_pointers)
             except RecursionError:
@@ -191,7 +239,7 @@ def find_nodes(node_tree, bl_idname, follow_pointers):
                 node.use_custom_color = True
                 node.color = (0.9, 0, 0)
                 return result
-        if node.bl_idname == bl_idname:
+        if node.bl_idname in names:
             result.append(node)
 
     return result
@@ -199,9 +247,10 @@ def find_nodes(node_tree, bl_idname, follow_pointers):
 
 def find_nodes_multi(node_tree, bl_idname_set, follow_pointers):
     result = []
+    names = expand_legacy(bl_idname_set)
 
     for node in node_tree.nodes:
-        if follow_pointers and node.bl_idname == "SuperLuxCoreNodeTreePointer" and node.node_tree:
+        if follow_pointers and node.bl_idname in TREE_POINTER_NAMES and node.node_tree:
             try:
                 result += find_nodes_multi(node.node_tree, bl_idname_set, follow_pointers)
             except RecursionError:
@@ -212,15 +261,17 @@ def find_nodes_multi(node_tree, bl_idname_set, follow_pointers):
                 node.use_custom_color = True
                 node.color = (0.9, 0, 0)
                 return result
-        if node.bl_idname in bl_idname_set:
+        if node.bl_idname in names:
             result.append(node)
 
     return result
 
 
 def has_nodes(node_tree, bl_idname, follow_pointers):
+    names = expand_legacy({bl_idname})
+
     for node in node_tree.nodes:
-        if follow_pointers and node.bl_idname == "SuperLuxCoreNodeTreePointer" and node.node_tree:
+        if follow_pointers and node.bl_idname in TREE_POINTER_NAMES and node.node_tree:
             try:
                 if has_nodes(node.node_tree, bl_idname, follow_pointers):
                     return True
@@ -232,15 +283,17 @@ def has_nodes(node_tree, bl_idname, follow_pointers):
                 node.use_custom_color = True
                 node.color = (0.9, 0, 0)
                 return False
-        if node.bl_idname == bl_idname:
+        if node.bl_idname in names:
             return True
 
     return False
 
 
 def has_nodes_multi(node_tree, bl_idname_set, follow_pointers):
+    names = expand_legacy(bl_idname_set)
+
     for node in node_tree.nodes:
-        if follow_pointers and node.bl_idname == "SuperLuxCoreNodeTreePointer" and node.node_tree:
+        if follow_pointers and node.bl_idname in TREE_POINTER_NAMES and node.node_tree:
             try:
                 if has_nodes_multi(node.node_tree, bl_idname_set, follow_pointers):
                     return True
@@ -252,7 +305,7 @@ def has_nodes_multi(node_tree, bl_idname_set, follow_pointers):
                 node.use_custom_color = True
                 node.color = (0.9, 0, 0)
                 return False
-        if node.bl_idname in bl_idname_set:
+        if node.bl_idname in names:
             return True
 
     return False

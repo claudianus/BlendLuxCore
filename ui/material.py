@@ -1,6 +1,7 @@
 from bl_ui.properties_material import MaterialButtonsPanel, MATERIAL_PT_viewport
 from bpy.types import Panel, Menu
 from ..operators.node_tree_presets import SUPERLUXCORE_OT_preset_material
+from ..utils.misc import material_use_cycles_nodes
 from .. import icons
 
 original_viewport_draw = None
@@ -90,14 +91,13 @@ class SUPERLUXCORE_PT_context_material(MaterialButtonsPanel, Panel):
             layout.separator()
 
         if mat:
-            if mat.superluxcore.node_tree or (mat.use_nodes and mat.node_tree and mat.superluxcore.use_cycles_nodes):
+            if mat.superluxcore.node_tree or (mat.use_nodes and mat.node_tree):
                 layout.operator("superluxcore.material_show_nodetree", icon=icons.SHOW_NODETREE)
 
-            if not mat.superluxcore.node_tree and not mat.superluxcore.use_cycles_nodes:
+            if not mat.superluxcore.node_tree:
                 layout.operator("superluxcore.mat_nodetree_new", icon=icons.NODETREE, text="Use SuperLuxCore Material Nodes")
 
             if mat.use_nodes and mat.node_tree:
-                layout.prop(mat.superluxcore, "use_cycles_nodes")
                 # Principled BSDF -> material target also applies to the
                 # automatic Blender-first conversion (no SuperLuxCore node tree)
                 layout.prop(mat.superluxcore, "principled_target")
@@ -111,7 +111,7 @@ class SUPERLUXCORE_PT_material_presets(MaterialButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         engine = context.scene.render.engine
-        if context.material and context.material.superluxcore.use_cycles_nodes:
+        if context.material and material_use_cycles_nodes(context.material):
             return False
         return engine == "SUPERLUXCORE"
 
@@ -157,7 +157,7 @@ class SUPERLUXCORE_PT_material_settings(MaterialButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         engine = context.scene.render.engine
-        return context.material and (engine == "SUPERLUXCORE") and context.material.superluxcore.use_cycles_nodes
+        return context.material and (engine == "SUPERLUXCORE") and material_use_cycles_nodes(context.material)
 
     def draw(self, context):
         layout = self.layout

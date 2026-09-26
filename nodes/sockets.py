@@ -74,8 +74,8 @@ class SuperLuxCoreNodeSocket:
             )
             # Don't show for volume sockets on volume output
             if (
-                self.bl_idname == "SuperLuxCoreSocketVolume"
-                and node.bl_idname == "SuperLuxCoreNodeVolOutput"
+                self.bl_idname in {"SuperLuxCoreSocketVolume", "LuxCoreSocketVolume"}
+                and node.bl_idname in {"SuperLuxCoreNodeVolOutput", "LuxCoreNodeVolOutput"}
             ):
                 show_operator = False
 
@@ -163,7 +163,7 @@ class SuperLuxCoreSocketMatEmission(bpy.types.NodeSocket, SuperLuxCoreNodeSocket
             if not linked_node:
                 return
 
-            if linked_node.bl_idname == "SuperLuxCoreNodeMatEmission":
+            if utils_node.node_matches(linked_node, "SuperLuxCoreNodeMatEmission"):
                 linked_node.export_emission(
                     exporter, depsgraph, props, definitions
                 )

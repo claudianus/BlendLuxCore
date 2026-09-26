@@ -1,8 +1,9 @@
 import bpy
 from bpy.props import PointerProperty
 from . import aovs, halt
+from .legacy import LuxCoreLegacyBridge
 
-class SuperLuxCoreViewLayer(bpy.types.PropertyGroup):
+class SuperLuxCoreViewLayer(LuxCoreLegacyBridge, bpy.types.PropertyGroup):
     aovs: PointerProperty(type=aovs.SuperLuxCoreAOVSettings)
     halt: PointerProperty(type=halt.SuperLuxCoreViewLayerHaltConditions)
 

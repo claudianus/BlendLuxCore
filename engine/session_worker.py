@@ -64,7 +64,7 @@ def precompile_kernels(config_props, renderconfig, progress_cb=None):
     Pure pysuperluxcore - safe on any thread. ``progress_cb`` receives
     ``(index, count)`` per compiled kernel (0-based index).
     """
-    renderengine_type = config_props.Get("renderengine.type").GetString()
+    renderengine_type = config_props.Get("renderengine.type", ["PATHCPU"]).GetString()
     if not (
         renderengine_type.endswith("OCL")
         and not renderconfig.HasCachedKernels()
@@ -105,6 +105,13 @@ class SessionWorker:
         # on every publish so main-thread readers (stats, film fetch)
         # always see the current object.
         self.session = None
+        # The exported SuperLuxCore scene the session was built on.
+        # RenderConfig(props, scene) is a non-owning ctor, so the Python
+        # wrapper owns the native scene and must be kept here: reaching
+        # it via session.GetRenderConfig().GetScene() goes through a
+        # non-owning intermediate and can hit py::smart_holder
+        # "Non-owning holder" load failures.
+        self.scene = None
         # Shared with the engine; guards mutating calls on the live
         # session against concurrent film reads. Never held across a
         # RenderConfig/RenderSession construction or a kernel compile.
@@ -324,6 +331,7 @@ class SessionWorker:
 
     def _do_stop(self):
         self._stop_session()
+        self.scene = None
         self._publish(None)
 
     def _do_start(self, superluxcore_scene, config_props, seq):
@@ -342,6 +350,7 @@ class SessionWorker:
             # A previous session must not keep rendering alongside the
             # new one (a superseded start leaves a live session behind).
             self._stop_session()
+            self.scene = superluxcore_scene
             self.phase = "Creating render config"
             renderconfig = pysuperluxcore.RenderConfig(config_props, superluxcore_scene)
 
@@ -385,11 +394,15 @@ class SessionWorker:
         self._lifecycle_busy = True
         try:
             self.phase = "Reconfiguring session"
-            # GetScene() returns a smart_holder wrapper that co-owns the
-            # native scene, so it stays valid after `old` is dropped
-            # (verified: RenderConfig(props, scene) is a non-owning
-            # ctor - the scene must not die with the old session).
-            scene = old.GetRenderConfig().GetScene()
+            # The worker keeps the exported scene alive itself (the
+            # RenderConfig ctor is non-owning): do NOT fetch it via
+            # old.GetRenderConfig().GetScene(), which traverses a
+            # non-owning intermediate wrapper.
+            scene = self.scene
+            if scene is None:
+                with self._cond:
+                    self._pending_config = config_props
+                return
             with self.session_lock:
                 old.Stop()
             # engine.session still points at the old (stopped) session
@@ -430,7 +443,11 @@ class SessionWorker:
                 # follow-up full export rebuilds the state anyway.
             return
         self.phase = "Applying scene edits"
-        scene = session.GetRenderConfig().GetScene()
+        # See _do_config: use the worker-held scene, not
+        # session.GetRenderConfig().GetScene().
+        scene = self.scene
+        if scene is None:
+            return
         with self.session_lock:
             session.BeginSceneEdit()
             try:

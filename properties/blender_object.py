@@ -2,6 +2,7 @@ import bpy
 from bpy.props import PointerProperty, BoolProperty, FloatProperty, IntProperty, StringProperty, EnumProperty
 from bpy.types import PropertyGroup
 from .hair import SuperLuxCoreHair
+from .legacy import LuxCoreLegacyBridge
 
 DESC_VISIBLE_TO_CAM = (
     "If disabled, the object will not be visible to camera rays. "
@@ -45,7 +46,7 @@ DESC_LINK_MODE = (
 )
 
 
-class SuperLuxCoreObjectProps(PropertyGroup):
+class SuperLuxCoreObjectProps(LuxCoreLegacyBridge, PropertyGroup):
     visible_to_camera: BoolProperty(
         name="Visible to Camera", default=True, description=DESC_VISIBLE_TO_CAM
     )

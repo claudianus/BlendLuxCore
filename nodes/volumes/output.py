@@ -3,6 +3,7 @@ from bpy.props import BoolProperty, IntProperty
 from ..output import SuperLuxCoreNodeOutput, update_active
 from ..materials.output import MATERIAL_ID_DESC
 from ... import utils
+from ...utils import node as utils_node
 import pysuperluxcore
 from ...utils.errorlog import SuperLuxCoreErrorLog
 from ... import icons
@@ -41,8 +42,8 @@ class SuperLuxCoreNodeVolOutput(bpy.types.Node, SuperLuxCoreNodeOutput):
             # PhotonGI only affects homogeneous and heterogeneous volumes, make the setting inactive for others
             linked_node = self.inputs["Volume"].links[0].from_node if self.inputs["Volume"].is_linked else None
             row = layout.row()
-            row.active = bool(linked_node and linked_node.bl_idname in {"SuperLuxCoreNodeVolHomogeneous",
-                                                                        "SuperLuxCoreNodeVolHeterogeneous"})
+            row.active = bool(linked_node and linked_node.bl_idname in utils_node.expand_legacy(
+                {"SuperLuxCoreNodeVolHomogeneous", "SuperLuxCoreNodeVolHeterogeneous"}))
             row.prop(self, "use_photongi")
 
             world = context.scene.world

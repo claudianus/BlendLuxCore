@@ -1,6 +1,7 @@
 import bpy
 from bpy.props import IntProperty
 from ..utils import node as utils_node
+from ..utils import misc as utils_misc
 from ..properties.lightgroups import MAX_LIGHTGROUPS, is_lightgroup_pass_name
 
 is_blender_5 = bpy.app.version[0] >= 5 # only test of Blender 5 for now
@@ -54,7 +55,7 @@ class SUPERLUXCORE_OT_select_objects_in_lightgroup(bpy.types.Operator):
         materials_in_group = set()
         for mat in bpy.data.materials:
             node_tree = mat.superluxcore.node_tree
-            if not node_tree or mat.superluxcore.use_cycles_nodes:
+            if not node_tree or utils_misc.material_use_cycles_nodes(mat):
                 continue
 
             for node in utils_node.find_nodes_multi(node_tree, relevant_node_types, follow_pointers=True):

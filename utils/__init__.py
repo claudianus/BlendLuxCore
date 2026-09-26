@@ -811,8 +811,19 @@ def get_blendfile_name():
 
 
 def get_persistent_cache_file_path(
-    file_path, save_or_overwrite, is_viewport_render, scene
+    file_path, save_or_overwrite, is_viewport_render, scene, default_suffix=None
 ):
+    if not file_path and default_suffix:
+        # Resolve the default cache path lazily at export time instead
+        # of writing it into the datablock on load (load handlers must
+        # never modify the user's file).
+        blend_name = get_blendfile_name()
+        if blend_name:
+            file_path = "//" + blend_name + "." + default_suffix
+        else:
+            file_path = os.path.join(
+                tempfile.gettempdir(), "Untitled." + default_suffix)
+
     file_path_abs = get_abspath(file_path, library=scene.library)
 
     if not os.path.isfile(file_path_abs) and not save_or_overwrite:

@@ -121,7 +121,7 @@ class SUPERLUXCORE_OT_set_node_tree:
         datablock.update_tag()
 
         if (isinstance(datablock, bpy.types.NodeTree)
-                and datablock.bl_idname == "superluxcore_material_nodes"):
+                and datablock.bl_idname in {"superluxcore_material_nodes", "luxcore_material_nodes"}):
             # Also flag the materials for update
             for mat in bpy.data.materials:
                 if mat.superluxcore.node_tree is datablock:
@@ -184,20 +184,3 @@ class SUPERLUXCORE_MT_node_tree:
             op = col.operator(set_operator, text=text, icon=icon)
             op.node_tree_index = index
 
-
-def use_cycles_settings():
-    use_cycles_material_nodes()
-
-    for light in bpy.data.lights:
-        light.superluxcore.use_cycles_settings = True
-        light.update_tag()
-
-    for world in bpy.data.worlds:
-        world.superluxcore.use_cycles_settings = True
-        world.update_tag()
-
-
-def use_cycles_material_nodes():
-    for mat in bpy.data.materials:
-        if mat.use_nodes and mat.node_tree:
-            mat.superluxcore.use_cycles_nodes = True

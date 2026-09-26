@@ -1,37 +1,7 @@
 import bpy
 from bpy.props import StringProperty, BoolProperty
-from .utils import init_vol_node_tree, poll_node, use_cycles_settings, use_cycles_material_nodes
+from .utils import init_vol_node_tree, poll_node
 from ..utils.errorlog import SuperLuxCoreErrorLog
-
-
-class SUPERLUXCORE_OT_use_cycles_settings(bpy.types.Operator):
-    bl_idname = "superluxcore.use_cycles_settings"
-    bl_label = "Use Cycles Settings"
-    bl_description = "Use Cycles material nodes, light settings, world settings etc. wherever possible"
-    bl_options = {"UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return True
-
-    def execute(self, context):
-        use_cycles_settings()
-        return {"FINISHED"}
-
-
-class SUPERLUXCORE_OT_use_cycles_nodes_everywhere(bpy.types.Operator):
-    bl_idname = "superluxcore.use_cycles_nodes_everywhere"
-    bl_label = "Use Cycles nodes on all materials"
-    bl_description = 'Enable the "Use Cycles nodes" checkbox on all materials that have a Cycles nodetree'
-    bl_options = {"UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return True
-
-    def execute(self, context):
-        use_cycles_material_nodes()
-        return {"FINISHED"}
 
 
 class SUPERLUXCORE_OT_errorlog_clear(bpy.types.Operator):

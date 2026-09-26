@@ -176,7 +176,8 @@ class SuperLuxCoreNodeMaterial(SuperLuxCoreNode, bpy.types.Node):
             definitions["bumptex"] = bump
 
             from_node = bump_socket.links[0].from_node
-            if from_node.bl_idname in {"SuperLuxCoreNodeTexBump", "SuperLuxCoreNodeTexTriplanarBump"}:
+            if from_node.bl_idname in utils_node.expand_legacy(
+                    {"SuperLuxCoreNodeTexBump", "SuperLuxCoreNodeTexTriplanarBump"}):
                 definitions["bumpsamplingdistance"] = from_node.sampling_distance
 
         # The emission socket and node are special cases
@@ -341,12 +342,14 @@ class SuperLuxCoreNodeTreePointer(SuperLuxCoreNode, bpy.types.Node):
 
     def update_node_tree(self, context):
         if self.node_tree:
+            tree_type = utils_node.TREE_TYPE_CANONICAL.get(self.node_tree.bl_idname,
+                                                           self.node_tree.bl_idname)
             id = self.outputs.find("Material")
-            self.outputs[id].enabled = self.node_tree.bl_idname == "superluxcore_material_nodes"
+            self.outputs[id].enabled = tree_type == "superluxcore_material_nodes"
             id = self.outputs.find("Color")
-            self.outputs[id].enabled = self.node_tree.bl_idname == "superluxcore_texture_nodes"
+            self.outputs[id].enabled = tree_type == "superluxcore_texture_nodes"
             id = self.outputs.find("Volume")
-            self.outputs[id].enabled = self.node_tree.bl_idname == "superluxcore_volume_nodes"
+            self.outputs[id].enabled = tree_type == "superluxcore_volume_nodes"
         else:
             id = self.outputs.find("Material")
             self.outputs[id].enabled = True

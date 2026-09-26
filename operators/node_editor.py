@@ -70,22 +70,24 @@ class SUPERLUXCORE_OT_node_editor_viewer(bpy.types.Operator):
         allowed_inputs = set()
         sockets_to_link = []
 
-        if node_tree.bl_idname == "superluxcore_material_nodes":
-            if active_node.bl_idname.startswith("SuperLuxCoreNodeMat"):
+        tree_type = utils_node.TREE_TYPE_CANONICAL.get(node_tree.bl_idname, node_tree.bl_idname)
+        mat_prefixes = ("SuperLuxCoreNodeMat", "LuxCoreNodeMat")
+        if tree_type == "superluxcore_material_nodes":
+            if active_node.bl_idname.startswith(mat_prefixes):
                 target_socket = active_output.inputs["Material"]
                 allowed_inputs = target_socket.allowed_inputs
                 if viewer_node:
                     _remove_all_viewers(node_tree)
-            elif active_node.bl_idname.startswith("SuperLuxCoreNodeShape"):
+            elif active_node.bl_idname.startswith(("SuperLuxCoreNodeShape", "LuxCoreNodeShape")):
                 target_socket = active_output.inputs["Shape"]
                 allowed_inputs = target_socket.allowed_inputs
                 if viewer_node:
                     _remove_all_viewers(node_tree)
-            elif active_node.bl_idname.startswith("SuperLuxCoreNodeTex"):
+            elif active_node.bl_idname.startswith(("SuperLuxCoreNodeTex", "LuxCoreNodeTex")):
                 if viewer_node:
                     # Existing viewer setup, find the emission node and update the gain
                     for node in node_tree.nodes:
-                        if superluxcore_viewer_mark in node and node.bl_idname == "SuperLuxCoreNodeMatEmission":
+                        if superluxcore_viewer_mark in node and node.bl_idname in ("SuperLuxCoreNodeMatEmission", "LuxCoreNodeMatEmission"):
                             node.gain = _calc_emission_viewer_gain(context)
                             break
                 else:
@@ -113,10 +115,10 @@ class SUPERLUXCORE_OT_node_editor_viewer(bpy.types.Operator):
 
                 target_socket = viewer_node.inputs[0]
                 allowed_inputs = {SuperLuxCoreSocketColor, SuperLuxCoreSocketFloat, SuperLuxCoreSocketVector}
-        elif node_tree.bl_idname == "superluxcore_texture_nodes":
+        elif tree_type == "superluxcore_texture_nodes":
             target_socket = active_output.inputs["Color"]
             allowed_inputs = target_socket.allowed_inputs
-        elif node_tree.bl_idname == "superluxcore_volume_nodes":
+        elif tree_type == "superluxcore_volume_nodes":
             target_socket = active_output.inputs["Volume"]
             allowed_inputs = target_socket.allowed_inputs
 

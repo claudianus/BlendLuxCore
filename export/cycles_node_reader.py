@@ -719,11 +719,19 @@ def _vector_mapping_defs(vector_socket, is_2d, flip_v, props, material, obj_name
 
 
 def _evaluate_curve(curve_map, curve_mapping, position):
-    """Sample a CurveMap, tolerating signature differences between versions."""
+    """Sample a CurveMap, tolerating signature differences between versions.
+
+    Blender 5.x moved evaluation onto the CurveMapping
+    (evaluate(curve_map, position)); older releases expose
+    CurveMap.evaluate(curve_mapping, position) or CurveMap.evaluate(position).
+    """
     try:
-        return curve_map.evaluate(curve_mapping, position)
-    except TypeError:
-        return curve_map.evaluate(position)
+        return curve_mapping.evaluate(curve_map, position)
+    except (TypeError, AttributeError):
+        try:
+            return curve_map.evaluate(curve_mapping, position)
+        except TypeError:
+            return curve_map.evaluate(position)
 
 
 def _socket(socket, props, material, obj_name, group_node, superluxcore_name=None):
@@ -1110,16 +1118,19 @@ def _node(node, output_socket, props, material, superluxcore_name=None, obj_name
         # Principled v2: emission = Emission Color * Emission Strength
         emission_strength = _socket(node.inputs["Emission Strength"], props, material, obj_name, group_node_stack)
         emission_color = _socket(node.inputs["Emission Color"], props, material, obj_name, group_node_stack)
-        if emission_color == [1.0, 1.0, 1.0] or emission_color == 1.0:
-            emission = emission_strength
-        elif emission_strength == 0 or emission_strength == 0.0:
+        if _is_zero(emission_strength) or _is_zero(emission_color):
+            # Statically black emission (Blender 5.x defaults Principled to
+            # Emission Strength=1 with a black color). Emitting a constant 0
+            # keeps the material off the light list — a scale texture would
+            # be non-constant, so the engine would register every triangle
+            # using this material as a mesh light (hundreds of thousands of
+            # fake lights on ordinary archviz scenes).
+            emission = 0.0
+        elif emission_color == [1.0, 1.0, 1.0] or emission_color == 1.0:
             emission = emission_strength
         else:
-            emission = _tex_helper(props, superluxcore_name + "emission_col", {
-                "type": "scale",
-                "texture1": emission_strength,
-                "texture2": emission_color,
-            })
+            emission = _tex_binary("scale", emission_strength, emission_color,
+                                   superluxcore_name + "emission_col", props)
         transparency = _socket(node.inputs["Alpha"], props, material, obj_name, group_node_stack)
         bump = _socket(node.inputs["Normal"], props, material, obj_name, group_node_stack)
 
@@ -1232,11 +1243,9 @@ def _node(node, output_socket, props, material, superluxcore_name=None, obj_name
                             obj_name, group_node_stack)
             strength = _socket(emission_node.inputs["Strength"], props, material,
                                obj_name, group_node_stack)
-            return _tex_helper(props, str(emission_node.as_pointer()) + "emission_col", {
-                "type": "scale",
-                "texture1": strength,
-                "texture2": color,
-            })
+            return _tex_binary("scale", strength, color,
+                               str(emission_node.as_pointer()) + "emission_col",
+                               props)
 
         is_emission1 = link1.from_node.bl_idname == "ShaderNodeEmission"
         is_emission2 = link2.from_node.bl_idname == "ShaderNodeEmission"
@@ -1280,8 +1289,12 @@ def _node(node, output_socket, props, material, superluxcore_name=None, obj_name
                     node, "adding emission to a material that already emits is not "
                     "supported; using a 50/50 mix instead", None, obj_name)
             else:
+                emission = emission_of(emission_link.from_node)
+                if _is_zero(emission):
+                    # Adding a statically black emission adds nothing.
+                    return base_name
                 props.Set(utils.luxutils.create_props("scene.materials." + base_name + ".", {
-                    "emission": emission_of(emission_link.from_node),
+                    "emission": emission,
                     "emission.gain": [1] * 3,
                     "emission.power": 0,
                     "emission.efficency": 0,
@@ -1872,23 +1885,24 @@ def _node(node, output_socket, props, material, superluxcore_name=None, obj_name
         # According to the Blender manual, strength is in Watts/m² when the node is used on meshes.
         strength = _socket(node.inputs["Strength"], props, material, obj_name, group_node_stack)
 
-        emission_col = superluxcore_name + "emission_col"
-        helper_prefix = "scene.textures." + emission_col + "."
-        helper_defs = {
-            "type": "scale",
-            "texture1": strength,
-            "texture2": color,
-        }
-        props.Set(utils.luxutils.create_props(helper_prefix, helper_defs))
+        emission = _tex_binary("scale", strength, color,
+                               superluxcore_name + "emission_col", props)
 
         definitions = {
             "type": "matte",
             "kd": [0, 0, 0],
-            "emission": emission_col,
-            "emission.gain": [1] * 3,
-            "emission.power": 0,
-            "emission.efficency": 0,
         }
+        if _is_zero(emission):
+            # Black/off emission: a scale texture would still register every
+            # triangle as a mesh light — a constant 0 is nulled by the engine.
+            definitions["emission"] = 0.0
+        else:
+            definitions.update({
+                "emission": emission,
+                "emission.gain": [1] * 3,
+                "emission.power": 0,
+                "emission.efficency": 0,
+            })
     elif node.bl_idname == "ShaderNodeValue":
         prefix = "scene.textures."
 

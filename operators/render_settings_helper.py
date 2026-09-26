@@ -3,9 +3,8 @@ from bpy.props import EnumProperty
 from .. import icons
 from .. import utils
 from ..utils import ui as utils_ui
-from .utils import use_cycles_settings
 
-TOTAL_QUESTIONS = 3
+TOTAL_QUESTIONS = 2
 
 
 @utils.count_index
@@ -24,8 +23,6 @@ class SUPERLUXCORE_OT_render_settings_helper(bpy.types.Operator):
         ("YES", "Yes", "", 1),
         ("NO", "No", "", 2),
     ]
-
-    use_cycles_settings: EnumProperty(items=yes_no_items)
 
     env_visibility_items = [
         ("NOT_SET", "Please Choose", "", 0),
@@ -73,10 +70,6 @@ class SUPERLUXCORE_OT_render_settings_helper(bpy.types.Operator):
         settings.denoiser.enabled = True
         settings.denoiser.type = "OIDN"
 
-        # Evaluate user choices
-        if self.use_cycles_settings == "YES":
-            use_cycles_settings()
-
         # Env. light visibility and indirect light speedup
         config.envlight_cache.enabled = self.env_visibility == "INDOORS"
         config.photongi.enabled = self.env_visibility == "INDOORS"
@@ -108,19 +101,6 @@ class SUPERLUXCORE_OT_render_settings_helper(bpy.types.Operator):
         config = context.scene.superluxcore.config
 
         question.index = 1
-
-        # Should Cycles settings be ported?
-        question(layout, "Should Cycles settings and shaders be used?")
-        layout.prop(self, "use_cycles_settings", expand=True)
-
-        if self.use_cycles_settings == "NOT_SET":
-            layout.separator()
-            return
-
-        if self.use_cycles_settings == "YES":
-            self._show_result(
-                "Will use Cycles settings for materials, lights and world"
-            )
 
         # Is the environment light obscured or not, is indirect light likely noisy or not?
         question(layout, "Is your scene indoors or outdoors?")

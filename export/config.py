@@ -760,7 +760,7 @@ def _convert_path(
 def _convert_filesaver(scene, definitions, superluxcore_engine):
     config = scene.superluxcore.config
 
-    filesaver_path = config.filesaver_path
+    filesaver_path = config.filesaver_path or scene.render.filepath
     output_path = utils.get_abspath(
         filesaver_path, must_exist=True, must_be_existing_dir=True
     )
@@ -838,6 +838,7 @@ def _convert_dlscache_settings(scene, definitions, config, is_viewport_render):
         dls_cache.save_or_overwrite,
         is_viewport_render,
         scene,
+        default_suffix="dlsc",
     )
     definitions.update(
         {
@@ -886,7 +887,7 @@ def _convert_photongi_settings(is_viewport_render, scene, definitions, config):
 
     file_path = utils.get_persistent_cache_file_path(
         photongi.file_path, photongi.save_or_overwrite, is_viewport_render,
-        scene
+        scene, default_suffix="pgi",
     )
 
     definitions.update(

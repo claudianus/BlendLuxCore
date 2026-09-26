@@ -7,6 +7,7 @@ from .. import icons
 from ..icons import icon_manager
 
 from ..utils import ui as utils_ui
+from ..utils.misc import use_cycles_compat
 from .light import draw_envlight_cache_ui
 from ..utils.node import get_active_output
 
@@ -25,9 +26,7 @@ class SUPERLUXCORE_PT_context_world(WorldButtonsPanel, Panel):
         return context.world and engine == "SUPERLUXCORE"
     
     def draw(self, context):
-        self.layout.prop(context.world.superluxcore, "use_cycles_settings")
-
-        if context.world.superluxcore.use_cycles_settings:
+        if use_cycles_compat(context.world.superluxcore):
             self.draw_cycles_settings(context)
         else:
             self.draw_superluxcore_settings(context)
@@ -108,7 +107,7 @@ class SUPERLUXCORE_WORLD_PT_sky2(WorldButtonsPanel, Panel):
     def poll(cls, context):
         engine = context.scene.render.engine
         world = context.world
-        return (world and not world.superluxcore.use_cycles_settings
+        return (world and not use_cycles_compat(world.superluxcore)
                 and engine == "SUPERLUXCORE" and world.superluxcore.light == "sky2")
     
     def draw(self, context):
@@ -151,7 +150,7 @@ class SUPERLUXCORE_WORLD_PT_infinite(WorldButtonsPanel, Panel):
     def poll(cls, context):
         engine = context.scene.render.engine
         world = context.world
-        return (world and not world.superluxcore.use_cycles_settings
+        return (world and not use_cycles_compat(world.superluxcore)
                 and engine == "SUPERLUXCORE" and world.superluxcore.light == "infinite")
 
     def draw(self, context):
@@ -253,7 +252,7 @@ class SUPERLUXCORE_WORLD_PT_visibility(WorldButtonsPanel, Panel):
         engine = context.scene.render.engine
         world = context.world
         return (engine == "SUPERLUXCORE" and world and world.superluxcore.light != "none"
-                and not world.superluxcore.use_cycles_settings)
+                and not use_cycles_compat(world.superluxcore))
 
     def draw(self, context):
         layout = self.layout

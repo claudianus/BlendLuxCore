@@ -1,5 +1,41 @@
 # Agent notes
 
+## Legacy upstream file compatibility (verified 2026-09)
+
+- Upstream BlendLuxCore files store every prop group under the
+  `"luxcore"` ID key (`world["luxcore"]["gain"]`, `mat["luxcore"]
+  ["node_tree"]`, `scene["luxcore"]["config"]`) and node types under
+  `LuxCore*`/`luxcore_*` names. Registered PointerProperty group
+  members NEVER surface in `id["<prop>"]` — RNA groups live in their
+  own storage; `id["..."]` only contains unregistered/ID-property data.
+  An RNA `luxcore` alias prop therefore reads defaults, NOT the file's
+  stored dict — `properties/legacy.py` reads the raw
+  `IDPropertyGroup` instead (enums come back as ints, converted via
+  `prop.enum_items` value matching; resolved pointers like
+  `["node_tree"]` arrive as real datablocks, dangling ones as empty
+  groups → None).
+- `LuxCoreLegacyBridge.__getattribute__` on each root group resolves
+  prop reads: authored `superluxcore` value (is_property_set, pointers
+  need non-empty group via _group_has_authored_leaf) > stored
+  `luxcore` value > RNA default. Reads never write.
+- `utils.misc.use_cycles_compat` / `material_use_cycles_nodes` decide
+  light/world/material interpretation purely from stored data: legacy
+  `luxcore` or authored `superluxcore` -> native path; nothing stored
+  -> Cycles translation fallback. A `use_cycles_settings` member stored
+  by old files is still honored (it persists as an unregistered ID-prop
+  member).
+- Load handlers must not write to datablocks: `compatibility.run()`
+  (node/socket rewriting) no longer runs on load — it stays available
+  through `SUPERLUXCORE_OT_convert_to_v23`. Cache paths
+  (photongi/envlight/dlsc) and `filesaver_path` resolve lazily at
+  export; LOL UI resets go through `_setif_changed`.
+- Node aliases: `nodes/__init__.py` registers one subclass per
+  SuperLuxCore node/socket/tree class under the upstream bl_idname;
+  `utils.node` maps both name families (`legacy_idname`,
+  `canonical_idname`, TREE_TYPES includes both).
+- Regression: `dev-tools/e46_legacy_bridge_test.py` (HALL_BENCH),
+  `dev-tools/e45_cycles_light_defaults_test.py` (Cycles fallback).
+
 ## Installed Blender extensions
 
 - `extensions/user_default/superluxcore` — this repo's add-on, synced via
@@ -83,6 +119,53 @@
   CompileGeometry rebuilds the SpillableArrays (mutating ops pull them
   back to heap), the upload then re-spills — verified by a second
   "Host staging spilled" log line after EndSceneEdit.
+- `RenderConfig.GetProperties()` returns a CLONED Properties (owned).
+  The native method returns a `const unique_ptr&` which py::smart_holder
+  cannot materialize on the non-owning wrapper from
+  `RenderSession.GetRenderConfig()` — it threw
+  "Non-owning holder (load_as_shared_ptr)". `GetRenderConfig` also has
+  `py::keep_alive<0,1>` so the borrowed config keeps the session alive.
+  Scalar reads can still use `config.GetProperty(name)` (returns by copy,
+  always safe). `SessionWorker` keeps `worker.scene` = the exported
+  scene rather than re-fetching via `GetRenderConfig().GetScene()`.
+
+## Phantom mesh lights (Cycles emission compat)
+
+- Blender 5.x defaults Principled to Emission Strength=1.0 + black
+  Emission Color. Emitting `scale(strength, color)` for that makes a
+  NON-constant texture — SuperLuxCore nulls only literal constant
+  zero/black emissions (`parsematerials.cpp`), so the material stayed
+  `IsLightSource()` and every triangle became a mesh light (546,123
+  fake lights on the ASiO scene: multi-GB task buffers + light BVH).
+- Fix: `cycles_node_reader` folds/skips provably-zero emission
+  (`_is_zero`, `_tex_binary` constant folding) in the Principled,
+  standalone-Emission and AddShader paths — emits constant `0.0`
+  instead. Linked/textured emission is untouched.
+- Regression: `dev-tools/e44_black_emission_test.py` (7 cases:
+  black/zero/real emission on Principled, Emission node, Add Shader).
+
+## Blender 5.2 RNA/API gotchas
+
+- `CurveMap` lost `.evaluate()` — call
+  `curve_mapping.evaluate(curve_map, position)` (helper
+  `_evaluate_curve` keeps both signatures).
+- RNA writes ("Writing to ID classes in this context is not allowed")
+  inside render/viewport callbacks: `utils_compatibility.run()` is
+  wrapped in try/RuntimeError during export (load_post already ran the
+  same upgrades); `find_suggested_clamp_value` swallows the
+  RuntimeError; `config._enabled_gpu_devices` falls back to reading
+  `GetOpenCLDeviceDescs()` when the device collection can't be
+  lazily populated.
+- `get_current_view_layer()` returns None outside the final-render
+  path (`State.active_view_layer` unset — direct export calls, tests);
+  `aovs.convert` falls back to `view_layers[0]` instead of dropping
+  all film outputs.
+- Empty `config.convert()` result (export exception) is checked with
+  `str(config_props) == ""` in BOTH `export_scene` (raises) and
+  `get_viewport_changes` (skips the config-cache diff) — never feed an
+  empty config to the session worker: `renderengine.type` would be
+  undefined downstream. All `config_props.Get("renderengine.type")`
+  sites use an explicit fallback.
 
 ## .lxm mesh proxy
 
@@ -170,3 +253,33 @@
 - World > HDRI > `cdfdim` caps env importance CDF (block-summed,
   unbiased; default 4096, 0=unlimited).
 
+
+## Cycles light/world auto-resolution (use_cycles_settings)
+
+- `light.superluxcore.use_cycles_settings` / `world.superluxcore.…` now
+  default **True** — a .blend authored for Cycles stores no SuperLuxCore
+  prop values, so `utils.misc.resolve_use_cycles_settings` routes it
+  through the Cycles converter automatically (the ASiO Sun at
+  energy=1000 exported through the native path used the `sun_sky_gain`
+  default 2e-5 — ~500x too dark vs Cycles).
+- Resolution order: explicitly stored flag wins; if the flag was never
+  set, native-only prop writes on the datablock pin it to the native
+  path, otherwise Cycles. Shared props (`importance`, `link_groups`,
+  `lightgroup`) and `rna_type`/`name` never pin native.
+- `compatibility.run()` writes the resolved value into the flag at
+  load_post so the UI checkbox matches the export mode on old files.
+- Cycles sun → `distant`/`sharpdistant` with
+  `gain = energy / (2π(1-cos θ))`; Cycles world with unlinked Surface
+  emits nothing. Regression: `dev-tools/e45_cycles_light_defaults_test.py`.
+
+## Deferred RNA writes from the render callback
+
+- RNA writes throw RuntimeError inside `bpy.ops.render.render`
+  (`Writing to ID classes in this context`) but are legal in
+  `render_complete` handlers. `utils.render.find_suggested_clamp_value`
+  stashes the value in `_pending_suggested_clamp` on RuntimeError;
+  `handlers/render_complete.py` flushes it (render_complete fires before
+  `bpy.ops.render.render` returns, so post-render reads see the value).
+- `engine/final.py`: the clamp-suggestion check must run BEFORE the
+  `HasDone()` break — a fast render can hit the halt condition in the
+  first stats update and would otherwise never record the suggestion.

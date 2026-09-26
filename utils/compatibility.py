@@ -46,6 +46,10 @@ def run():
             camera.dof.aperture_fstop = camera.superluxcore.fstop
             camera.superluxcore.use_dof = False
 
+    # The Cycles interpretation is resolved at export time
+    # (utils.misc.use_cycles_compat) purely from stored data. Nothing is
+    # written back to datablocks at load, so files are never modified or
+    # "converted" by merely opening them.
 
 def update_mat_output_volume_change(node_tree):
     # commit 3078719a9a33a7e2a798965294463dce6c8b7749
@@ -105,7 +109,7 @@ def update_glossy_ior_change(node_tree):
 def update_volume_asymmetry_change(node_tree):
     # commit 2387d1c300b5a1f6931592efcdd0574d243356e7
 
-    if node_tree.bl_idname != "superluxcore_volume_nodes":
+    if node_tree.bl_idname not in {"superluxcore_volume_nodes", "luxcore_volume_nodes"}:
         return
 
     affected_nodes = find_nodes(node_tree, "SuperLuxCoreNodeVolHeterogeneous", False)
@@ -283,7 +287,7 @@ def update_glass_disney_add_film_sockets(node_tree):
         if node_id != -1:
             continue
         
-        if node.bl_idname == "SuperLuxCoreNodeMatDisney":
+        if node.bl_idname in {"SuperLuxCoreNodeMatDisney", "LuxCoreNodeMatDisney"}:
             node.add_input("SuperLuxCoreSocketFloat0to1", "Film Amount", 1, enabled=False)
         
         ThinFilmCoating.init(node)

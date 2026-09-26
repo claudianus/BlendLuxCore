@@ -674,9 +674,25 @@ class SuperLuxCoreConfig(PropertyGroup):
             # id_data is the owning Scene for a nested PropertyGroup
             devices = self.id_data.superluxcore.devices
             if len(devices.devices) == 0:
-                # Lazily populate on first use (new scenes have no
-                # load_post pass to initialize the list)
-                devices.update_devices_if_necessary()
+                try:
+                    # Lazily populate on first use (new scenes have no
+                    # load_post pass to initialize the list)
+                    devices.update_devices_if_necessary()
+                except RuntimeError:
+                    # RNA writes are forbidden inside render/update
+                    # callbacks — enumerate straight from the device
+                    # descriptions instead. Collection entries default to
+                    # enabled, so every matching GPU counts.
+                    props = devices.get_device_props()
+                    return [
+                        type("DeviceDesc", (), {
+                            "enabled": True,
+                            "name": props.Get(p + ".name").GetString(),
+                            "type": props.Get(p + ".type").GetString(),
+                        })
+                        for p in props.GetAllUniqueSubNames("opencl.device")
+                        if props.Get(p + ".type").GetString() == wanted
+                    ]
             return [
                 d for d in devices.devices
                 if d.enabled and d.type == wanted

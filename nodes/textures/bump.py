@@ -34,11 +34,11 @@ class SuperLuxCoreNodeTexBump(SuperLuxCoreNodeTexture, bpy.types.Node):
 
         show_triplanar_warning = False
         value_node = utils_node.get_linked_node(self.inputs["Value"])
-        if value_node and value_node.bl_idname == "SuperLuxCoreNodeTexTriplanar":
+        if value_node and utils_node.node_matches(value_node, "SuperLuxCoreNodeTexTriplanar"):
             show_triplanar_warning = True
         else:
             height_node = utils_node.get_linked_node(self.inputs["Bump Height"])
-            if height_node and height_node.bl_idname == "SuperLuxCoreNodeTexTriplanar":
+            if height_node and utils_node.node_matches(height_node, "SuperLuxCoreNodeTexTriplanar"):
                 show_triplanar_warning = True
 
         if show_triplanar_warning:

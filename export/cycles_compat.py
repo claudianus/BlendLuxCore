@@ -420,7 +420,7 @@ def cycles_portal_rects(scene):
         # Only Cycles-mode lights become portals - in SuperLuxCore light
         # mode the object is an actual emitter and is_portal is ignored.
         if light.type != "AREA" \
-                or not getattr(light.superluxcore, "use_cycles_settings", False) \
+                or not utils.misc.use_cycles_compat(light.superluxcore) \
                 or not getattr(light.cycles, "is_portal", False):
             continue
         if light.shape not in {"SQUARE", "RECTANGLE"}:

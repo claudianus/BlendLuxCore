@@ -3,6 +3,7 @@ from bpy.props import PointerProperty, BoolProperty, FloatProperty, IntProperty,
 from bpy.types import PropertyGroup, Image
 from .imagepipeline import SuperLuxCoreImagepipeline
 from .image_user import SuperLuxCoreImageUser
+from .legacy import LuxCoreLegacyBridge
 
 CLIPPING_PLANE_DESC = (
     "The arbitrary clipping plane is used to clip the scene at any position and angle. "
@@ -55,7 +56,7 @@ class SuperLuxCoreBokeh(PropertyGroup):
     image_user: PointerProperty(type=SuperLuxCoreImageUser)
 
 
-class SuperLuxCoreCameraProps(PropertyGroup):
+class SuperLuxCoreCameraProps(LuxCoreLegacyBridge, PropertyGroup):
     use_clipping: BoolProperty(name="Clipping", default=True,
                                 description="Use near/far clipping for the SuperLuxCore camera "
                                             "(clipping still affects the Blender OpenGL viewport even if disabled)")

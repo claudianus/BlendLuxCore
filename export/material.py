@@ -20,10 +20,6 @@ def convert(exporter, depsgraph, material, is_viewport_render, obj_name=""):
         superluxcore_name = utils.get_superluxcore_name(material, is_viewport_render)
         node_tree = material.superluxcore.node_tree
 
-        # Try to use Cycles nodes on assets without SuperLuxCore nodes, so the user doesn't have to
-        # open all asset files individually and enable use_cycles_nodes everywhere by hand or script
-        is_asset_without_lux_mat = node_tree is None and material.library
-
         if is_blender_5:
             # material.use_nodes is deprecated in Blender 5.0.
             # Technically still OK to use for now but made explicit by this.
@@ -31,12 +27,12 @@ def convert(exporter, depsgraph, material, is_viewport_render, obj_name=""):
         else:
             matusenodes = material.use_nodes
 
-        # Blender-first: a material with a Blender (Cycles-style) node tree but
-        # no SuperLuxCore tree is converted through the Cycles reader automatically
-        # instead of falling back to clay. Explicit opt-in still honored.
-        has_blender_tree = getattr(material, "node_tree", None) is not None
-        use_cycles = material.superluxcore.use_cycles_nodes or \
-            is_asset_without_lux_mat or (node_tree is None and has_blender_tree)
+        # LuxCore node trees export natively; a Blender (Cycles-style)
+        # tree only serves as the translation source when no LuxCore
+        # tree exists. Both are read straight from the file - nothing
+        # is converted or rewritten.
+        use_cycles = utils.misc.material_use_cycles_nodes(material) and \
+            getattr(material, "node_tree", None) is not None
 
         if matusenodes and use_cycles:
             name, props = cycles_node_reader.convert(

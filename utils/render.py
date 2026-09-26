@@ -143,7 +143,7 @@ def update_status_msg(stats, engine, scene, config, time_until_film_refresh):
         # Reset to 0 in case the user disables the halt conditions during render
         engine.update_progress(0)
 
-    if "TILE" in config.GetProperties().Get("renderengine.type").GetString():
+    if "TILE" in _session_property(config, "renderengine.type", "PATHCPU"):
         TileStats.film_width, TileStats.film_height = calc_filmsize(scene)
         tile_w = stats.Get("stats.tilepath.tiles.size.x").GetInt()
         tile_h = stats.Get("stats.tilepath.tiles.size.y").GetInt()
@@ -156,9 +156,24 @@ def update_status_msg(stats, engine, scene, config, time_until_film_refresh):
         TileStats.notconverged_passcounts = stats.Get('stats.tilepath.tiles.notconverged.pass').GetInts()
 
 
+def _session_property(config, name, fallback):
+    """Read a property off a session's RenderConfig.
+
+    RenderConfig::GetProperties() exposes the internal config by a
+    non-owning reference — under pybind11's smart_holder it can fail with
+    "Non-owning holder (load_as_shared_ptr)" once the owning wrapper was
+    garbage-collected. GetProperty() returns the value by copy and is
+    safe on the borrowed object.
+    """
+    try:
+        return config.GetProperty(name).GetString()
+    except RuntimeError:
+        return fallback
+
+
 def get_pretty_stats(config, stats, scene, context=None):
     halt = get_halt_conditions(scene)
-    engine = config.GetProperties().Get("renderengine.type").GetString()
+    engine = _session_property(config, "renderengine.type", "PATHCPU")
 
     # Here we collect strings in a list and later join them
     # so the result will look like: "message 1 | message 2 | ..."
@@ -219,7 +234,7 @@ def get_pretty_stats(config, stats, scene, context=None):
     pretty.append("Rays/Sample " + rays_per_sample_to_string(get_rays_per_sample(stats)))
 
     # Engine + Sampler
-    sampler = config.GetProperties().Get("sampler.type").GetString()
+    sampler = _session_property(config, "sampler.type", "SOBOL")
     pretty.append(engine_to_str(engine) + " + " + sampler_to_str(sampler))
 
     # Triangle count
@@ -344,6 +359,28 @@ def compute_clamp_signature(scene):
     return _SIG_CACHE["sig"]
 
 
+# scene.as_pointer() -> suggested clamp value, waiting for a context
+# where RNA writes are allowed (see find_suggested_clamp_value)
+_pending_suggested_clamp = {}
+
+
+def _write_suggested_clamp(scene, suggested_clamping_value):
+    scene.superluxcore.config.path.suggested_clamping_value = suggested_clamping_value
+    # Stamp the suggestion with the scene's lighting content so a
+    # stale value is ignored once the scene's emitters change.
+    scene.superluxcore.config.path.suggested_clamping_sig = (
+        compute_clamp_signature(scene)
+    )
+
+
+def flush_suggested_clamp(scene):
+    """Apply a clamp suggestion deferred from the render callback.
+    Called by the render_complete handler, where RNA writes are legal."""
+    value = _pending_suggested_clamp.pop(scene.as_pointer(), None)
+    if value is not None:
+        _write_suggested_clamp(scene, value)
+
+
 def find_suggested_clamp_value(session, scene=None):
     """
     Find suggested clamp value.
@@ -361,16 +398,15 @@ def find_suggested_clamp_value(session, scene=None):
     if scene:
         try:
             # TODO: rework this so it can't fail anymore (some users have reported that it throws an AttributeError)
-            scene.superluxcore.config.path.suggested_clamping_value = suggested_clamping_value
-            # Stamp the suggestion with the scene's lighting content so a
-            # stale value is ignored once the scene's emitters change.
-            scene.superluxcore.config.path.suggested_clamping_sig = (
-                compute_clamp_signature(scene)
-            )
+            _write_suggested_clamp(scene, suggested_clamping_value)
         except AttributeError:
+            # reported by users on some versions
             print("Warning: could not set suggested_clamping_value property")
-            import traceback
-            traceback.print_exc()
+        except RuntimeError:
+            # RNA writes are forbidden while the render callback runs
+            # (Writing to ID classes in this context) - defer to the
+            # render_complete handler via flush_suggested_clamp.
+            _pending_suggested_clamp[scene.as_pointer()] = suggested_clamping_value
 
     return suggested_clamping_value
 

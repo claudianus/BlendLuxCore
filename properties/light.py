@@ -7,6 +7,7 @@ import math
 from .ies import SuperLuxCoreIESProps
 from .image_user import SuperLuxCoreImageUser
 from .config import ENVLIGHT_CACHE_DESC
+from .legacy import LuxCoreLegacyBridge
 from ..utils.light_descriptions import (
     RGB_GAIN_DESC, IMPORTANCE_DESCRIPTION, POWER_DESCRIPTION, NORMALIZEBYCOLOR_DESCRIPTION,
     EXPOSURE_DESCRIPTION, EFFICACY_DESCRIPTION, LUMEN_DESCRIPTION, CANDELA_DESCRIPTION,
@@ -17,7 +18,7 @@ from ..utils.light_descriptions import (
 )
 
 
-class SuperLuxCoreLightProps(bpy.types.PropertyGroup):
+class SuperLuxCoreLightProps(LuxCoreLegacyBridge, bpy.types.PropertyGroup):
     def update_image(self, context):
         self.image_user.update(self.image)
 
@@ -31,8 +32,6 @@ class SuperLuxCoreLightProps(bpy.types.PropertyGroup):
             # For area light (laser can't be rectangular)
             if self.is_laser:
                 context.light.shape = "SQUARE"
-
-    use_cycles_settings: BoolProperty(name="Use Cycles Settings", default=False)
 
     ##############################################
     # SuperLuxCore specific properties needed to translate SuperLuxCore light concepts to Blender
@@ -175,7 +174,7 @@ class SuperLuxCoreLightProps(bpy.types.PropertyGroup):
                                       "visibility in reflections and refractions)")
 
     @classmethod
-    def register(cls):        
+    def register(cls):
         bpy.types.Light.superluxcore = PointerProperty(
             name="SuperLuxCore Light Settings",
             description="SuperLuxCore light settings",

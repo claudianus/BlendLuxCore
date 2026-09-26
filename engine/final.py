@@ -182,6 +182,17 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
                     time_until_film_refresh = 0
                 utils_render.update_status_msg(stats, engine, depsgraph.scene, session_config, time_until_film_refresh)
 
+                # Compute and print the optimal clamp value. Done only once after a warmup phase.
+                # Only do this if clamping is disabled, otherwise the value is meaningless.
+                # Must run BEFORE the HasDone break: a fast render can reach
+                # the halt condition in the first stats update, and skipping
+                # this check then would never record the suggestion.
+                samples = stats.Get("stats.renderengine.pass").GetInt()
+                if not checked_optimal_clamp and samples > clamp_warmup_samples:
+                    clamp_value = utils_render.find_suggested_clamp_value(engine.session, depsgraph.scene)
+                    print("Recommended clamp value:", clamp_value)
+                    checked_optimal_clamp = True
+
                 # Check if the user cancelled during the expensive stats update
                 if _stop_requested(engine) or engine.session.HasDone():
                     break
@@ -193,14 +204,6 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
                     last_film_refresh = now
 
             utils_render.update_status_msg(stats, engine, depsgraph.scene, session_config, time_until_film_refresh)
-
-            # Compute and print the optimal clamp value. Done only once after a warmup phase.
-            # Only do this if clamping is disabled, otherwise the value is meaningless.
-            samples = stats.Get("stats.renderengine.pass").GetInt()
-            if not checked_optimal_clamp and samples > clamp_warmup_samples:
-                clamp_value = utils_render.find_suggested_clamp_value(engine.session, depsgraph.scene)
-                print("Recommended clamp value:", clamp_value)
-                checked_optimal_clamp = True
 
         # Check before we sleep
         if _stop_requested(engine):

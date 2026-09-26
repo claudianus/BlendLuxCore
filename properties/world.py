@@ -13,6 +13,7 @@ from .light import (
 )
 from .image_user import SuperLuxCoreImageUser
 from .config import ENVLIGHT_CACHE_DESC
+from .legacy import LuxCoreLegacyBridge
 
 USE_SUN_GAIN_FOR_SKY_DESC = (
     "Use the gain setting of the attached sun "
@@ -41,9 +42,7 @@ GROUND_ENABLE_DESC = (
 GROUND_COLOR_DESC = GROUND_ENABLE_DESC
 
 
-class SuperLuxCoreWorldProps(bpy.types.PropertyGroup):
-    use_cycles_settings: BoolProperty(name="Use Cycles Settings", default=False)
-
+class SuperLuxCoreWorldProps(LuxCoreLegacyBridge, bpy.types.PropertyGroup):
     lights = [
         ("sky2", "Sky", "Hosek and Wilkie sky model", 0),
         ("infinite", "HDRI", "High dynamic range image", 1),

@@ -1,13 +1,11 @@
 _needs_reload = "bpy" in locals()
 
 import os
-import tempfile
 import bpy
 from bpy.app.handlers import persistent
 
 import pysuperluxcore
 from .. import utils, operators
-from ..utils import compatibility
 from . import frame_change_pre
 from ..utils.errorlog import SuperLuxCoreErrorLog
 from ..operators.manual_compatibility import SUPERLUXCORE_OT_convert_to_v23
@@ -23,30 +21,29 @@ if _needs_reload:
     for module in modules:
         importlib.reload(module)
 
-def _init_persistent_cache_file_path(settings, suffix):
-    if not settings.file_path:
-        blend_name = utils.get_blendfile_name()
-        if blend_name:
-            pgi_path = "//" + blend_name + "." + suffix
-        else:
-            # Blend file was not saved yet
-            pgi_path = os.path.join(tempfile.gettempdir(), "Untitled." + suffix)
-        settings.file_path = pgi_path
+def _setif_changed(obj, attr, value):
+    """Assign only when the value differs, so loading a file does not
+    dirty it with redundant bookkeeping writes."""
+    try:
+        if getattr(obj, attr) != value:
+            setattr(obj, attr, value)
+    except (AttributeError, TypeError):
+        pass
 
 
 def _init_SuperLuxCoreOnlineLibrary():
     user_preferences = utils.get_addon_preferences(bpy.context)
-    ui_props = bpy.context.scene.superluxcoreOL.ui
+    ol = bpy.context.scene.superluxcoreOL
+    ui_props = ol.ui
 
-    bpy.context.scene.superluxcoreOL.on_search = False
-    bpy.context.scene.superluxcoreOL.search_category = ""
-
-    ui_props.assetbar_on = False
-    ui_props.turn_off = False
-    ui_props.ToC_loaded = False
-    bpy.context.scene.superluxcoreOL.model.thumbnails_loaded = False
-    bpy.context.scene.superluxcoreOL.scene.thumbnails_loaded = False
-    bpy.context.scene.superluxcoreOL.material.thumbnails_loaded = False
+    _setif_changed(ol, "on_search", False)
+    _setif_changed(ol, "search_category", "")
+    _setif_changed(ui_props, "assetbar_on", False)
+    _setif_changed(ui_props, "turn_off", False)
+    _setif_changed(ui_props, "ToC_loaded", False)
+    _setif_changed(ol.model, "thumbnails_loaded", False)
+    _setif_changed(ol.scene, "thumbnails_loaded", False)
+    _setif_changed(ol.material, "thumbnails_loaded", False)
 
     if not os.path.exists(user_preferences.global_dir):
         os.makedirs(user_preferences.global_dir)
@@ -81,20 +78,20 @@ def handler(_):
 
         if pysuperluxcore.GetPlatformDesc().Get("compile.LUXRAYS_DISABLE_OPENCL").GetBool():
             # OpenCL not available, make sure we are using CPU device
-            scene.superluxcore.config.device = "CPU"
+            _setif_changed(scene.superluxcore.config, "device", "CPU")
 
-        # Use Blender output path for filesaver by default
-        if not scene.superluxcore.config.filesaver_path:
-            scene.superluxcore.config.filesaver_path = scene.render.filepath
-
-        _init_persistent_cache_file_path(scene.superluxcore.config.photongi, "pgi")
-        _init_persistent_cache_file_path(scene.superluxcore.config.envlight_cache, "env")
-        _init_persistent_cache_file_path(scene.superluxcore.config.dls_cache, "dlsc")
+        # filesaver_path and the persistent-cache paths are resolved
+        # lazily at export (utils.get_persistent_cache_file_path /
+        # export.config filesaver fallback) - writing them here would
+        # modify the user's file just by opening it.
 
         _init_SuperLuxCoreOnlineLibrary()
 
-    # Run converters for backwards compatibility
-    compatibility.run()
+    # Node-tree schema converters must NOT run on load: they remove and
+    # rewrite user data silently ("데이터가 날아간다"). The translation
+    # layer resolves legacy content at export/read time instead; the
+    # manual SUPERLUXCORE_OT_convert_to_v23 operator still runs them on
+    # explicit user request.
 
     # A loaded file can rewire datablock pointers entirely; persistent
     # render scenes and dirty maps from before the load are invalid.

@@ -4,6 +4,7 @@ from bpy.props import PointerProperty, FloatProperty, BoolProperty, EnumProperty
 from ..utils import node as utils_node
 # from ..operators.material import show_nodetree
 from ..utils.node import show_nodetree
+from .legacy import LuxCoreLegacyBridge
 
 
 class SuperLuxCoreMaterialPreviewProps(PropertyGroup):
@@ -23,7 +24,7 @@ class SuperLuxCoreMaterialPreviewProps(PropertyGroup):
     )
 
 
-class SuperLuxCoreMaterialProps(PropertyGroup):
+class SuperLuxCoreMaterialProps(LuxCoreLegacyBridge, PropertyGroup):
     def update_auto_vp_color(self, context):
         if self.auto_vp_color:
             utils_node.update_opengl_materials(None, context)
@@ -37,24 +38,6 @@ class SuperLuxCoreMaterialProps(PropertyGroup):
     )
     node_tree: PointerProperty(name="Node Tree", type=bpy.types.NodeTree)
     preview: PointerProperty(type=SuperLuxCoreMaterialPreviewProps)
-
-    def update_use_cycles_nodes(self, context):
-        mat = self.id_data
-        node_tree = (
-            mat.node_tree
-            if mat.superluxcore.use_cycles_nodes
-            else mat.superluxcore.node_tree
-        )
-        if node_tree:
-            show_nodetree(context, node_tree)
-
-    use_cycles_nodes: BoolProperty(
-        name="Use Cycles Nodes",
-        default=False,
-        update=update_use_cycles_nodes,
-        description="Use the Cycles nodes of this material instead of the SuperLuxCore node tree "
-        "(WARNING: This option is not fully implemented yet, only very few nodes work)",
-    )
 
     principled_target: EnumProperty(
         name="Principled Target",

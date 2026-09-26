@@ -73,9 +73,15 @@ def register():
     utils.register_module("Main", [], submodules)
 
     pysuperluxcore.Init(utils.log.SuperLuxCoreLog.add)
+    try:
+        plc_version = version('pysuperluxcore')
+    except Exception:
+        # Extension reloads can lose the package-metadata path; the
+        # version string is informational only, never block on it.
+        plc_version = "unknown"
     print(
         f"SuperLuxCore {utils.get_version_string()} registered "
-        f"(with pysuperluxcore {version('pysuperluxcore')})"
+        f"(with pysuperluxcore {plc_version})"
     )
 
 

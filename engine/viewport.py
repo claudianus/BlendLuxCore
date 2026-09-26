@@ -300,9 +300,14 @@ def view_draw(engine, context, depsgraph):
     if engine.session is None:
         config = scene.superluxcore.config
         definitions = {}
-        superluxcore_engine, _ = convert_viewport_engine(
-            context, scene, definitions, config
-        )
+        try:
+            superluxcore_engine, _ = convert_viewport_engine(
+                context, scene, definitions, config
+            )
+        except Exception:
+            # A config failure must not take down view_draw — the real
+            # export in view_update reports the error via the error log.
+            superluxcore_engine = "RTPATHCPU"
         message = ""
 
         if superluxcore_engine.endswith("OCL"):
