@@ -33,3 +33,10 @@ class LUXCORE_RENDER_PT_image_resize_policy(Panel, RenderButtonsPanel):
         layout.prop(resize_policy, "type")
         layout.prop(resize_policy, "scale")
         layout.prop(resize_policy, "min_size")
+
+        layout.separator()
+        mem_col = layout.column()
+        mem_col.active = True
+        mem_col.prop(
+            context.scene.luxcore.config, "free_blender_image_buffers"
+        )

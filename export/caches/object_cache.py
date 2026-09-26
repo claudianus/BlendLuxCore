@@ -100,6 +100,9 @@ def needs_edge_detector_shape(node_tree):
     ):
         if node.hide_planar_edges:
             return True
+    # The bevel texture reads per-edge angles written by edgedetectoraov
+    if utils_node.find_nodes(node_tree, "ShaderNodeBevel", True):
+        return True
     return False
 
 

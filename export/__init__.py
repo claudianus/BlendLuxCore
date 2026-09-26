@@ -34,6 +34,7 @@ from .caches.object_cache import (
     _apply_cycles_displacement,
 )
 from .caches import persistent_scene
+from . import image
 from .recorded_scene import RecordedScene  # noqa: F811 keep name for reload
 
 if _needs_reload:
@@ -45,6 +46,7 @@ if _needs_reload:
         recorded_scene,
         camera,
         config,
+        image,
         imagepipeline,
         light,
         material,
@@ -853,6 +855,15 @@ class Exporter(object):
                     )
                 )
             self._init_stats(stats, config_props, scene)
+
+        # Final renders can release Blender's decoded image buffers:
+        # LuxCore reads images from files and never touches ImBuf, so
+        # the same texture data otherwise sits in RAM twice for the
+        # whole render. Only file-backed, unmodified images are freed.
+        if not is_viewport_render and getattr(
+            scene.luxcore.config, "free_blender_image_buffers", True
+        ):
+            image.ImageExporter.free_blender_buffers()
 
         # Do not hold reference to temporary data
         self.scene = None

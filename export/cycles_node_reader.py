@@ -2637,12 +2637,20 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             FALLBACK_VECTOR, obj_name)
     elif node.bl_idname == "ShaderNodeBevel":
         prefix = "scene.textures."
-        # The "bevel" texture exists but is disabled in the engine's SDL parser;
-        # use the unmodified shading normal instead
-        _warn_unsupported(
-            node, "Bevel is not supported by this engine version; using the "
-            "unmodified shading normal", None, obj_name)
-        definitions = {"type": "shadingnormal"}
+        # Bump-only rounded edges; requires the edgedetectoraov shape wrapper
+        # (requested by needs_edge_detector_shape when this node is present)
+        if node.inputs["Normal"].is_linked:
+            LuxCoreErrorLog.add_warning(
+                f'Bevel node "{node.name}": the Normal input is not '
+                "supported, the shading normal is used", obj_name=obj_name)
+        if node.inputs["Radius"].is_linked:
+            LuxCoreErrorLog.add_warning(
+                f'Bevel node "{node.name}": a texture-linked Radius is not '
+                "supported, using the constant default", obj_name=obj_name)
+        definitions = {
+            "type": "bevel",
+            "radius": node.inputs["Radius"].default_value,
+        }
     elif node.bl_idname == "ShaderNodeAmbientOcclusion":
         # No AO texture in LuxCore; approximate "fully lit"
         if output_socket.name == "AO":

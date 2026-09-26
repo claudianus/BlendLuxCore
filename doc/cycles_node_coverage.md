@@ -118,7 +118,7 @@ with no LuxCore equivalent additionally carry a specific reason via
 | ShaderNodeNormal | approx | direction output subset warns |
 | ShaderNodeNormalMap | mapped | tangent-space normal maps |
 | ShaderNodeBump | mapped | bump mapping |
-| ShaderNodeBevel | approx | LuxCore bevel texture (round edges) |
+| ShaderNodeBevel | mapped | LuxCore bevel texture (bump-only round edges; Radius constant only, Normal input unsupported) |
 | ShaderNodeAmbientOcclusion | approx | AO texture |
 | ShaderNodeWireframe | mapped | wireframe |
 | ShaderNodeDisplacement / VectorDisplacement | approx | object space only; exported as displacement shape |

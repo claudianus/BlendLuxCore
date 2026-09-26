@@ -11,6 +11,10 @@ class ImageExporter:
     """
 
     temp_images = {}
+    # Images handed to LuxCore during the current/last export. LuxCore
+    # loads them from files itself, so Blender's decoded pixel buffers
+    # can be released for the duration of the render.
+    used_images = set()
 
     @classmethod
     def _save_to_temp_file(cls, image):
@@ -113,6 +117,8 @@ class ImageExporter:
 
         This is the main method of the module.
         """
+        cls.used_images.add(image)
+
         if image.source == "GENERATED":
             return cls._save_to_temp_file(image)
 
@@ -165,6 +171,8 @@ class ImageExporter:
     def export_cycles_node_reader(cls, image):
         """Export cycles node reader."""
         # TODO deduplicate code, support image sequences
+        cls.used_images.add(image)
+
         if image.source == "GENERATED":
             return cls._save_to_temp_file(image)
 
@@ -193,6 +201,35 @@ class ImageExporter:
         )
 
     @classmethod
+    def free_blender_buffers(cls):
+        """Release Blender-side decoded pixel buffers of exported images.
+
+        Only file-backed, unmodified images are touched: their content
+        is recoverable from disk (or the packed file), so freeing can
+        never lose data. Generated/dirty images keep their pixels.
+        """
+        freed = 0
+        for image in cls.used_images:
+            try:
+                if (
+                    image.source in {"FILE", "SEQUENCE"}
+                    and not image.is_dirty
+                    and image.has_data
+                ):
+                    image.buffers_free()
+                    image.gl_free()
+                    freed += 1
+            except Exception:
+                # Image may have been removed or is otherwise not
+                # freeable — never let this break a render
+                pass
+        if freed:
+            print(
+                f"[BLC] Freed Blender pixel buffers of {freed} image(s) "
+                "for the duration of the render"
+            )
+
+    @classmethod
     def cleanup(cls):
         """Remove cached images."""
         for temp_image in cls.temp_images.values():
@@ -202,3 +239,4 @@ class ImageExporter:
             os.remove(filepath)
 
         cls.temp_images.clear()
+        cls.used_images.clear()

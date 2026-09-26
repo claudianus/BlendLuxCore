@@ -1,3 +1,4 @@
+import hashlib
 import math
 from array import array
 import mathutils
@@ -365,9 +366,9 @@ def _sample_loop_points(eval_obj, depsgraph, vert_sig):
     """Re-run the mesh_converter vertex pipeline on the evaluated object
     and return loop-expanded (N,3) float32 positions, or None when the
     topology differs from the export-time signature (vert_count,
-    loop_vertex_indices).
+    loop_count, loop_indices digest).
     """
-    vert_count, loop_vertices_ref = vert_sig
+    vert_count, loop_count, loop_digest = vert_sig
     object_eval = None
     mesh = None
     try:
@@ -377,12 +378,12 @@ def _sample_loop_points(eval_obj, depsgraph, vert_sig):
             return None
         mesh.calc_loop_triangles()
         mesh.split_faces()
-        if len(mesh.vertices) != vert_count or len(mesh.loops) != len(
-            loop_vertices_ref
-        ):
+        if len(mesh.vertices) != vert_count or len(mesh.loops) != loop_count:
             return None
         loop_vertices = get_ndarray(mesh.loops, "vertex_index", 0, np.uint32)
-        if not np.array_equal(loop_vertices, loop_vertices_ref):
+        if hashlib.blake2b(
+            loop_vertices.tobytes(), digest_size=16
+        ).digest() != loop_digest:
             return None
         vertex_points = get_ndarray(mesh.vertices, "co", 3, np.float32)
         return np.ascontiguousarray(vertex_points[loop_vertices])
@@ -410,7 +411,15 @@ def _build_vertex_motion(vert_steps, frame_offsets, luxcore_scene):
             # Mesh does not deform — no vertex series needed
             continue
         for shape_name, _mat in rec["mesh"].mesh_definitions:
-            luxcore_scene.SetMeshVertexMotion(shape_name, times, steps_data)
+            # Submeshes are exported with locally compacted vertices —
+            # apply the same loop remap to every step so the series
+            # matches the shape's vertex count.
+            uniq = rec["mesh"].submesh_maps.get(shape_name)
+            if uniq is None:
+                luxcore_scene.SetMeshVertexMotion(shape_name, times, steps_data)
+            else:
+                sub_steps = [d[uniq] for d in steps_data]
+                luxcore_scene.SetMeshVertexMotion(shape_name, times, sub_steps)
 
 
 def _collect_strand_step(strand_steps, exported_thing, eval_obj, depsgraph, step):

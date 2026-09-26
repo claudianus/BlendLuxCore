@@ -854,6 +854,15 @@ class LuxCoreConfig(PropertyGroup):
     out_of_core: BoolProperty(name="Out of Core", default=False, 
                               description="Enable storage of image pixels, meshes and other data in CPU RAM if GPU RAM is not sufficient. "
                                           "Enabling this option causes the scene to use more CPU RAM")
+    free_blender_image_buffers: BoolProperty(
+        name="Free Blender Image Buffers",
+        default=True,
+        description="Release Blender's decoded pixel buffers of file-backed images once "
+                    "the final render export finishes. LuxCore reads textures from disk "
+                    "itself, so the same image otherwise occupies RAM twice. Only "
+                    "unmodified FILE/SEQUENCE images are freed — painted or dirty "
+                    "buffers are never touched",
+    )
 
     def using_out_of_core(self):
         if self.effective_device() != "OCL":
