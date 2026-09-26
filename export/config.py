@@ -18,6 +18,88 @@ class SamplingOverlap:
     OUT_OF_CORE = 32
 
 
+# Emitters above this count switch the AUTO light strategy to ReSTIR DI:
+# below it, the log-power distribution is cheaper per sample and equally
+# accurate; reservoir resampling only pays off once plain light sampling
+# keeps missing most of the emitters.
+AUTO_LIGHT_STRATEGY_EMITTER_THRESHOLD = 16
+
+# Engines supporting the ReSTIR DI light strategy (see RESTIR_DI_DESC in
+# properties/config.py). AUTO falls back to LOG_POWER on any other engine.
+_RESTIR_ENGINES = {
+    "PATHCPU", "TILEPATHCPU", "RTPATHCPU",
+    "PATHOCL", "TILEPATHOCL", "RTPATHOCL",
+}
+
+_EMISSIVE_NODE_TYPES = {"LuxCoreNodeMatEmission", "ShaderNodeEmission"}
+
+
+def _material_is_emissive(mat):
+    """Cheap heuristic: does this material emit light?
+
+    Looks for an emission node (LuxCore or Cycles) or a Principled BSDF
+    with emission enabled. Linked-ness of the emission node is not
+    verified, so this may overcount emitters slightly — acceptable for a
+    strategy heuristic that only needs the order of magnitude.
+    """
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return False
+    for node in mat.node_tree.nodes:
+        if node.bl_idname in _EMISSIVE_NODE_TYPES:
+            return True
+        if node.bl_idname == "ShaderNodeBsdfPrincipled":
+            try:
+                if node.inputs["Emission Strength"].default_value > 0:
+                    return True
+            except (KeyError, AttributeError):
+                pass
+    return False
+
+
+def _count_emitters(scene):
+    """Estimate the number of distinct emitters for strategy selection.
+
+    Light objects count once each; a mesh with an emissive material is
+    weighted by polygon count because every triangle becomes a separate
+    light in the engine; a lit world background counts once.
+    """
+    count = 0
+    emissive_mats = set()
+    for obj in scene.objects:
+        if obj.type == "LIGHT":
+            count += 1
+        elif obj.type == "MESH" and obj.data is not None:
+            mats = getattr(obj.data, "materials", None)
+            if mats is None:
+                continue
+            for mat in mats:
+                if mat is None:
+                    continue
+                if mat not in emissive_mats:
+                    if not _material_is_emissive(mat):
+                        continue
+                    emissive_mats.add(mat)
+                # Polygons approximate the internal per-triangle light
+                # count without needing a triangulation pass.
+                count += max(1, len(obj.data.polygons))
+                break
+
+    world = scene.world
+    if world is not None and getattr(world, "use_nodes", False):
+        count += 1
+
+    return count
+
+
+def _auto_light_strategy(scene, luxcore_engine):
+    """Resolve AUTO light strategy from the scene's emitter count."""
+    if luxcore_engine not in _RESTIR_ENGINES:
+        return "LOG_POWER"
+    if _count_emitters(scene) > AUTO_LIGHT_STRATEGY_EMITTER_THRESHOLD:
+        return "RESTIR_DI"
+    return "LOG_POWER"
+
+
 def convert(exporter, scene, context=None, engine=None):
     config = scene.luxcore.config
     simple_token = None
@@ -109,6 +191,8 @@ def convert(exporter, scene, context=None, engine=None):
                 light_strategy = "DLS_CACHE"
         else:
             light_strategy = config.light_strategy
+            if light_strategy == "AUTO":
+                light_strategy = _auto_light_strategy(scene, luxcore_engine)
 
         # Common properties that should be set regardless of engine configuration.
         # NB: the engine's PMJ02 tag breaks the SOBOL/RANDOM convention
@@ -148,9 +232,31 @@ def convert(exporter, scene, context=None, engine=None):
             definitions["lightstrategy.restir.spatialreuse.enable"] = (
                 config.restir_spatial_enable
             )
+            definitions["lightstrategy.restir.visibility.enable"] = (
+                config.restir_visibility_enable
+            )
             if config.restir_candidates > 0:
                 definitions["lightstrategy.restir.candidates"] = (
                     config.restir_candidates
+                )
+
+        # ReSTIR GI runs on PATHCPU and the pathoclbase GPU engines
+        # (PATHOCL/TILEPATHOCL); RTPATHOCL and BIDIR* do not implement
+        # the reservoir machinery, so exporting there would be a
+        # silent no-op.
+        if config.restir_gi_enable and luxcore_engine in (
+            "PATHCPU", "PATHOCL", "TILEPATHOCL"
+        ):
+            definitions["path.restir.gi.enable"] = True
+            definitions["path.restir.gi.temporal.enable"] = (
+                config.restir_gi_temporal_enable
+            )
+            definitions["path.restir.gi.spatial.enable"] = (
+                config.restir_gi_spatial_enable
+            )
+            if config.restir_gi_candidates > 0:
+                definitions["path.restir.gi.candidates"] = (
+                    config.restir_gi_candidates
                 )
 
         if config.mnee_enable:
@@ -173,14 +279,25 @@ def convert(exporter, scene, context=None, engine=None):
             _convert_photongi_settings(context is not None, scene,
                                        definitions, config)
 
+        # Manual clamping wins; otherwise auto-clamp applies the value
+        # suggested by a previous unclamped render (see
+        # utils/render.find_suggested_clamp_value).
+        use_clamping = config.path.use_clamping
+        clamping_value = config.path.clamping
         if (
-            config.path.use_clamping
+            not use_clamping
+            and config.path.auto_clamping
+            and config.path.suggested_clamping_value > 0
+        ):
+            use_clamping = True
+            clamping_value = config.path.suggested_clamping_value
+
+        if (
+            use_clamping
             and not in_material_shading_mode
             and not utils.using_photongi_debug_mode(is_viewport_render, scene)
         ):
-            definitions["path.clamping.variance.maxvalue"] = (
-                config.path.clamping
-            )
+            definitions["path.clamping.variance.maxvalue"] = clamping_value
 
         # Filter
         if config.filter == "GAUSSIAN":
@@ -354,13 +471,17 @@ def convert_viewport_engine(context, scene, definitions, config):
 
 
 def _convert_final_engine(scene, definitions, config):
+    # AUTO resolves to the concrete backend here so every downstream
+    # check (engine tag, hybrid split, OpenCL settings) sees the resolved
+    # device, not the enum placeholder.
+    device = config.effective_device()
     if config.engine == "PATH":
         # Specific settings for PATH and TILEPATH
         _convert_path(
             config,
             definitions,
             config.path.hybridbackforward_enable,
-            config.device,
+            device,
             False,
             scene,
         )
@@ -389,9 +510,9 @@ def _convert_final_engine(scene, definitions, config):
             luxcore_engine = "PATH"
 
         # Add CPU/OCL suffix
-        luxcore_engine += config.device
+        luxcore_engine += device
 
-        if config.device == "OCL":
+        if device == "OCL":
             # OpenCL specific settings
             _convert_opencl_settings(scene, definitions, True)
     else:
@@ -466,6 +587,13 @@ def _convert_final_engine(scene, definitions, config):
         definitions["opencl.outofcore.film.enable"] = True
     if config.using_out_of_core():
         definitions["opencl.outofcore.enable"] = True
+
+    if config.low_vram():
+        # Low-resource profile: shrink the GPU wavefront task count so
+        # the per-task buffers (rays/hits, ReSTIR reservoirs, MNEE state,
+        # visibility candidate rays) fit a small-VRAM GPU and leave
+        # headroom for the driver and the OS compositor.
+        definitions["opencl.task.count"] = config.LOW_RESOURCE_TASK_COUNT
 
     return luxcore_engine, sampler
 

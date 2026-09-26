@@ -45,6 +45,12 @@ class LUXCORE_RENDER_PT_simple(RenderButtonsPanel, Panel):
             )
             return
 
+        # Named presets on top of the quality slider
+        row = layout.row(align=True)
+        row.operator("luxcore.set_quality_preset", text="Draft").quality = 0.15
+        row.operator("luxcore.set_quality_preset", text="Standard").quality = 0.5
+        row.operator("luxcore.set_quality_preset", text="Final").quality = 0.9
+
         # Quality preset slider: the one control that matters
         col = layout.column(align=True)
         col.prop(simple, "quality", slider=True)

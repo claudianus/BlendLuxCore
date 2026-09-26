@@ -89,6 +89,13 @@ POWER_DESC = (
 
 UNIFORM_DESC = "Sample all lights equally, not according to their brightness"
 
+AUTO_LIGHT_STRATEGY_DESC = (
+    "(Default) Pick the light strategy from the scene's emitter count: "
+    "ReSTIR DI when the scene has many emitters, log-power sampling otherwise. "
+    "Mesh lights are weighted by their polygon count since every triangle "
+    "becomes a separate light"
+)
+
 RESTIR_DI_DESC = (
     "Reservoir importance resampling: pick each candidate light by its estimated "
     "contribution at the shading point (recommended for scenes with many lights; "
@@ -357,7 +364,7 @@ class LuxCoreConfigSimple(PropertyGroup):
             config.photongi.caustic_periodic_update = True
             config.photongi.caustic_updatespp = 16 if q < 0.7 else 8
             # Sharp caustics via light tracing at mid quality and above
-            if q >= 0.5 and config.device == "CPU":
+            if q >= 0.5 and config.effective_device() == "CPU":
                 config.path.hybridbackforward_enable = True
                 config.path.hybridbackforward_lightpartition = 20
 
@@ -395,6 +402,15 @@ class LuxCoreConfigPath(PropertyGroup):
                                                       description=HYBRID_BACKFORWARD_GLOSSINESS_DESC)
 
     use_clamping: BoolProperty(name="Clamp Output", default=False, description=CLAMPING_DESC)
+    auto_clamping: BoolProperty(
+        name="Auto Clamp",
+        default=True,
+        description="Once a render has produced a suggested clamp value, "
+                    "apply it automatically on subsequent renders. Manual "
+                    "clamping (Clamp Output) takes precedence when enabled. "
+                    "First render of a scene still runs unclamped so the "
+                    "suggestion can be measured"
+    )
     # path.clamping.variance.maxvalue
     clamping: FloatProperty(name="Max Brightness", default=10, min=0,soft_max=10000,  description=CLAMPING_DESC)
     # This should only be set in the engine code after export. Only show a read-only label to the user.
@@ -624,8 +640,87 @@ class LuxCoreConfig(PropertyGroup):
     ]
     sampler_gpu: EnumProperty(name="Sampler", items=samplers_gpu, default="SOBOL")
     
+    # GPUs with less local memory than this trigger the low-resource path
+    # (automatic out-of-core). Apple silicon reports unified memory here,
+    # so the threshold only engages on genuinely small GPUs.
+    LOW_VRAM_BYTES = 4 * 1024 ** 3  # 4 GiB
+    # Low-resource profile: the GPU wavefront task count is capped so
+    # the per-task buffers (rays/hits, ReSTIR reservoirs, MNEE state,
+    # visibility candidate rays) fit a small GPU and leave headroom for
+    # the driver and the OS compositor. LuxCore's default is 512K.
+    LOW_RESOURCE_TASK_COUNT = 131072
+
+    def _enabled_gpu_devices(self):
+        """Enabled devices matching the GPU backend selected in the
+        addon preferences. Empty when the device list was never scanned
+        or the backend is unsupported."""
+        try:
+            from ..utils import get_addon_preferences
+            backend = get_addon_preferences(bpy.context).gpu_backend
+            wanted = {
+                "OPENCL": "OPENCL_GPU",
+                "CUDA": "CUDA_GPU",
+                "METAL": "METAL_GPU",
+            }.get(backend)
+            if wanted is None:
+                return []
+            # id_data is the owning Scene for a nested PropertyGroup
+            devices = self.id_data.luxcore.devices
+            if len(devices.devices) == 0:
+                # Lazily populate on first use (new scenes have no
+                # load_post pass to initialize the list)
+                devices.update_devices_if_necessary()
+            return [
+                d for d in devices.devices
+                if d.enabled and d.type == wanted
+            ]
+        except Exception:
+            return []
+
+    def effective_device(self):
+        """Resolve AUTO: GPU when an enabled GPU of the selected backend
+        exists, CPU otherwise."""
+        if self.device != "AUTO":
+            return self.device
+        return "OCL" if self._enabled_gpu_devices() else "CPU"
+
+    def low_vram(self):
+        """True when every enabled GPU is below the out-of-core
+        threshold. Empty device list counts as not low-resource."""
+        gpus = self._enabled_gpu_devices()
+        if not gpus:
+            return False
+        try:
+            mems = [
+                # maxmemory is not stored on the device collection; re-read
+                # the descs and match by name
+                self._gpu_max_memory(d)
+                for d in gpus
+            ]
+        except Exception:
+            return False
+        mems = [m for m in mems if m > 0]
+        return bool(mems) and min(mems) < self.LOW_VRAM_BYTES
+
+    def _gpu_max_memory(self, device_entry):
+        try:
+            devices = self.id_data.luxcore.devices
+            props = devices.get_device_props()
+            for prefix in props.GetAllUniqueSubNames("opencl.device"):
+                if (
+                    props.Get(prefix + ".name").GetString()
+                    == device_entry.name
+                    and props.Get(prefix + ".type").GetString()
+                    == device_entry.type
+                ):
+                    # u64 value — GetString avoids int32 truncation
+                    return int(props.Get(prefix + ".maxmemory").GetString())
+        except Exception:
+            pass
+        return 0
+
     def get_sampler(self):
-        return self.sampler_gpu if (self.engine == "PATH" and self.device == "OCL") else self.sampler
+        return self.sampler_gpu if (self.engine == "PATH" and self.effective_device() == "OCL") else self.sampler
 
     # SOBOL properties
     sobol_adaptive_strength: FloatProperty(name="Adaptive Strength", default=0.9, min=0, max=0.95,
@@ -669,7 +764,13 @@ class LuxCoreConfig(PropertyGroup):
                                           "Enabling this option causes the scene to use more CPU RAM")
 
     def using_out_of_core(self):
-        return self.device == "OCL" and self.out_of_core and self.out_of_core_mode == "EVERYTHING"
+        if self.effective_device() != "OCL":
+            return False
+        if self.out_of_core and self.out_of_core_mode == "EVERYTHING":
+            return True
+        # Low-resource auto-detection: small-VRAM GPUs always run
+        # out-of-core so scenes still fit
+        return self.low_vram()
 
     # METROPOLIS properties
     # sampler.metropolis.largesteprate
@@ -686,14 +787,17 @@ class LuxCoreConfig(PropertyGroup):
 
     # Only available when engine is PATH (not BIDIR)
     devices = [
-        ("CPU", "CPU", "CPU only", 0),
+        ("AUTO", "Auto", "Use the GPU(s) when an enabled device of the backend "
+                         "selected in the addon preferences is available, "
+                         "otherwise fall back to the CPU", 0),
+        ("CPU", "CPU", "CPU only", 1),
         # Identifier stays OCL for blend-file compatibility; it means any GPU
         # backend selected in the addon preferences (OpenCL / CUDA / Metal).
         ("OCL", "GPU", "Use GPU(s) and optionally the CPU. The GPU backend (OpenCL/CUDA/Metal) "
                        "is chosen in the addon preferences. "
-                       "You can enable/disable each device in the Devices panel below", 1),
+                       "You can enable/disable each device in the Devices panel below", 2),
     ]
-    device: EnumProperty(name="Device", items=devices, default="CPU")
+    device: EnumProperty(name="Device", items=devices, default="AUTO")
     # A trick so we can show the user that bidir can only be used on the CPU (see UI code)
     bidir_device: EnumProperty(name="Device", items=devices, default="CPU",
                                description="Bidir is only available on CPU. Switch to the Path engine if you want to render on the GPU")
@@ -734,12 +838,13 @@ class LuxCoreConfig(PropertyGroup):
 
     # Light strategy
     light_strategy_items = [
-        ("LOG_POWER", "Log Power", LOG_POWER_DESC, 0),
-        ("POWER", "Power", POWER_DESC, 1),
-        ("UNIFORM", "Uniform", UNIFORM_DESC, 2),
-        ("RESTIR_DI", "ReSTIR DI (reservoir)", RESTIR_DI_DESC, 3),
+        ("AUTO", "Auto", AUTO_LIGHT_STRATEGY_DESC, 0),
+        ("LOG_POWER", "Log Power", LOG_POWER_DESC, 1),
+        ("POWER", "Power", POWER_DESC, 2),
+        ("UNIFORM", "Uniform", UNIFORM_DESC, 3),
+        ("RESTIR_DI", "ReSTIR DI (reservoir)", RESTIR_DI_DESC, 4),
     ]
-    light_strategy: EnumProperty(name="Light Strategy", items=light_strategy_items, default="LOG_POWER",
+    light_strategy: EnumProperty(name="Light Strategy", items=light_strategy_items, default="AUTO",
                                   description="Decides how the lights in the scene are sampled")
 
     # ReSTIR DI options
@@ -751,6 +856,26 @@ class LuxCoreConfig(PropertyGroup):
                                   description="EXPERIMENTAL: share reservoirs with neighboring pixels (GRIS merge). "
                                               "Unbiased, but currently variance-neutral without shift mapping — "
                                               "expect similar noise, not less")
+    restir_visibility_enable: BoolProperty(name="Visibility-Weighted Target", default=False,
+                                  description="Trace each candidate's shadow ray and fold binary visibility "
+                                              "into the reservoir target. Improves light selection on scenes "
+                                              "with heavy occlusion; on mostly-visible scenes the extra binary "
+                                              "term reallocates noise into penumbra edges instead of reducing it")
+
+    # ReSTIR GI (G1+G2 first-bounce reservoir, CPU + pathoclbase GPU)
+    restir_gi_enable: BoolProperty(name="ReSTIR GI", default=False,
+                                  description="EXPERIMENTAL: resample the first-bounce continuation vertex "
+                                              "from a per-pixel reservoir (ReSTIR GI). Helps "
+                                              "indirect-heavy scenes; PATHCPU/PATHOCL/TILEPATHOCL")
+    restir_gi_candidates: IntProperty(name="GI Candidates", default=0, min=0, max=32,
+                                  description="Fresh first-bounce candidates per reservoir "
+                                              "(0 = engine default of 4)")
+    restir_gi_temporal_enable: BoolProperty(name="GI Temporal Reuse", default=True,
+                                  description="Merge the pixel's reservoir across passes with a "
+                                              "Jacobian-corrected reconnection shift")
+    restir_gi_spatial_enable: BoolProperty(name="GI Spatial Reuse", default=True,
+                                  description="Merge up to 2 same-surface-gated neighbour pixels "
+                                              "with reconnection shift + visibility test")
 
     # MNEE (specular chain direct light sampling)
     mnee_enable: BoolProperty(name="MNEE Specular Caustics", default=False,
@@ -807,5 +932,5 @@ class LuxCoreConfig(PropertyGroup):
     image_resize_policy: PointerProperty(type=LuxCoreConfigImageResizePolicy)
 
     def using_only_lighttracing(self):
-        return (self.engine == "PATH" and self.device == "CPU" and self.path.hybridbackforward_enable
+        return (self.engine == "PATH" and self.effective_device() == "CPU" and self.path.hybridbackforward_enable
                 and self.path.hybridbackforward_lightpartition == 100)

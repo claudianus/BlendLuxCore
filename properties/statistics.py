@@ -5,6 +5,7 @@ from ..utils.statistics import (
     Stat,
     bool_to_string,
     clamping_to_string,
+    convergence_to_string,
     get_rays_per_sample,
     get_rounded,
     get_vram_usage,
@@ -30,6 +31,10 @@ class LuxCoreRenderStats:
         self.render_time = Stat("Render Time", categories[-1],
                                 0, smaller_is_better, time_to_string, get_rounded)
         self.samples_eye = Stat("Samples", categories[-1], 0, greater_is_better)
+        # Tiled engines only: -1 renders as "n/a" (see _init_stats and
+        # update_from_luxcore_stats)
+        self.convergence = Stat("Convergence", categories[-1], -1.0,
+                                greater_is_better, convergence_to_string)
         categories.append("Performance")
         self.samples_per_sec = Stat("Samples/Sec", categories[-1],
                                     0, greater_is_better, samples_per_sec_to_string, get_rounded)
@@ -99,6 +104,12 @@ class LuxCoreRenderStats:
     def update_from_luxcore_stats(self, stat_props):
         self.render_time.value = stat_props.Get("stats.renderengine.time").GetFloat()
         self.samples_eye.value = stat_props.Get("stats.renderengine.pass.eye").GetInt()
+        # Engines running a convergence test (TILEPATH*, or any engine with
+        # the noise-threshold halt enabled) report a positive value; the row
+        # stays "n/a" (-1) elsewhere.
+        convergence = stat_props.Get("stats.renderengine.convergence").GetFloat()
+        if convergence > 0 or self.convergence.value >= 0:
+            self.convergence.value = max(convergence, 0.0)
         self.samples_light_tracing.value = stat_props.Get("stats.renderengine.pass.light").GetInt()
         self.samples_per_sec.value = stat_props.Get("stats.renderengine.total.samplesec").GetFloat()
         self.triangle_count.value = stat_props.Get("stats.dataset.trianglecount").GetUnsignedLongLong()

@@ -104,7 +104,13 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
     path_settings = scene.luxcore.config.path
     last_film_refresh = 0
     last_stat_refresh = 0
-    checked_optimal_clamp = path_settings.use_clamping
+    # When auto clamping already applied the suggested value at export,
+    # the running render is clamped: re-measuring a suggestion from a
+    # clamped film would drift, so skip it.
+    checked_optimal_clamp = path_settings.use_clamping or (
+        path_settings.auto_clamping
+        and path_settings.suggested_clamping_value > 0
+    )
     engine_type = session_config.GetProperty("renderengine.type").GetString()
     if engine_type.startswith("TILE"):
         epsilon = 0.1

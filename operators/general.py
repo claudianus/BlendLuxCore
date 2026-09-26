@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import StringProperty, BoolProperty
+from bpy.props import StringProperty, BoolProperty, FloatProperty
 from .utils import init_vol_node_tree, poll_node, use_cycles_settings, use_cycles_material_nodes
 from ..utils.errorlog import LuxCoreErrorLog
 
@@ -113,6 +113,19 @@ class LUXCORE_OT_set_suggested_clamping_value(bpy.types.Operator):
         config.path.use_clamping = True
         config.path.clamping = config.path.suggested_clamping_value
 
+        return {"FINISHED"}
+
+
+class LUXCORE_OT_set_quality_preset(bpy.types.Operator):
+    bl_idname = "luxcore.set_quality_preset"
+    bl_label = "Set Quality Preset"
+    bl_description = "Set the Quick Setup quality slider to a named preset"
+    bl_options = {"INTERNAL"}
+
+    quality: FloatProperty(min=0.0, max=1.0)
+
+    def execute(self, context):
+        context.scene.luxcore.config.simple.quality = self.quality
         return {"FINISHED"}
 
 

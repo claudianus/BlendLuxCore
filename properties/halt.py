@@ -41,14 +41,17 @@ NOISE_THRESH_STEP_DESC = (
 
 # Attached to view layer and scene
 class LuxCoreHaltConditions(bpy.types.PropertyGroup):
-    enable: BoolProperty(name="Enable", default=False)
+    # Enabled by default with a convergence-based stop plus a sample cap:
+    # renders terminate once the image is clean, and pathological scenes
+    # still terminate instead of running forever.
+    enable: BoolProperty(name="Enable", default=True)
 
     use_time: BoolProperty(name="Use Time", default=False)
     time: IntProperty(name="Time (s)", default=600, min=1)
 
     use_samples: BoolProperty(name="Use Samples", default=True,
                                description=USE_SAMPLES_DESC)
-    samples: IntProperty(name="Samples", default=32, min=2, soft_max=16384, 
+    samples: IntProperty(name="Samples", default=1024, min=2, soft_max=16384,
                           description=SAMPLES_DESC)
 
     use_light_samples: BoolProperty(name="Use Light Path Samples", default=False,
@@ -56,8 +59,8 @@ class LuxCoreHaltConditions(bpy.types.PropertyGroup):
     light_samples: IntProperty(name="Light Path Samples", default=100, min=1,
                                 description=LIGHT_PATH_SAMPLES_DESC)
 
-    # Noise threshold
-    use_noise_thresh: BoolProperty(name="Use Noise Threshold", default=False,
+    # Noise threshold (on by default: convergence-based stop)
+    use_noise_thresh: BoolProperty(name="Use Noise Threshold", default=True,
                                     description=USE_NOISE_THRESH_DESC)
     noise_thresh: IntProperty(name="Noise Threshold", default=5, min=0, soft_min=3, max=255,
                                description=NOISE_THRESH_DESC)

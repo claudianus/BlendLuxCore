@@ -21,7 +21,7 @@ def luxcore_render_draw(panel, context):
     if config.engine == "PATH":
         col_device.prop(config, "device", text="Compute device", icon="MEMORY")
 
-        if config.device == "OCL":
+        if config.effective_device() == "OCL":
             gpu_backend = utils.get_addon_preferences(context).gpu_backend
 
             if gpu_backend == "OPENCL" and not utils.luxutils.is_opencl_build():
@@ -127,7 +127,7 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
     def error(self, context):
         use_native_cpu = context.scene.luxcore.devices.use_native_cpu
         config = context.scene.luxcore.config
-        return config.device == "OCL" and not use_native_cpu
+        return config.effective_device() == "OCL" and not use_native_cpu
 
     def draw_header(self, context):
         layout = self.layout
@@ -145,7 +145,7 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
         layout.use_property_decorate = False
         layout.enabled = config.path.hybridbackforward_enable
 
-        if config.device == "CPU":
+        if config.effective_device() == "CPU":
             layout.prop(config.path, "hybridbackforward_lightpartition")
         else:
             layout.prop(config.path, "hybridbackforward_lightpartition_opencl")
@@ -188,6 +188,9 @@ class LUXCORE_RENDER_PT_lightpaths_clamping(RenderButtonsPanel, Panel):
         layout.active = config.path.use_clamping
         layout.prop(config.path, "clamping")
 
+        if not config.path.use_clamping:
+            layout.prop(config.path, "auto_clamping")
+
         if config.path.suggested_clamping_value == -1:
             # Optimal clamp value not yet found, need to start a render first
             if config.path.use_clamping:
@@ -203,6 +206,12 @@ class LUXCORE_RENDER_PT_lightpaths_clamping(RenderButtonsPanel, Panel):
                 )
         else:
             # Show a button that can be used to set the optimal clamp value
+            if config.path.auto_clamping and not config.path.use_clamping:
+                layout.label(
+                    text="Auto-clamping at %g"
+                    % config.path.suggested_clamping_value,
+                    icon=icons.INFO,
+                )
             op_text = (
                 "Set Suggested Value: %f"
                 % config.path.suggested_clamping_value

@@ -202,6 +202,40 @@ gradients on CPU and Metal/OpenCL.
 
 - Corona-style **Quick Setup**: a quality slider + denoise toggle; caustics
   auto-enabled when the scene has glass; progressive caustics refinement.
+- **Automatic light strategy** (`light_strategy = "AUTO"`, the default):
+  counts scene emitters — light objects, the world background, and
+  emissive meshes weighted by polygon count — and picks ReSTIR DI above
+  `AUTO_LIGHT_STRATEGY_EMITTER_THRESHOLD` (16) on engines that support it,
+  log-power sampling otherwise. Explicit strategy choices always win.
+- **Auto clamp**: once an unclamped render has produced a suggested clamp
+  value, subsequent renders apply it automatically. Manual "Clamp Output"
+  takes precedence.
+- **Auto device selection** (`config.device = "AUTO"`, the default): uses
+  the GPU(s) when an enabled device of the backend selected in the addon
+  preferences exists, falls back to CPU otherwise. Enabled GPUs below
+  4 GiB automatically run out-of-core so large scenes still fit, and get
+  a capped wavefront task count (`opencl.task.count = 131072` vs the
+  512K default) so the per-task buffers fit and leave headroom for the
+  driver/compositor.
+- **Quality presets**: Draft / Standard / Final buttons on top of the
+  Quick Setup quality slider.
+- **ReSTIR DI visibility weighting** (`restir_visibility_enable`): exposes
+  LuxCore's `lightstrategy.restir.visibility.enable` — candidates' shadow
+  rays steer the reservoir target. Opt-in; honest description in the
+  tooltip (it can reallocate noise into penumbra edges on mostly-visible
+  scenes instead of reducing it).
+- **ReSTIR GI** (`restir_gi_enable`): exposes LuxCore's
+  `path.restir.gi.enable` (first-bounce reservoir, temporal + gated
+  spatial reuse). Runs on PATHCPU and the pathoclbase GPU engines
+  (PATHOCL/TILEPATHOCL); the export is gated so RTPATHOCL/BIDIR* never
+  see a silent no-op. Experimental, opt-in.
+- **Convergence stat**: the render statistics panel shows the converged-
+  pixel percentage whenever a convergence test runs — always on tiled
+  engines, and on PATH*/PATHOCL when the noise-threshold halt condition is
+  enabled (`batch.haltthreshold`/`batch.haltnoisethreshold`). "n/a" only
+  when no convergence test is configured.
+- Production defaults on new scenes: denoiser enabled, halt conditions
+  enabled with a convergence stop (noise threshold) plus a 1024-spp cap.
 - Viewport: black-flash and UI-freeze fixes; engine-teardown hardening; an
   error-log file for fatal errors.
 - Backend options: **Metal GPU** (Apple silicon) and a **spectral render**

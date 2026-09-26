@@ -80,6 +80,7 @@ classes = (
     general.LUXCORE_OT_switch_space_data_context,
     general.LUXCORE_OT_switch_to_camera_settings,
     general.LUXCORE_OT_set_suggested_clamping_value,
+    general.LUXCORE_OT_set_quality_preset,
     general.LUXCORE_OT_update_opencl_devices,
     general.LUXCORE_OT_add_node,
     general.LUXCORE_OT_attach_sun_to_sky,

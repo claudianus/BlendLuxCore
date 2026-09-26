@@ -57,7 +57,7 @@ class LUXCORE_RENDER_PT_sampling(RenderButtonsPanel, Panel):
             # Not tiled, regular sampling
             row = layout.row()
             
-            if config.device == "OCL" and config.engine == "PATH":
+            if config.effective_device() == "OCL" and config.engine == "PATH":
                 row.prop(config, "sampler_gpu")
             else:
                 row.prop(config, "sampler")
@@ -67,7 +67,7 @@ class LUXCORE_RENDER_PT_sampling(RenderButtonsPanel, Panel):
                 col.active = not config.using_out_of_core()
                 col.prop(config, "sampler_pattern")
                 
-                if config.device == "OCL":
+                if config.effective_device() == "OCL":
                     col = layout.column()
                     col.prop(config, "out_of_core")
                     if config.out_of_core:
@@ -229,7 +229,14 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
         if config.light_strategy == "RESTIR_DI":
             col.prop(config, "restir_temporal_enable")
             col.prop(config, "restir_spatial_enable")
+            col.prop(config, "restir_visibility_enable")
             col.prop(config, "restir_candidates")
+
+        col.prop(config, "restir_gi_enable")
+        if config.restir_gi_enable:
+            col.prop(config, "restir_gi_temporal_enable")
+            col.prop(config, "restir_gi_spatial_enable")
+            col.prop(config, "restir_gi_candidates")
 
         col.prop(config, "mnee_enable")
         if config.mnee_enable:

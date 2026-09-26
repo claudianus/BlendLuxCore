@@ -29,7 +29,7 @@ MAX_MEMORY_DESC = (
 class LuxCoreDenoiser(PropertyGroup):
     refresh = False
 
-    enabled: BoolProperty(name="", default=False, description="Enable/disable denoiser")
+    enabled: BoolProperty(name="", default=True, description="Enable/disable denoiser")
     type_items = [
         ("BCD", "Bayesian Collaborative Denoiser", "", 0),
         ("OIDN", "Intel Open Image Denoiser", "", 1),

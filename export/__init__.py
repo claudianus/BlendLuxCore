@@ -1582,6 +1582,17 @@ class Exporter(object):
     def _init_stats(self, stats, config_props, scene):
         render_engine = config_props.Get("renderengine.type").GetString()
         stats.render_engine.value = utils_render.engine_to_str(render_engine)
+        # Tiled engines always run a convergence test. On PATH/PATHOCL the
+        # film-level test (batch.haltnoisethreshold, exported via the legacy
+        # batch.haltthreshold alias) is opt-in through the noise-threshold
+        # halt condition; -1 renders as "n/a" and is never overwritten by
+        # update_from_luxcore_stats.
+        has_noise_test = (
+            "TILE" in render_engine
+            or config_props.Get("batch.haltnoisethreshold", [-1]).GetFloat() > 0
+            or config_props.Get("batch.haltthreshold", [-1]).GetFloat() > 0
+        )
+        stats.convergence.value = 0.0 if has_noise_test else -1.0
         sampler = config_props.Get("sampler.type").GetString()
         stats.sampler.value = utils_render.sampler_to_str(sampler)
 
