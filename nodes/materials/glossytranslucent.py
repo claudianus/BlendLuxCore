@@ -1,9 +1,19 @@
 import bpy
-from bpy.props import BoolProperty
+from bpy.props import BoolProperty, EnumProperty
 from ..base import LuxCoreNodeMaterial
 from ...utils import node as utils_node
 from ...utils.node import Roughness
 
+
+DISTRIBUTION_ITEMS = [
+    ("schlick", "Schlick", "Legacy Schlick microfacet distribution (compatible)", 0),
+    ("ggx", "GGX", "Modern GGX distribution with VNDF sampling (opt-in)", 1),
+]
+DISTRIBUTION_DESCRIPTION = (
+    "Microfacet distribution used for the glossy coating. "
+    "Schlick is the legacy default; GGX uses VNDF sampling and matches "
+    "modern PBR shading models"
+)
 
 IOR_DESCRIPTION = (
     "Specify index of refraction to control reflection brightness, instead of using the specular color. "
@@ -79,6 +89,12 @@ class LuxCoreNodeMatGlossyTranslucent(LuxCoreNodeMaterial, bpy.types.Node):
                               update=update_use_ior_bf,
                               description=IOR_DESCRIPTION + " (backface)")
 
+    distribution: EnumProperty(name="Distribution",
+                               items=DISTRIBUTION_ITEMS,
+                               default="schlick",
+                               description=DISTRIBUTION_DESCRIPTION,
+                               update=utils_node.force_viewport_update)
+
     def init(self, context):
         default_roughness = 0.05
 
@@ -107,6 +123,7 @@ class LuxCoreNodeMatGlossyTranslucent(LuxCoreNodeMaterial, bpy.types.Node):
         self.outputs.new("LuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
+        layout.prop(self, "distribution")
         layout.prop(self, "multibounce")
         layout.prop(self, "use_ior")
         Roughness.draw(self, context, layout)
@@ -132,6 +149,7 @@ class LuxCoreNodeMatGlossyTranslucent(LuxCoreNodeMaterial, bpy.types.Node):
             "ka_bf": self.inputs["Absorption Color"].export(exporter, depsgraph, props),
             "d": self.inputs["Absorption Depth (nm)"].export(exporter, depsgraph, props),
             "d_bf": self.inputs["Absorption Depth (nm)"].export(exporter, depsgraph, props),
+            "distribution": self.distribution,
         }
 
         if self.use_ior:

@@ -167,4 +167,5 @@ def main():
     print("[MemTest] Saved:", OUT)
 
 
-main()
+if __name__ == "__main__":
+    main()

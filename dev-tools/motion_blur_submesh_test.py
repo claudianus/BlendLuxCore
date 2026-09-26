@@ -150,4 +150,5 @@ def main():
     print("[MBTest] Saved:", OUT)
 
 
-main()
+if __name__ == "__main__":
+    main()

@@ -60,3 +60,63 @@ class LUXCORE_RENDER_PT_filesaver(RenderButtonsPanel, Panel):
         col = layout.column(align=True)
         col.prop(config, "filesaver_format")
         col.prop(config, "filesaver_path")
+
+
+class LUXCORE_RENDER_PT_external(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"LUXCORE"}
+    bl_label = "External Process Render"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_parent_id = "LUXCORE_RENDER_PT_tools"
+
+    def draw_header(self, context):
+        layout = self.layout
+        config = context.scene.luxcore.config
+        layout.prop(config, "external_process", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        config = context.scene.luxcore.config
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        layout.enabled = config.external_process
+
+        layout.label(
+            text="Renders in a detached process; Blender's scene", icon=icons.INFO
+        )
+        layout.label(text="memory is released while rendering.")
+        layout.label(text="Result lands in the render output path.")
+
+        if not context.scene.luxcore.halt.enable:
+            layout.label(
+                text="No halt condition set — render runs until the",
+                icon=icons.ERROR,
+            )
+            layout.label(text="process is killed manually.")
+
+
+class LUXCORE_RENDER_PT_geospill(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"LUXCORE"}
+    bl_label = "Out-of-Core Spilling"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_parent_id = "LUXCORE_RENDER_PT_tools"
+
+    def draw_header(self, context):
+        layout = self.layout
+        config = context.scene.luxcore.config
+        layout.prop(config, "spill_geometry", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        config = context.scene.luxcore.config
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        layout.enabled = config.spill_geometry
+
+        layout.label(
+            text="Mesh buffers are file-backed; the OS evicts cold", icon=icons.INFO
+        )
+        layout.label(text="pages under memory pressure.")
+        layout.prop(config, "spill_geometry_minmb")
+        layout.prop(config, "spill_images")

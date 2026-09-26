@@ -637,6 +637,19 @@ class Exporter(object):
         # World (converted above the persistent-scene decision)
         scene_props.Set(world_props)
 
+        # Out-of-core geometry spilling (LuxCore scene.spill.*): mesh
+        # buffers over the threshold are file-backed before the BVH is
+        # built, so the kernel can evict cold pages under pressure.
+        if scene.luxcore.config.spill_geometry:
+            scene_props.Set(pyluxcore.Property("scene.spill.enable", True))
+            scene_props.Set(pyluxcore.Property(
+                "scene.spill.minbytes",
+                scene.luxcore.config.spill_geometry_minmb * 1024 * 1024,
+            ))
+            scene_props.Set(pyluxcore.Property(
+                "scene.spill.images", scene.luxcore.config.spill_images
+            ))
+
         if (
             scene.luxcore.debug.enabled
             and scene.luxcore.debug.print_properties

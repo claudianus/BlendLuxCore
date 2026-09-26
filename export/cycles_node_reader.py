@@ -1339,6 +1339,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             "fresnel": tex_name,
             "uroughness": roughness,
             "vroughness": roughness,
+            # Cycles Glossy BSDF is GGX-based
+            "distribution": "ggx",
             "bumptex": _socket(node.inputs["Normal"], props, material, obj_name, group_node_stack),
         }
     elif node.bl_idname == "ShaderNodeTexImage":
@@ -1436,6 +1438,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             "fresnel": tex_name,
             "uroughness": roughness,
             "vroughness": 0.05,
+            # Cycles Anisotropic BSDF is GGX-based
+            "distribution": "ggx",
             "bumptex": _socket(node.inputs["Normal"], props, material, obj_name, group_node_stack),
         }
     elif node.bl_idname == "ShaderNodeBsdfMetallic":
@@ -1498,6 +1502,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         definitions["uroughness"] = roughness
         definitions["vroughness"] = vroughness
+        # Blender's Metallic node is GGX-based
+        definitions["distribution"] = "ggx"
         if node.inputs.get("Rotation") is not None and \
                 (node.inputs["Rotation"].is_linked or
                  node.inputs["Rotation"].default_value != 0.0):
@@ -3575,6 +3581,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if roughness != 0:
             definitions["uroughness"] = roughness
             definitions["vroughness"] = roughness
+            # Eevee specular is GGX-based; match the distribution
+            definitions["distribution"] = "ggx"
     elif node.bl_idname == "ShaderNodePointInfo":
         prefix = "scene.textures."
         if output_socket.name == "Position":

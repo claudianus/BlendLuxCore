@@ -1,8 +1,9 @@
 import bpy
-from bpy.props import BoolProperty
+from bpy.props import BoolProperty, EnumProperty
 from ..base import LuxCoreNodeMaterial
 from ...utils import node as utils_node
-from .glossytranslucent import IOR_DESCRIPTION
+from .glossytranslucent import (IOR_DESCRIPTION,
+                              DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION)
 from ... import icons
 from ...utils.node import Roughness
 
@@ -28,6 +29,11 @@ class LuxCoreNodeMatGlossyCoating(LuxCoreNodeMaterial, bpy.types.Node):
                                   default=False,
                                   description=Roughness.aniso_desc,
                                   update=Roughness.update_anisotropy)
+    distribution: EnumProperty(name="Distribution",
+                               items=DISTRIBUTION_ITEMS,
+                               default="schlick",
+                               description=DISTRIBUTION_DESCRIPTION,
+                               update=utils_node.force_viewport_update)
 
     def init(self, context):
         self.add_input("LuxCoreSocketMaterial", "Base Material")
@@ -43,6 +49,7 @@ class LuxCoreNodeMatGlossyCoating(LuxCoreNodeMaterial, bpy.types.Node):
         self.outputs.new("LuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
+        layout.prop(self, "distribution")
         layout.prop(self, "multibounce")
         layout.prop(self, "use_ior")
         Roughness.draw(self, context, layout)
@@ -59,6 +66,7 @@ class LuxCoreNodeMatGlossyCoating(LuxCoreNodeMaterial, bpy.types.Node):
             "ka": self.inputs["Absorption Color"].export(exporter, depsgraph, props),
             "d": self.inputs["Absorption Depth (nm)"].export(exporter, depsgraph, props),
             "multibounce": self.multibounce,
+            "distribution": self.distribution,
         }
 
         if self.use_ior:

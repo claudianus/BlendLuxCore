@@ -2,6 +2,7 @@ import bpy
 from bpy.props import FloatProperty, EnumProperty
 from ..base import LuxCoreNodeMaterial
 from ..sockets import LuxCoreSocketFloat
+from .glossytranslucent import DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION
 from ... import icons
 from ...utils import node as utils_node
 
@@ -50,6 +51,11 @@ class LuxCoreNodeMatCarpaint(LuxCoreNodeMaterial, bpy.types.Node):
         ("white", "White", "", 8),
     ]
     preset: EnumProperty(name="Preset", items=preset_items, default="manual", update=update_preset)
+    distribution: EnumProperty(name="Distribution",
+                               items=DISTRIBUTION_ITEMS,
+                               default="schlick",
+                               description=DISTRIBUTION_DESCRIPTION,
+                               update=utils_node.force_viewport_update)
 
     def init(self, context):
         self.add_input("LuxCoreSocketColor", "Diffuse Color", (0.3, 0.3, 0.3))
@@ -72,6 +78,7 @@ class LuxCoreNodeMatCarpaint(LuxCoreNodeMaterial, bpy.types.Node):
         op = layout.operator("luxcore.open_website", text="Open Wiki Page", icon=icons.URL)
         op.url = "https://wiki.luxcorerender.org/LuxCoreRender_Materials_Car_Paint"
         layout.prop(self, "preset")
+        layout.prop(self, "distribution")
 
     def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
         if self.preset != "manual":
@@ -79,7 +86,8 @@ class LuxCoreNodeMatCarpaint(LuxCoreNodeMaterial, bpy.types.Node):
                 "type": "carpaint",
                 "preset": self.preset.replace("_", " "),
                 "ka": self.inputs["Absorption Color"].export(exporter, depsgraph, props),
-                "d": self.inputs["Absorption Depth (nm)"].export(exporter, depsgraph, props)
+                "d": self.inputs["Absorption Depth (nm)"].export(exporter, depsgraph, props),
+                "distribution": self.distribution,
             }
         else:
             definitions = {
@@ -96,6 +104,7 @@ class LuxCoreNodeMatCarpaint(LuxCoreNodeMaterial, bpy.types.Node):
                 "r1": self.inputs["R1"].export(exporter, depsgraph, props),
                 "r2": self.inputs["R2"].export(exporter, depsgraph, props),
                 "r3": self.inputs["R3"].export(exporter, depsgraph, props),
+                "distribution": self.distribution,
             }
 
         self.export_common_inputs(exporter, depsgraph, props, definitions)

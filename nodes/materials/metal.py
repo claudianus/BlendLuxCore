@@ -4,6 +4,7 @@ from ..base import LuxCoreNodeMaterial
 from ... import utils
 from ...utils import node as utils_node
 from ...utils.node import Roughness
+from .glossy2 import DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION
 
 class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
     """metal material node"""
@@ -43,6 +44,11 @@ class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
                                   default=False,
                                   description=Roughness.aniso_desc,
                                   update=Roughness.update_anisotropy)
+    distribution: EnumProperty(name="Distribution",
+                               items=DISTRIBUTION_ITEMS,
+                               default="schlick",
+                               description=DISTRIBUTION_DESCRIPTION,
+                               update=utils_node.force_viewport_update)
 
     def init(self, context):
         self.add_input("LuxCoreSocketColor", "Color", (0.7, 0.7, 0.7))
@@ -56,11 +62,13 @@ class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "input_type", expand=True)
+        layout.prop(self, "distribution")
         Roughness.draw(self, context, layout)
 
     def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
         definitions = {
             "type": "metal2",
+            "distribution": self.distribution,
         }
 
         if self.input_type == "fresnel":

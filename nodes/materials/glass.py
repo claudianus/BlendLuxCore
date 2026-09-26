@@ -1,11 +1,12 @@
 import bpy
-from bpy.props import FloatProperty, BoolProperty
+from bpy.props import FloatProperty, BoolProperty, EnumProperty
 from ..base import LuxCoreNodeMaterial
 from ..sockets import LuxCoreSocketFloat
 from ...utils.node import get_active_output
 from ... import icons
 from ...utils import node as utils_node
 from ...utils.node import Roughness, ThinFilmCoating
+from .glossy2 import DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION
 
 CAUCHYB_DESCRIPTION = (
     "Dispersion strength (cauchy B coefficient)\n"
@@ -69,6 +70,11 @@ class LuxCoreNodeMatGlass(LuxCoreNodeMaterial, bpy.types.Node):
     use_thinfilmcoating: BoolProperty(name="Thin Film Coating", default=False,
                                       description=THIN_FILM_DESCRIPTION,
                                       update=ThinFilmCoating.toggle)
+    distribution: EnumProperty(name="Distribution",
+                               items=DISTRIBUTION_ITEMS,
+                               default="schlick",
+                               description=DISTRIBUTION_DESCRIPTION,
+                               update=utils_node.force_viewport_update)
 
     def init(self, context):
         self.add_input("LuxCoreSocketColor", "Transmission Color", (1, 1, 1))
@@ -91,6 +97,7 @@ class LuxCoreNodeMatGlass(LuxCoreNodeMaterial, bpy.types.Node):
         column.prop(self, "rough")
 
         if self.rough:
+            layout.prop(self, "distribution")
             Roughness.draw(self, context, layout)
 
         # Rough glass cannot be archglass
@@ -129,6 +136,7 @@ class LuxCoreNodeMatGlass(LuxCoreNodeMaterial, bpy.types.Node):
             ThinFilmCoating.export(self, exporter, depsgraph, props, definitions)
 
         if self.rough:
+            definitions["distribution"] = self.distribution
             Roughness.export(self, exporter, depsgraph, props, definitions)
         self.export_common_inputs(exporter, depsgraph, props, definitions)
 

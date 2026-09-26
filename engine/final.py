@@ -7,6 +7,7 @@ import bpy
 from .. import export, utils, draw, properties
 from ..draw.final import FrameBufferFinal
 from ..utils import render as utils_render
+from ..utils import external_render
 from ..utils.errorlog import LuxCoreErrorLog
 from ..utils import view_layer as utils_view_layer
 from ..properties.denoiser import LuxCoreDenoiser
@@ -67,8 +68,30 @@ def render(engine, depsgraph):
 def _render_layer(engine, depsgraph, statistics, view_layer):
     engine.reset()
     engine.exporter = export.Exporter(statistics)
-    engine.session = engine.exporter.create_session(depsgraph, engine=engine, view_layer=view_layer)
     scene = depsgraph.scene_eval
+
+    if scene.luxcore.config.external_process and not engine.is_preview:
+        # Serialize the scene and hand it to a detached render process;
+        # returning from render() releases the depsgraph and all
+        # evaluated Blender-side scene memory.
+        result = engine.exporter.export_scene(
+            depsgraph, None, engine, view_layer
+        )
+        if result is None:
+            return
+        luxcore_scene, config_props = result
+        if not scene.luxcore.halt.enable:
+            print(
+                "[BLC] WARNING: no halt condition set — the external "
+                "render runs until the process is killed"
+            )
+        external_render.run(config_props, luxcore_scene, scene)
+        # Drop the exporter (its caches still hold the exported numpy
+        # arrays); returning releases the depsgraph too.
+        engine.exporter = None
+        return
+
+    engine.session = engine.exporter.create_session(depsgraph, engine=engine, view_layer=view_layer)
 
     if engine.session is None:
         # session is None, but no error was thrown
