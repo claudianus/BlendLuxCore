@@ -87,6 +87,29 @@ def _read_pointcloud_data(obj):
     return positions, radii
 
 
+def _point_matrices(positions, radii, matrix_world):
+    """World-space 4x4 matrix per point: Translation(p) @ Scale(r)."""
+    count = len(positions)
+    inner = np.zeros((count, 4, 4), dtype=np.float32)
+    inner[:, 0, 0] = radii
+    inner[:, 1, 1] = radii
+    inner[:, 2, 2] = radii
+    inner[:, 0, 3] = positions[:, 0]
+    inner[:, 1, 3] = positions[:, 1]
+    inner[:, 2, 3] = positions[:, 2]
+    inner[:, 3, 3] = 1.0
+    mw = np.asarray(matrix_world, dtype=np.float32)
+    return np.matmul(mw, inner)
+
+
+def _point_matrices_flat(positions, radii, matrix_world):
+    """_point_matrices() flattened the way LuxCore wants (transposed)."""
+    mats = _point_matrices(positions, radii, matrix_world)
+    return np.ascontiguousarray(
+        mats.transpose(0, 2, 1).reshape(-1), dtype=np.float32
+    )
+
+
 def convert_pointcloud_obj(
     exporter,
     dg_obj_instance,
@@ -121,21 +144,12 @@ def convert_pointcloud_obj(
         )
 
     matrix_world = dg_obj_instance.matrix_world.copy()
-    mw = np.asarray(matrix_world, dtype=np.float32)
-
-    # Per-point local matrix: Translation(p) @ Scale(r)
-    inner = np.zeros((count, 4, 4), dtype=np.float32)
-    inner[:, 0, 0] = radii
-    inner[:, 1, 1] = radii
-    inner[:, 2, 2] = radii
-    inner[:, 0, 3] = positions[:, 0]
-    inner[:, 1, 3] = positions[:, 1]
-    inner[:, 2, 3] = positions[:, 2]
-    inner[:, 3, 3] = 1.0
 
     # World-space point matrices; LuxCore wants them transposed + flattened
-    mats = np.matmul(mw, inner)
-    mats_flat = np.ascontiguousarray(mats.transpose(0, 2, 1).reshape(-1), dtype=np.float32)
+    mats = _point_matrices(positions, radii, matrix_world)
+    mats_flat = np.ascontiguousarray(
+        mats.transpose(0, 2, 1).reshape(-1), dtype=np.float32
+    )
 
     # Shared icosphere mesh (one per scene)
     mesh_name = "BLC_PointCloudSphere"
@@ -182,6 +196,10 @@ def convert_pointcloud_obj(
         visible_to_cam,
         obj_id,
     )
+    # Point-transform motion blur (A5 follow-up): motion_blur.convert()
+    # re-evaluates the point data at every shutter step and rebuilds
+    # per-point matrices on this record.
+    exported.is_pointcloud = True
     part = exported.parts[0]
 
     if count > 1:
@@ -194,7 +212,7 @@ def convert_pointcloud_obj(
 
         exported.duplicate_count = count - 1
         pending_duplicates.append(
-            (part.lux_obj, mats_flat[16:], count - 1, dup_ids)
+            (part.lux_obj, mats_flat[16:], count - 1, dup_ids, obj_key)
         )
 
     return exported

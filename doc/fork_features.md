@@ -70,6 +70,99 @@ gradients on CPU and Metal/OpenCL.
   depsgraph Geometry-Nodes realized output is covered automatically.
 - Blender 5.2 export bugs fixed (instancing visibility, hair curves, CURVE
   type, removed APIs).
+- **Dupli/particle transform motion blur** (A5): when camera motion blur
+  is enabled with object blur, dupli/particle instances export per-instance
+  transform time series through `Scene.DuplicateObject`'s motion-multi
+  overload — instances blur instead of rendering static. Opt-in is
+  `enable_motion_blur` on the instanced object OR its instancer (emitter);
+  either flag blurs all copies including the first instance. Matched
+  across shutter steps by `(instancer, persistent_id)`; steps where an
+  instance has no evaluated transform (particle born/died mid-shutter)
+  reuse its center-frame matrix, and a dupli object whose ids collide
+  falls back to static duplication. Transform interpolation only —
+  vertex-level deformation blur is not supported by the engine.
+- **Point-cloud motion blur** (A5 follow-up): POINTCLOUD objects with
+  `enable_motion_blur` re-evaluate point positions/radii at every shutter
+  step and export per-point transform time series — point 0 rides the
+  base object's motion properties, the remaining points go through the
+  same motion-multi duplication path as duplis. If the point count
+  differs at any step (topology change) the whole cloud falls back to
+  static, base object included.
+  Per-stage export timings (export time breakdown + instance/object
+  counts) are exposed in render stats.
+- **Persistent scene reuse** (A6-II, `export/caches/persistent_scene.py`):
+  final renders of the same scene + view layer reuse the previous
+  `pyluxcore.Scene` instead of re-exporting every object. A
+  `depsgraph_update_post` handler accumulates dirty datablock ids
+  (keyed on `.original` pointers — `DepsgraphUpdate.id` is evaluated);
+  an empty/ignorable dirty set reuses the scene wholesale, a
+  transform-only update on a delta-safe object applies
+  `Scene.UpdateObjectTransformation` (absolute for instanced exports,
+  `new @ old.inverted()` for world-baked geometry); object-data dirt
+  resolves to per-object geometry deltas (in-place `DefineMesh` for
+  eligible meshes, delete + re-export otherwise), and anything else —
+  datablock dirt, membership changes, instancer source-set changes,
+  object motion blur on instancer deltas, camera/world signature
+  changes — falls back to a full export and re-caches.
+  Frame changes are covered separately: `frame_set()` leaves no
+  depsgraph updates, so per-member transform snapshots plus animation
+  classification decide between transform delta, geometry re-export
+  (deforming meshes, moved lights) and rebuild, and animated materials
+  mark the scene for an in-place material refresh.
+  **Material deltas** (A6-III): a dirty `Material` datablock re-exports
+  all member materials into the cached scene via `Scene.Parse`
+  re-definition (a first-class engine operation, including light-source
+  re-wiring). Shading echoes on objects/meshes/node trees only ever
+  ride along with a real `Material` update — an echo without one
+  (e.g. a world node tree) rebuilds — and material identity
+  (`mat_sig`, renames) plus slot topology (`slot_sig`) signatures keep
+  renames and binding edits on the rebuild path. A `shape_sig`
+  signature replays the wrapper-shape chain (`define_shapes`/
+  `_apply_cycles_displacement`) so material edits that add or remove
+  `scene.shapes.*` wrappers (e.g. a displacement link) rebuild instead
+  of going stale.
+  **Mesh geometry deltas**: a dirty `Mesh` datablock or
+  geometry-flagged object re-`DefineMesh`es its named shapes in place —
+  the engine rewires every referencing scene object and triangle light
+  itself. Eligibility is re-verified at apply time (MESH type,
+  delta-safe, no wrapper shapes on the shared mesh, unchanged
+  instancing decision, identical submesh set) and any failure falls
+  back to a full export.
+  **Non-mesh geometry deltas** (delete + re-export): member objects
+  whose dirty data cannot be patched in place — hair curves, volumes,
+  pointclouds, legacy curves, shifted submesh sets, wrapped meshes —
+  are deleted from the cached scene and re-exported through the normal
+  conversion path (`Scene.Parse` re-definition); the same path carries
+  moved lights and other non-delta-safe members on frame changes, so
+  animation frames delta instead of rebuild. Dirty object-data
+  datablocks resolve to members through a `data_ptrs` map.
+  **Instancer-set refresh**: a moved or geometry-dirty dupli emitter /
+  particle instancer re-flushes the `src+dupli` objects of every
+  source it instances — the base object takes the first instance
+  matrix via `UpdateObjectTransformation`, the `dupli` object is
+  deleted and re-`DuplicateObject`ed with the remaining matrices and
+  object ids. Moved dupli sources re-flush their parent instancers
+  through a reverse `instancer_srcs` map, dirty `ParticleSettings`
+  re-flush their emitters via `psys_map`, and a dupli-source mesh
+  edit re-`DefineMesh`es the compound-key `_instance` mesh in place
+  (the engine rewires the dupli base plus all duplicates). Sources
+  that only exist as instanced exports — e.g. VERTS-dupli children —
+  are resolved through `Object.evaluated_get` because render-mode
+  `depsgraph.objects` omits them. Source-set changes (added/dropped
+  sources), emptied dupli sets, per-instance ("singular") instancer
+  exports and object motion blur fall back to a full rebuild.
+  Design + rationale: `doc/incremental_export_design.md`.
+  Regression: `dev-tools/a6_persistent_scene_test.py` (headless;
+  covers reuse, transform/material/geometry deltas, curve/light/
+  hair-curves re-export deltas, deforming-mesh frame deltas,
+  instancer re-flush and dupli-source in-place redefines,
+  signature-driven rebuilds (visibility, camera, world, material
+  rename, slot topology, shape stack), animated transforms and
+  animated materials, with image-diff assertions).
+  Benchmark: `dev-tools/a6_benchmark.py` — on a 1202-object ~2M-tri
+  scene, reuse/transform/geometry deltas run at ~20% and material
+  deltas at ~30% of full-export time (measured on export-stage
+  timings, not render wall time).
 
 ## UX — Quick Setup + viewport stability
 

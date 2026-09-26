@@ -1,12 +1,17 @@
 import math
+from array import array
+import mathutils
+import numpy as np
 import pyluxcore
 from .. import utils
 from .caches.exported_data import ExportedObject, ExportedLight
+from .caches.object_cache import _instance_key, _dupli_motion_enabled
+from .pointcloud import _read_pointcloud_data, _point_matrices
 
 
 # TODO fix motion blur of area lights, they get a wrong transformation
 
-def convert(context, engine, scene, depsgraph, exported_objects):
+def convert(context, engine, scene, depsgraph, exported_objects, instances=None):
     assert scene.camera
     motion_blur = scene.camera.data.luxcore.motion_blur
     assert motion_blur.enable and (motion_blur.object_blur or motion_blur.camera_blur)
@@ -15,7 +20,19 @@ def convert(context, engine, scene, depsgraph, exported_objects):
     assert steps >= 2 and isinstance(steps, int)
 
     frame_offsets = _calc_frame_offsets(motion_blur.shutter, steps)
-    matrices = _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph, exported_objects)
+    # Per-step {instance_key: matrix_world} maps for dupli motion blur (A5).
+    # Collected during the same frame stepping loop that samples object
+    # matrices, so no extra depsgraph evaluations are needed.
+    dupli_steps = (
+        [dict() for _ in range(steps)] if instances is not None else None
+    )
+    matrices = _get_matrices(context, engine, scene, steps, frame_offsets,
+                             depsgraph, exported_objects, instances, dupli_steps)
+
+    if dupli_steps is not None:
+        _build_dupli_motion(instances, dupli_steps, frame_offsets, steps)
+
+    _build_pointcloud_motion(exported_objects, matrices, frame_offsets, steps)
 
     # Find and delete entries of non-moving objects (where all matrices are equal)
     for prefix, matrix_steps in list(matrices.items()):
@@ -50,7 +67,8 @@ def _calc_frame_offsets(shutter, steps):
     return [step_interval * step - shutter / 2 for step in range(steps)]
 
 
-def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph, exported_objects):
+def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
+                  exported_objects, instances=None, dupli_steps=None):
     motion_blur = scene.camera.data.luxcore.motion_blur
     matrices = {}  # {prefix: [matrix1, matrix2, ...]}
 
@@ -70,7 +88,10 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph, expor
         except Exception:
             pass
         if motion_blur.object_blur:
-            _append_object_matrices(depsgraph, exported_objects, matrices, step)
+            _append_object_matrices(
+                depsgraph, exported_objects, matrices, step,
+                instances, dupli_steps,
+            )
 
         if motion_blur.camera_blur and not context:
             # Evaluated camera, not the original: original matrix_world
@@ -87,10 +108,32 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph, expor
     return matrices
 
 
-def _append_object_matrices(depsgraph, exported_objects, matrices, step):
+def _append_object_matrices(depsgraph, exported_objects, matrices, step,
+                            instances=None, dupli_steps=None):
     for dg_obj_instance in depsgraph.object_instances:
         obj = dg_obj_instance.parent if dg_obj_instance.is_instance else dg_obj_instance.object
-        if not obj.luxcore.enable_motion_blur:
+        # A5: opt-in is enable_motion_blur on the instanced object OR the
+        # instancer — same rule as Duplis key allocation in first_run.
+        dupli_mb = (
+            dg_obj_instance.is_instance
+            and _dupli_motion_enabled(dg_obj_instance)
+        )
+
+        # Dupli/particle transform motion blur (A5): record this instance's
+        # matrix under its stable key when its source object opted in.
+        if dupli_steps is not None and dupli_mb:
+            duplis = instances.get(
+                dg_obj_instance.object.original.as_pointer()
+            )
+            if duplis is not None and duplis.keys is not None:
+                dupli_steps[step][_instance_key(dg_obj_instance)] = (
+                    dg_obj_instance.matrix_world.copy()
+                )
+
+        # The first dupli instance exists as a real scene object and is
+        # covered by the object-level motion props below — extend the gate
+        # with the A5 rule so flagging the instanced object blurs it too.
+        if not (obj.luxcore.enable_motion_blur or dupli_mb):
             continue
 
         obj_key = utils.make_key_from_instance(dg_obj_instance)
@@ -99,6 +142,10 @@ def _append_object_matrices(depsgraph, exported_objects, matrices, step):
         try:
             exported_thing = exported_objects[obj_key]
             if isinstance(exported_thing, ExportedObject):
+                if exported_thing.is_pointcloud:
+                    matrix = _collect_pointcloud_step(
+                        exported_thing, dg_obj_instance, step
+                    )
                 for part in exported_thing.parts:
                     prefix = "scene.objects." + part.lux_obj + "."
                     _append_matrix(matrices, prefix, matrix, step)
@@ -112,8 +159,139 @@ def _append_object_matrices(depsgraph, exported_objects, matrices, step):
             pass
 
 
+def _collect_pointcloud_step(exported_thing, dg_obj_instance, step):
+    """Point-transform motion blur: re-evaluate the point data at this
+    shutter step and rebuild world-space point matrices. Returns the
+    matrix to store in the motion props — point 0's matrix (the base
+    object IS point 0), or the object transform as fallback when the
+    step evaluation fails.
+    """
+    if step == 0:
+        # ExportedObject records can persist across viewport updates —
+        # start a fresh sample set for each stepping pass.
+        exported_thing.pc_step_data.clear()
+        exported_thing.pc_failed = False
+    positions, radii = _read_pointcloud_data(dg_obj_instance.object)
+    expected = exported_thing.duplicate_count + 1
+    if positions is None or len(positions) != expected:
+        exported_thing.pc_failed = True
+        exported_thing.pc_step_data.append(None)
+        return dg_obj_instance.matrix_world.copy()
+
+    step_flat = np.ascontiguousarray(
+        _point_matrices(positions, radii, dg_obj_instance.matrix_world)
+        .transpose(0, 2, 1)
+        .reshape(-1),
+        dtype=np.float32,
+    )
+    exported_thing.pc_step_data.append(step_flat)
+    exported_thing.pc_prefix = (
+        "scene.objects." + exported_thing.parts[0].lux_obj + "."
+    )
+    # Base object = point 0: the first 16 floats are its transposed matrix
+    m = step_flat[:16]
+    return mathutils.Matrix(
+        [[m[0], m[4], m[8], m[12]],
+         [m[1], m[5], m[9], m[13]],
+         [m[2], m[6], m[10], m[14]],
+         [m[3], m[7], m[11], m[15]]]
+    )
+
+
+def _build_pointcloud_motion(exported_objects, matrices, frame_offsets, steps):
+    """Flatten per-step point matrices into the [instance][step]-major
+    buffers expected by Scene.DuplicateObject's motion-multi overload.
+    Point 0 is the base object and rides the regular motion.N property
+    path. If the point count differs at any step (topology change) the
+    whole cloud falls back to static — including the base object props.
+    """
+    for exported_thing in exported_objects.values():
+        if not getattr(exported_thing, "is_pointcloud", False):
+            continue
+        if exported_thing.pc_prefix is None:
+            continue  # motion gate off or no step data was collected
+
+        data = exported_thing.pc_step_data
+        count = exported_thing.duplicate_count
+        if (
+            exported_thing.pc_failed
+            or len(data) != steps
+            or any(s is None for s in data)
+        ):
+            matrices.pop(exported_thing.pc_prefix, None)
+            continue
+
+        if all(np.array_equal(s, data[0]) for s in data[1:]):
+            # Cloud does not move — drop base props as well
+            matrices.pop(exported_thing.pc_prefix, None)
+            continue
+
+        if count == 0:
+            # Single point: no duplicates, base props carry its motion
+            continue
+
+        exported_thing.pc_steps_n = steps
+        exported_thing.pc_motion = array("f", [])
+        exported_thing.pc_motion_times = array("f", [])
+        for inst in range(count):
+            for s in range(steps):
+                exported_thing.pc_motion.extend(
+                    data[s][inst * 16 + 16 : inst * 16 + 32]
+                )
+                exported_thing.pc_motion_times.append(frame_offsets[s])
+
+
 def _append_matrix(matrices, prefix, matrix, step):
     if step == 0:
         matrices[prefix] = [matrix]
     else:
         matrices[prefix].append(matrix)
+
+
+def _build_dupli_motion(instances, dupli_steps, frame_offsets, steps):
+    """Flatten the per-step key->matrix maps into the [instance][step]-major
+    buffers expected by Scene.DuplicateObject's motion-multi overload:
+    times = count*steps floats, motion = count*steps*16 floats. Instances
+    missing at a step (particle born/died mid-shutter) reuse their
+    center-frame matrix, matching the static transform at that step.
+    """
+    total_missing = 0
+    for duplis in instances.values():
+        if duplis is None or duplis.keys is None:
+            continue
+        count = duplis.get_count()
+        # keys were appended in lockstep with object_ids in first_run.
+        # They must also be unique: an empty/colliding persistent_id set
+        # would alias several instances to one matrix, so motion is
+        # dropped for that dupli object entirely (static fallback).
+        if (
+            count == 0
+            or len(duplis.keys) != count
+            or len(set(duplis.keys)) != count
+        ):
+            continue
+
+        duplis.motion_steps = steps
+        duplis.motion = array("f", [])
+        duplis.motion_times = array("f", [])
+        for j in range(count):
+            key = duplis.keys[j]
+            center = duplis.matrices[j * 16 : j * 16 + 16]
+            for s in range(steps):
+                matrix = dupli_steps[s].get(key)
+                if matrix is None:
+                    duplis.motion.extend(center)
+                    duplis.motion_missing += 1
+                else:
+                    duplis.motion.extend(
+                        pyluxcore.BlenderMatrix4x4ToList(matrix)
+                    )
+                duplis.motion_times.append(frame_offsets[s])
+        total_missing += duplis.motion_missing
+
+    if total_missing:
+        print(
+            "Motion blur: %d instance-step samples had no evaluated "
+            "transform (particle born/died mid-shutter); center-frame "
+            "transform was used for those steps." % total_missing
+        )

@@ -1,5 +1,6 @@
 import bpy
 from array import array
+from contextlib import contextmanager
 from functools import lru_cache
 from time import time
 
@@ -28,6 +29,42 @@ class TriAOVDataIndices:
 
 
 MAX_PARTICLES_FOR_LIVE_TRANSFORM = 2000
+
+
+def _instance_key(dg_obj_instance):
+    # Stable inter-frame identity for a dupli/particle instance
+    # (A5 motion blur). persistent_id is only unique per instancer, so
+    # the instancer pointer is included: two emitters sharing one dupli
+    # object would otherwise alias their particle ids. parent is None
+    # for some instance types, hence the 0 fallback.
+    parent = dg_obj_instance.parent
+    parent_ptr = parent.original.as_pointer() if parent else 0
+    return (parent_ptr, tuple(dg_obj_instance.persistent_id))
+
+
+def _dupli_motion_enabled(dg_obj_instance):
+    # Opt-in for instance transform motion blur (A5): enable_motion_blur
+    # on the instanced object OR on the instancer (emitter). Checking
+    # both keeps the first instance's object-level motion props and the
+    # duplicated instances consistent — flagging either side blurs all
+    # copies instead of a subset.
+    if dg_obj_instance.object.luxcore.enable_motion_blur:
+        return True
+    parent = dg_obj_instance.parent
+    return bool(parent and parent.luxcore.enable_motion_blur)
+
+
+@contextmanager
+def _timed(exporter, stat_name):
+    # Accumulates elapsed seconds into exporter.stats.<stat_name> when
+    # stats collection is active; zero-cost no-op otherwise (A6 stage
+    # instrumentation).
+    if exporter and exporter.stats:
+        start = time()
+        yield
+        getattr(exporter.stats, stat_name).value += time() - start
+    else:
+        yield
 
 
 def uses_pointiness(node_tree):
@@ -339,6 +376,28 @@ class Duplis:
         self.exported_obj = exported_obj
         self.matrices = array("f", [])
         self.object_ids = array("I", [])
+        # Transform motion blur for instances (A5). `keys` is allocated
+        # only when object blur is enabled and the instanced object opts
+        # in via luxcore.enable_motion_blur; it stores one
+        # (instancer_ptr, persistent_id) key per instance, parallel to
+        # object_ids. motion_blur.convert() then fills motion/motion_times
+        # as [instance][step]-major buffers for Scene.DuplicateObject's
+        # motion-multi overload. `motion_missing` counts steps where an
+        # instance had no evaluated transform and fell back to its
+        # center-frame matrix (particle born/died mid-shutter).
+        self.keys = None
+        self.motion = None
+        self.motion_times = None
+        self.motion_steps = 0
+        self.motion_missing = 0
+        # Source object's luxcore.id, cached at Duplis creation: it is a
+        # per-object constant, so reading original.luxcore.id per instance
+        # would be a wasted 4-level RNA traversal in the hot loop.
+        self.luxcore_id = -1
+        # Compound instance key of the first (base) instance — lets the
+        # persistent-scene delta find this source's geo_meta entry
+        # (A6-III instancer refresh).
+        self.obj_key = None
 
     def get_count(self):
         return len(self.object_ids)
@@ -350,6 +409,20 @@ class ObjectCache2:
         self.exported_meshes = {}
         self.exported_hair = {}
         self.pending_pointcloud_duplicates = []
+        # {obj_key: (baked matrix_world, delta-safe)} used by the
+        # persistent-scene cache for transform-only deltas (A6-II).
+        self.bake_matrices = {}
+        # {obj_key: (mesh src ptr, mesh_key, use_instancing, base shape
+        # names, has wrapper shapes)} — geometry-delta eligibility
+        # metadata for the persistent-scene cache (A6-III).
+        self.obj_geo_meta = {}
+        # {instancer obj_key: set(source original ptr)} — which objects
+        # each instancer emitted duplis of, and
+        # {instancer obj_key} whose instances took the singular
+        # (per-instance ExportedObject) path instead of a dupli set —
+        # populated by first_run for the persistent-scene delta.
+        self.instancer_srcs = {}
+        self.instancer_singular = set()
 
     def first_run(
         self,
@@ -363,6 +436,12 @@ class ObjectCache2:
     ):
         is_viewport_render = bool(context)
         instances = {}
+        # Persistent-scene delta bookkeeping: for every instancer, the
+        # set of source objects it spawned duplis of (fast path) or a
+        # marker that some of its instances were exported individually
+        # (singular path — such instancers cannot be delta-refreshed).
+        self.instancer_srcs = {}
+        self.instancer_singular = set()
 
         if engine:
             obj_count_estimate = max(1, get_obj_count_estimate(depsgraph))
@@ -371,6 +450,10 @@ class ObjectCache2:
 
         # Particle system counts might have changed
         supports_live_transform.cache_clear()
+
+        # Hoisted out of the per-instance fast path below: one global
+        # lookup instead of an attribute chain per instance.
+        blender_mat_to_list = pyluxcore.BlenderMatrix4x4ToList
 
         for index, dg_obj_instance in enumerate(depsgraph.object_instances):
             obj = dg_obj_instance.object
@@ -388,6 +471,13 @@ class ObjectCache2:
                 # This code is optimized for large amounts of duplis. Drawback is that objects generated from this
                 # code can't be transformed later in a viewport render session (due to BlendLuxCore implementation
                 # reasons, not because of LuxCore)
+                if dg_obj_instance.parent is not None:
+                    # Record unconditionally (even for instances skipped
+                    # below): the refresh path compares this source set
+                    # against the instancer's current depsgraph output.
+                    self.instancer_srcs.setdefault(
+                        utils.make_key(dg_obj_instance.parent), set()
+                    ).add(obj.original.as_pointer())
                 if engine and index % 5000 == 0:
                     if engine.test_break():
                         return None
@@ -422,14 +512,18 @@ class ObjectCache2:
                                 context.space_data
                             ):
                                 continue
-                        obj_id = dg_obj_instance.object.original.luxcore.id
+                        obj_id = duplis.luxcore_id
                         if obj_id == -1:
                             obj_id = dg_obj_instance.random_id & 0xFFFFFFFE
                         duplis.object_ids.append(obj_id)
+                        if duplis.keys is not None:
+                            duplis.keys.append(
+                                _instance_key(dg_obj_instance)
+                            )
                         # We need a copy of matrix_world here, not sure why, but if we don't
                         # make a copy, we only get an identity matrix in C++
                         duplis.matrices.extend(
-                            pyluxcore.BlenderMatrix4x4ToList(
+                            blender_mat_to_list(
                                 dg_obj_instance.matrix_world.copy()
                             )
                         )
@@ -481,14 +575,33 @@ class ObjectCache2:
                     if exported_obj:
                         # Note, the transformation matrix and object ID of this first instance is not added
                         # to the duplication list, since it already exists in the scene
-                        instances[obj.original.as_pointer()] = Duplis(
-                            exported_obj
+                        new_duplis = Duplis(exported_obj)
+                        new_duplis.obj_key = utils.make_key_from_instance(
+                            dg_obj_instance
                         )
+                        new_duplis.luxcore_id = obj.original.luxcore.id
+                        if (
+                            exporter.object_blur_enabled
+                            and _dupli_motion_enabled(dg_obj_instance)
+                        ):
+                            new_duplis.keys = []
+                        instances[obj.original.as_pointer()] = new_duplis
                     else:
                         # Could not export the object, happens e.g. with curve objects with zero faces
                         instances[obj.original.as_pointer()] = None
             else:
                 # This code is for singular objects and for duplis that should be movable later in a viewport render
+                if (
+                    dg_obj_instance.is_instance
+                    and dg_obj_instance.parent is not None
+                ):
+                    # Instances converted one-by-one (non-mesh sources,
+                    # viewport live-transform particles): their matrices
+                    # live on per-instance ExportedObjects a dupli
+                    # re-flush cannot reach — flag the instancer.
+                    self.instancer_singular.add(
+                        utils.make_key(dg_obj_instance.parent)
+                    )
                 if not utils.is_instance_visible(
                     dg_obj_instance, obj, context
                 ):
@@ -513,6 +626,10 @@ class ObjectCache2:
                     engine,
                 )
 
+        if exporter.stats:
+            exporter.stats.exported_object_count.value = len(
+                self.exported_objects
+            )
         # self._debug_info()
         return instances
 
@@ -524,8 +641,7 @@ class ObjectCache2:
         start_time = time()
 
         # Point clouds: one icosphere instance per point beyond the base object
-        self._flush_pointcloud_duplicates(luxcore_scene)
-
+        instance_count = self._flush_pointcloud_duplicates(luxcore_scene)
         for duplis in instances.values():
             if duplis is None:
                 # If duplis is None, then a non-exportable object like a curve with zero faces is being duplicated
@@ -535,31 +651,61 @@ class ObjectCache2:
                 # Only one instance was created (and is already present in the luxcore_scene), nothing to duplicate
                 continue
 
+            instance_count += duplis.get_count()
+
             for part in duplis.exported_obj.parts:
                 src_name = part.lux_obj
                 dst_name = src_name + "dupli"
-                luxcore_scene.DuplicateObject(
-                    src_name,
-                    dst_name,
-                    duplis.get_count(),
-                    duplis.matrices,
-                    duplis.object_ids,
-                )
-
-                # TODO: support steps and times (motion blur)
-                # steps = 0 # TODO
-                # times = array("f", [])
-                # luxcore_scene.DuplicateObject(src_name, dst_name, count, steps, times, transformations)
+                if duplis.motion is not None and duplis.motion_steps > 1:
+                    # Transform motion blur for instances (A5): per-instance
+                    # [step] time series collected by motion_blur.convert().
+                    luxcore_scene.DuplicateObject(
+                        src_name,
+                        dst_name,
+                        duplis.get_count(),
+                        duplis.motion_steps,
+                        duplis.motion_times,
+                        duplis.motion,
+                        duplis.object_ids,
+                    )
+                else:
+                    luxcore_scene.DuplicateObject(
+                        src_name,
+                        dst_name,
+                        duplis.get_count(),
+                        duplis.matrices,
+                        duplis.object_ids,
+                    )
 
         if stats:
             stats.export_time_instancing.value = time() - start_time
+            stats.instance_count.value = instance_count
 
     def _flush_pointcloud_duplicates(self, luxcore_scene):
-        for src_name, matrices, count, object_ids in self.pending_pointcloud_duplicates:
-            luxcore_scene.DuplicateObject(
-                src_name, src_name + "dupli", count, matrices, object_ids
-            )
+        count = 0
+        for (
+            src_name, matrices, count_, object_ids, obj_key
+        ) in self.pending_pointcloud_duplicates:
+            exported = self.exported_objects.get(obj_key)
+            if exported is not None and exported.pc_motion is not None:
+                # Per-point motion blur: [instance][step] buffers built by
+                # motion_blur.convert() from re-evaluated point positions.
+                luxcore_scene.DuplicateObject(
+                    src_name,
+                    src_name + "dupli",
+                    count_,
+                    exported.pc_steps_n,
+                    exported.pc_motion_times,
+                    exported.pc_motion,
+                    object_ids,
+                )
+            else:
+                luxcore_scene.DuplicateObject(
+                    src_name, src_name + "dupli", count_, matrices, object_ids
+                )
+            count += count_
         self.pending_pointcloud_duplicates.clear()
+        return count
 
     def _debug_info(self):
         print("Objects in cache:", len(self.exported_objects))
@@ -694,44 +840,47 @@ class ObjectCache2:
                 if exported_stuff:
                     props = exported_stuff.get_props()
             elif obj.type == "POINTCLOUD":
-                exported_stuff = pointcloud.convert_pointcloud_obj(
-                    exporter,
-                    dg_obj_instance,
-                    obj,
-                    obj_key,
-                    depsgraph,
-                    luxcore_scene,
-                    scene_props,
-                    is_viewport_render,
-                    view_layer,
-                    self.pending_pointcloud_duplicates,
-                )
+                with _timed(exporter, "export_time_pointcloud"):
+                    exported_stuff = pointcloud.convert_pointcloud_obj(
+                        exporter,
+                        dg_obj_instance,
+                        obj,
+                        obj_key,
+                        depsgraph,
+                        luxcore_scene,
+                        scene_props,
+                        is_viewport_render,
+                        view_layer,
+                        self.pending_pointcloud_duplicates,
+                    )
                 if exported_stuff:
                     props = exported_stuff.get_props()
             elif obj.type == "VOLUME":
-                exported_stuff = volume.convert_volume_obj(
-                    exporter,
-                    dg_obj_instance,
-                    obj,
-                    obj_key,
-                    depsgraph,
-                    luxcore_scene,
-                    scene_props,
-                    is_viewport_render,
-                    view_layer,
-                )
+                with _timed(exporter, "export_time_volumes"):
+                    exported_stuff = volume.convert_volume_obj(
+                        exporter,
+                        dg_obj_instance,
+                        obj,
+                        obj_key,
+                        depsgraph,
+                        luxcore_scene,
+                        scene_props,
+                        is_viewport_render,
+                        view_layer,
+                    )
                 if exported_stuff:
                     props = exported_stuff.get_props()
             elif obj.type == "LIGHT":
-                props, exported_stuff = light.convert_light(
-                    exporter,
-                    obj,
-                    obj_key,
-                    depsgraph,
-                    luxcore_scene,
-                    dg_obj_instance.matrix_world.copy(),
-                    is_viewport_render,
-                )
+                with _timed(exporter, "export_time_lights"):
+                    props, exported_stuff = light.convert_light(
+                        exporter,
+                        obj,
+                        obj_key,
+                        depsgraph,
+                        luxcore_scene,
+                        dg_obj_instance.matrix_world.copy(),
+                        is_viewport_render,
+                    )
 
         # Convert hair
         for psys in obj.particle_systems:
@@ -814,6 +963,15 @@ class ObjectCache2:
         if exported_stuff:
             scene_props.Set(props)
             self.exported_objects[obj_key] = exported_stuff
+            # Transform deltas are only safe where the transform either
+            # sits on the LuxCore object or is world-baked into mesh
+            # verts. Volumes bake it into their grid mapping and
+            # pointclouds into per-point instance matrices, so those
+            # require a full re-export on any transform change.
+            self.bake_matrices[obj_key] = (
+                dg_obj_instance.matrix_world.copy(),
+                obj.type in MESH_OBJECTS,
+            )
 
         return exported_stuff
 
@@ -898,7 +1056,7 @@ class ObjectCache2:
 
             # mesh_definitions here is the local working copy (the mesh
             # cache keeps the pristine shapes for the next object).
-            return ExportedObject(
+            exported_obj = ExportedObject(
                 obj_key,
                 mesh_definitions,
                 mat_names,
@@ -908,6 +1066,26 @@ class ObjectCache2:
                 ),
                 obj_id,
             )
+            # Geometry-delta metadata (A6-III): the ordered base shape
+            # list lets the persistent-scene delta re-DefineMesh in
+            # place and the shape signature replay the wrapper chain,
+            # while the wrapper flag excludes objects whose final
+            # shape is a derived wrapper (displacement/pointiness/...) —
+            # those hold a raw pointer to the base mesh that DefineMesh
+            # replacement cannot rewire.
+            base_list = list(exported_mesh.mesh_definitions)
+            base_names = {name for name, _m in base_list}
+            self.obj_geo_meta[obj_key] = (
+                obj.original.data.as_pointer() if obj.original.data else 0,
+                mesh_key,
+                use_instancing,
+                base_list,
+                any(
+                    part.lux_shape not in base_names
+                    for part in exported_obj.parts
+                ),
+            )
+            return exported_obj
 
     def diff(self, depsgraph):
         only_scene = len(depsgraph.updates) == 1 and isinstance(

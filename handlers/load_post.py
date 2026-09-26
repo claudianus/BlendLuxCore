@@ -11,6 +11,7 @@ from ..utils import compatibility
 from . import frame_change_pre
 from ..utils.errorlog import LuxCoreErrorLog
 from ..operators.manual_compatibility import LUXCORE_OT_convert_to_v23
+from ..export.caches import persistent_scene
 
 if _needs_reload:
     import importlib
@@ -94,6 +95,10 @@ def handler(_):
 
     # Run converters for backwards compatibility
     compatibility.run()
+
+    # A loaded file can rewire datablock pointers entirely; persistent
+    # render scenes and dirty maps from before the load are invalid.
+    persistent_scene.clear_all()
 
     frame_change_pre.have_to_check_node_trees = False
     LuxCoreErrorLog.clear()
