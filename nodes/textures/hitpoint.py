@@ -23,7 +23,7 @@ class LuxCoreNodeTexHitpoint(LuxCoreNodeTexture, bpy.types.Node):
         utils_node.force_viewport_update(self, context)
 
     def update_vcol(self, context):
-        if context.object:
+        if context.object and hasattr(context.object.data, "vertex_colors") and context.object.data.vertex_colors is not None:
             for i, e in enumerate(context.object.data.vertex_colors.keys()):
                 if e == self.vcol:
                     self.vcolindex = i

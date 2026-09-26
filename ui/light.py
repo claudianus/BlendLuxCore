@@ -314,7 +314,7 @@ class LUXCORE_LIGHT_PT_visibility(DataButtonsPanel, Panel):
 
         # Visible for sky2, sun, infinite, constantinfinite, area
         return ((light.type == "SUN" and light.luxcore.light_type == "sun")
-                or light.type == "HEMI"
+                or (light.type == "SUN" and light.luxcore.light_type == "hemi")
                 or (light.type == "AREA" and not light.luxcore.is_laser))
 
     def draw_header(self, context):
@@ -357,7 +357,7 @@ class LUXCORE_LIGHT_PT_spot(DataButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         light = context.light
-        return (light and light.type == 'SPOT') and context.engine == "LUXCORE"
+        return (light and light.type == 'SPOT') and context.scene.render.engine == "LUXCORE"
 
     def draw(self, context):
         layout = self.layout
@@ -383,7 +383,7 @@ class LUXCORE_LIGHT_PT_ies_light(DataButtonsPanel, Panel):
     def poll(cls, context):
         light = context.light
         return (light and not light.luxcore.use_cycles_settings
-                and light.type in {"AREA", "POINT"} and context.engine == "LUXCORE")
+                and light.type in {"AREA", "POINT"} and context.scene.render.engine == "LUXCORE")
 
     def draw_header(self, context):
         layout = self.layout
@@ -430,7 +430,7 @@ class LUXCORE_LIGHT_PT_nodes(DataButtonsPanel, Panel):
     def poll(cls, context):
         light = context.light
         return (light and not light.luxcore.use_cycles_settings
-                and light.type == "AREA" and context.engine == "LUXCORE")
+                and light.type == "AREA" and context.scene.render.engine == "LUXCORE")
 
     def draw(self, context):
         layout = self.layout
@@ -453,7 +453,7 @@ class LUXCORE_LIGHT_PT_cycles_nodes(DataButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        if context.engine != "LUXCORE" or not context.light:
+        if context.scene.render.engine != "LUXCORE" or not context.light:
             return False
         is_portal = context.light.type == "AREA" and context.light.cycles.is_portal
         return context.light.luxcore.use_cycles_settings and not is_portal

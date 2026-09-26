@@ -30,6 +30,12 @@ def convert(scene):
             definitions["batch.haltthreshold.step"] = halt.noise_thresh_step
             definitions["batch.haltthreshold.filter.enable"] = True
             definitions["batch.haltthreshold.stoprendering.enable"] = True
+        else:
+            # Explicitly disable: session Parse() keeps old properties,
+            # so omitting the keys would leave a stale threshold armed
+            # from an earlier export with noise threshold enabled.
+            definitions["batch.haltthreshold.filter.enable"] = False
+            definitions["batch.haltthreshold.stoprendering.enable"] = False
     else:
         # All halt conditions disabled.
         # Note that we have to explicitly set halttime and haltspp to 0 because

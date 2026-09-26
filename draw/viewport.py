@@ -23,15 +23,24 @@ if _needs_reload:
 
 
 def run_denoiser(framebuffer, engine):
-    """Denoiser worker."""
-    session = engine.session
-    film = session.GetFilm()
-    film.ApplyOIDN(0)  # Apply on first stage in pipeline
+    """Denoiser worker (background thread).
 
-    framebuffer.update(session, execute_imagepipeline=False)
-    framebuffer.draw()
-    framebuffer.denoised = True
-    engine.tag_redraw()
+    Only the OIDN compute runs here. Everything touching GL or Blender
+    (framebuffer.update/draw, tag_redraw) must happen on the main thread,
+    so the worker only raises a flag that view_draw() consumes. (Calling
+    .run() instead of .start() here used to freeze the whole UI for the
+    full OIDN run on every pause.)
+    """
+    try:
+        session = engine.session
+        film = session.GetFilm()
+        film.ApplyOIDN(0)  # Apply on first stage in pipeline
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        return
+    framebuffer._denoise_done = True
 
 
 class FrameBuffer:
@@ -62,6 +71,11 @@ class FrameBuffer:
         # Denoiser
         self.denoised = False  # Set to true after denoising
         self._denoiser_thread = None
+        self._denoise_done = False
+        self._denoise_session = None
+        self._texture = None
+        self._pixels_dirty = True
+        self._last_update = 0.0
         self._last_pixels = None  # Last rendered pixels (h, w, depth), used for resize transitions
         self._from_transition = False  # True while showing a resampled frame from before a restart
 
@@ -224,11 +238,15 @@ class FrameBuffer:
         ) * region_width + aspect * base * (2 * border_min - 1)
 
     def start_denoiser(self, engine):
+        self._denoise_done = False
+        self._denoise_session = engine.session
         self._denoiser_thread = threading.Thread(
             target=run_denoiser,
             args=(self, engine),
+            daemon=True,
+            name="LuxCoreViewportDenoise",
         )
-        self._denoiser_thread.run()
+        self._denoiser_thread.start()
 
     def is_denoiser_active(self):
         return self._denoiser_thread and self._denoiser_thread.is_alive()
@@ -237,11 +255,44 @@ class FrameBuffer:
         self.denoiser_result_cached = False  # TODO
         print("RESET DENOISER")
         self.denoised = False
-        if self._denoiser_thread is None:
-            return
+        # No join: a stale worker only flips _denoise_done, which
+        # consume_denoise_result() ignores unless the session still matches.
+        self._denoise_session = None
+        self._denoise_done = False
         self._denoiser_thread = None
 
-    def update(self, luxcore_session, execute_imagepipeline=True):
+    def consume_denoise_result(self, engine):
+        """Apply a finished background denoise on the MAIN thread.
+
+        Returns True when a fresh denoised image was uploaded (caller
+        should tag_redraw). Stale workers (session replaced since) are
+        ignored.
+        """
+        if not getattr(self, "_denoise_done", False):
+            return False
+        self._denoise_done = False
+        if getattr(self, "_denoise_session", None) is not engine.session:
+            return False
+        try:
+            engine.session.UpdateStats()
+        except RuntimeError:
+            return False
+        self.update(engine.session, execute_imagepipeline=False, force=True)
+        self.denoised = True
+        return True
+
+    def update(self, luxcore_session, execute_imagepipeline=True, force=False):
+        # Throttle film readback: GetOutputFloat() stalls the device
+        # pipeline (a full-film download + imagepipeline run per draw) and
+        # view_draw() runs at display rate. 10 Hz is plenty for a progressive
+        # preview and keeps the GPU rendering instead of stalling. The
+        # denoise path forces an immediate upload.
+        import time as _time
+
+        now = _time.time()
+        if not force and now - getattr(self, "_last_update", 0.0) < 0.1:
+            return False
+        self._last_update = now
         # The gpu buffer uses 16-bit float. Values >= 65520 get cast to
         # infinty, leading to a black viewport.
         # Here, I need to get the data into a separate numpy array to handle
@@ -262,15 +313,22 @@ class FrameBuffer:
         self.buffer = gpu.types.Buffer(
             "FLOAT", [self._width * self._height * bufferdepth], data
         )
+        self._pixels_dirty = True
+        return True
 
     def draw(self):
         format = "RGBA16F" if self._transparent else "RGB16F"
-        self._texture = gpu.types.GPUTexture(
-            size=(self._width, self._height),
-            layers=0,
-            is_cubemap=False,
-            format=format,
-            data=self.buffer,
-        )
+        # Re-create the GPU texture only when new pixels arrived; drawing
+        # the same texture every frame churns VRAM for nothing (and the old
+        # texture was never explicitly freed).
+        if getattr(self, "_pixels_dirty", True) or getattr(self, "_texture", None) is None:
+            self._texture = gpu.types.GPUTexture(
+                size=(self._width, self._height),
+                layers=0,
+                is_cubemap=False,
+                format=format,
+                data=self.buffer,
+            )
+            self._pixels_dirty = False
         self.shader.uniform_sampler("image", self._texture)
         self.batch.draw(self.shader)

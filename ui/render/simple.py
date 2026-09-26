@@ -50,6 +50,16 @@ class LUXCORE_RENDER_PT_simple(RenderButtonsPanel, Panel):
         col.prop(simple, "quality", slider=True)
         col.label(text=quality_label(simple.quality))
 
+        # Effective values: show exactly what a render will use, so the
+        # mapping is transparent (same function as the exporter).
+        m = simple.quality_map()
+        col.label(text="Depth %d · Clamp %s · %dspp · Guiding %s" % (
+            m["depth_total"],
+            ("off" if not m["use_clamping"] else "%g" % m["clamping"]),
+            m["halt_samples"],
+            ("on" if m["guiding"] else "off"),
+        ), icon=icons.INFO)
+
         # Denoiser toggle
         row = layout.row()
         row.prop(simple, "denoise")

@@ -239,51 +239,57 @@ def convert_hair(
 
         if settings.export_color != "none" or uvs_needed:
             emitter_mesh = obj.to_mesh(depsgraph=depsgraph)
-            uv_textures = emitter_mesh.uv_layers
-            vertex_colors = emitter_mesh.vertex_colors
+            try:
+                uv_textures = emitter_mesh.uv_layers
+                vertex_colors = emitter_mesh.vertex_colors
 
-            if settings.export_color == "uv_texture_map" and settings.image:
+                if settings.export_color == "uv_texture_map" and settings.image:
+                    try:
+                        image_filename = ImageExporter.export(
+                            settings.image, settings.image_user, scene
+                        )
+                        uvs_needed = True
+                    except OSError as error:
+                        msg = "%s (Object: %s, Particle System: %s)" % (
+                            error,
+                            obj.name,
+                            psys.name,
+                        )
+                        LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+                elif settings.export_color == "vertex_color":
+                    colors = convert_colors(
+                        obj,
+                        psys,
+                        settings,
+                        vertex_colors,
+                        engine,
+                        strands_count,
+                        start,
+                        dupli_count,
+                        mod,
+                        num_children,
+                    )
+
+                if uvs_needed:
+                    uvs = convert_uvs(
+                        obj,
+                        psys,
+                        settings,
+                        uv_textures,
+                        engine,
+                        strands_count,
+                        start,
+                        dupli_count,
+                        mod,
+                        num_children,
+                    )
+            finally:
+                # Guaranteed mesh release: any exception above (convert_colors
+                # / convert_uvs / image export) used to leak the temp mesh.
                 try:
-                    image_filename = ImageExporter.export(
-                        settings.image, settings.image_user, scene
-                    )
-                    uvs_needed = True
-                except OSError as error:
-                    msg = "%s (Object: %s, Particle System: %s)" % (
-                        error,
-                        obj.name,
-                        psys.name,
-                    )
-                    LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
-            elif settings.export_color == "vertex_color":
-                colors = convert_colors(
-                    obj,
-                    psys,
-                    settings,
-                    vertex_colors,
-                    engine,
-                    strands_count,
-                    start,
-                    dupli_count,
-                    mod,
-                    num_children,
-                )
-
-            if uvs_needed:
-                uvs = convert_uvs(
-                    obj,
-                    psys,
-                    settings,
-                    uv_textures,
-                    engine,
-                    strands_count,
-                    start,
-                    dupli_count,
-                    mod,
-                    num_children,
-                )
-
-            obj.to_mesh_clear()
+                    obj.to_mesh_clear()
+                except Exception:
+                    pass
 
         if len(uvs) == 0:
             copy_uvs = False
@@ -450,22 +456,33 @@ def convert_hair_curves(
     copy_uvs = settings.copy_uv_coords
 
     if export_color != "none" or uvs_needed:
-        emitter_mesh = obj.parent.to_mesh(depsgraph=depsgraph)
-        vertex_colors = emitter_mesh.vertex_colors
-
-        if export_color == "uv_texture_map" and image:
+        if obj.parent is None:
+            LuxCoreErrorLog.add_warning(
+                "Hair curves without emitter (parentless curves): "
+                "skipping UV/color export",
+                obj_name=obj.name,
+            )
+            uvs_needed = False
+        else:
+            emitter_mesh = obj.parent.to_mesh(depsgraph=depsgraph)
             try:
-                image_filename = ImageExporter.export(
-                    image, settings.image_user, scene
-                )
-                uvs_needed = True
-            except OSError as error:
-                msg = "%s (Object: %s, Hair Curves: %s)" % (
-                    error,
-                    obj.name,
-                    obj.data.name,
-                )
-                LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+                vertex_colors = emitter_mesh.vertex_colors
+
+                if export_color == "uv_texture_map" and image:
+                    try:
+                        image_filename = ImageExporter.export(
+                            image, settings.image_user, scene
+                        )
+                        uvs_needed = True
+                    except OSError as error:
+                        msg = "%s (Object: %s, Hair Curves: %s)" % (
+                            error,
+                            obj.name,
+                            obj.data.name,
+                        )
+                        LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+            finally:
+                obj.parent.to_mesh_clear()
         #     elif settings.export_color == "vertex_color":
         #         colors = convert_colors(obj, psys, settings, vertex_colors, engine,
         #                                 strands_count, start, dupli_count, mod, num_children)

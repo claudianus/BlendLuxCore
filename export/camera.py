@@ -66,6 +66,10 @@ def _view_persp(scene, context, definitions):
     definitions["type"] = "perspective"    
     zoom = 2.25
 
+    # 16mm half-sensor: matches the real-camera convention (camera.data.angle
+    # is ~39.6deg horizontal for a 50mm AUTO lens; 16mm gives 35.5deg, close).
+    # A sensor-fit derivation (18/aspect) would give the *vertical* angle
+    # (~22.9deg wide) and mismatch final renders, so keep this.
     definitions["fieldofview"] = math.degrees(2 * math.atan(16 / context.space_data.lens))
     definitions["screenwindow"] = utils.calc_screenwindow(zoom, 0, 0, scene, context)
 
@@ -229,11 +233,15 @@ def _clipping_plane(scene, definitions):
 
     if cam_settings.use_clipping_plane and cam_settings.clipping_plane:
         plane = cam_settings.clipping_plane
-        normal = plane.rotation_euler.to_matrix() @ Vector((0, 0, 1))
+        # World-space plane: rotation_euler/location ignore parents, so
+        # derive both from matrix_world (normalized: parents may scale).
+        world = plane.matrix_world
+        normal = (world.to_3x3() @ Vector((0, 0, 1))).normalized()
+        center = world.translation
 
         definitions.update({
             "clippingplane.enable": cam_settings.use_clipping_plane,
-            "clippingplane.center": list(plane.location),
+            "clippingplane.center": list(center),
             "clippingplane.normal": list(normal),
         })
     else:

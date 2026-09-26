@@ -74,6 +74,8 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
 
     def __del__(self):
         # Note: this method is also called when unregister() is called (for some reason I don't understand)
+        # Broad guard: anything (including Stop itself) may fail here since
+        # Blender can call this from GC/unregister contexts.
         try:
             if getattr(self, "session", None):
                 if not self.is_preview:
@@ -83,6 +85,8 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
                 del self.session
         except ReferenceError:
             print("[Engine] del: RenderEngine struct was already deleted")
+        except Exception as error:
+            print("[Engine] del: ignored teardown error:", error)
 
     def log_listener(self, msg):
         if "Direct light sampling cache entries" in msg:
@@ -121,7 +125,13 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
             # Add error to error log so the user can inspect and copy/paste it
             LuxCoreErrorLog.add_error(error_str)
 
-            # Clean up
+            # Clean up: stop a started session first, otherwise its render
+            # threads keep running with no owner (leak).
+            try:
+                if getattr(self, "session", None) is not None and self.session.IsStarted():
+                    self.session.Stop()
+            except Exception:
+                pass
             del self.session
             self.session = None
         finally:
@@ -136,6 +146,11 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
         except Exception as error:
             import traceback
             traceback.print_exc()
+            try:
+                self.report({"ERROR"}, str(error))
+            except Exception:
+                pass
+            LuxCoreErrorLog.add_error(error)
             # Clean up
             del self.session
             self.session = None
@@ -147,8 +162,19 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
         try:
             viewport.view_draw(self, context, depsgraph)
         except Exception as error:
+            # Stop a started session first (leaked threads otherwise), drop
+            # the exporter so the next view_update() builds a fresh session
+            # instead of reusing a half-torn one. No fatal flag: viewport
+            # errors are usually transient (resize races), recovery is better
+            # than a permanently dead viewport.
+            try:
+                if getattr(self, "session", None) is not None and self.session.IsStarted():
+                    self.session.Stop()
+            except Exception:
+                pass
             del self.session
             self.session = None
+            self.exporter = None
 
             self.update_stats("Error: ", str(error))
             import traceback

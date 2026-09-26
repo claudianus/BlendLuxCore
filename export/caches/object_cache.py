@@ -721,8 +721,11 @@ class ObjectCache2:
 
         if exported_mesh:
             mat_names = []
+            # Local working copy (see the ExportedObject construction below:
+            # the cached list must not be mutated per object).
+            mesh_definitions = [list(entry) for entry in exported_mesh.mesh_definitions]
             for idx, (shape_name, mat_index) in enumerate(
-                exported_mesh.mesh_definitions
+                mesh_definitions
             ):
                 shape = shape_name
                 lux_mat_name, mat_props, node_tree = export_material(
@@ -739,14 +742,16 @@ class ObjectCache2:
                         shape, node_tree, exporter, depsgraph, scene_props
                     )
 
-                exported_mesh.mesh_definitions[idx] = [shape, mat_index]
+                mesh_definitions[idx] = [shape, mat_index]
 
             obj_transform = transform.copy() if use_instancing else None
             obj_id = utils.make_object_id(dg_obj_instance)
 
+            # mesh_definitions here is the local working copy (the mesh
+            # cache keeps the pristine shapes for the next object).
             return ExportedObject(
                 obj_key,
-                exported_mesh.mesh_definitions,
+                mesh_definitions,
                 mat_names,
                 obj_transform,
                 utils.visible_to_camera(
@@ -759,7 +764,12 @@ class ObjectCache2:
         only_scene = len(depsgraph.updates) == 1 and isinstance(
             depsgraph.updates[0].id, bpy.types.Scene
         )
-        return depsgraph.id_type_updated("OBJECT") and not only_scene
+        # MESH data-block edits (e.g. mesh data tweaks that only flag the
+        # datablock, material-driven geometry) don't always flag the OBJECT.
+        return (
+            depsgraph.id_type_updated("OBJECT")
+            or depsgraph.id_type_updated("MESH")
+        ) and not only_scene
 
     def update(self, exporter, depsgraph, luxcore_scene, scene_props, context):
         is_viewport_render = bool(context)
@@ -768,12 +778,30 @@ class ObjectCache2:
         use_instancing = True
 
         # Geometry updates (mesh edit, modifier edit etc.)
-        if depsgraph.id_type_updated("OBJECT"):
+        # MESH datablocks updated without an OBJECT geometry flag (see diff):
+        # collect their names so objects using them are refreshed below.
+        mesh_updated_names = {
+            u.id.name
+            for u in depsgraph.updates
+            if isinstance(u.id, bpy.types.Mesh)
+        }
+        if depsgraph.id_type_updated("OBJECT") or mesh_updated_names:
             for dg_update in depsgraph.updates:
+                obj = None
                 if dg_update.is_updated_geometry and isinstance(
                     dg_update.id, bpy.types.Object
                 ):
                     obj = dg_update.id
+                elif (
+                    isinstance(dg_update.id, bpy.types.Object)
+                    and dg_update.id.data is not None
+                    and getattr(dg_update.id.data, "name", "") in mesh_updated_names
+                ):
+                    # Object itself not flagged, but its mesh datablock was.
+                    obj = dg_update.id
+                if obj is None:
+                    continue
+                if True:
                     if not utils.is_obj_visible(
                         obj
                     ) or not obj.visible_in_viewport_get(context.space_data):

@@ -658,6 +658,12 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             # Define the LuxCore texture node
             props.Set(utils.luxutils.create_props(prefix + luxcore_name + ".", definitions))
             return luxcore_name
+        else:
+            # Only image textures carry their own gamma; anything else
+            # falls through with stale definitions (or UnboundLocalError).
+            LuxCoreErrorLog.add_warning(
+                "Gamma node without image input is not supported", obj_name=obj_name)
+            return ERROR_VALUE
 
     elif node.bl_idname == "ShaderNodeNormalMap":
         if node.space != "TANGENT":

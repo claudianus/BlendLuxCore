@@ -275,6 +275,8 @@ def force_viewport_mesh_update(_, context):
     """ For updates on shape modifier changes (displacement, simplify etc.) """
     # TODO ensure shape update on input texture changes. Need to evaluate the node tree ...
     # TODO ensure shape update on socket connection changes
+    if not context.object:
+        return
     mat = context.object.active_material
     for obj in context.visible_objects:
         for slot in obj.material_slots:
@@ -287,6 +289,8 @@ def force_viewport_mesh_update(_, context):
 def force_viewport_mesh_update2(node_tree):
     for obj in bpy.data.objects:
         for slot in obj.material_slots:
+            if slot.material is None:
+                continue
             if slot.material.luxcore.node_tree == node_tree:
                 if obj.data:
                     obj.data.update_tag()

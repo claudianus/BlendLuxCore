@@ -91,11 +91,12 @@ class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
             # Happens for example when copying from one node tree to another
             return
 
-        # Copy the links to volumes
+        # Copy the links to volumes and shapes (dropping Shape here used
+        # to silently lose displacement/subdiv on node duplicate)
         for orig_input in orig_node.inputs:
             # We cannot use orig_input.is_linked as it makes Blender crash
             links = utils_node.get_links(node_tree, orig_input)
-            if links and orig_input.name in ["Interior Volume", "Exterior Volume"]:
+            if links and orig_input.name in ["Interior Volume", "Exterior Volume", "Shape"]:
                 # We can not use orig_input.links because of a Blender exception
                 from_socket = links[0].from_socket
                 to_socket = self.inputs[orig_input.name]

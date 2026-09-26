@@ -209,11 +209,14 @@ def _make_imagepipeline(props, context, scene, output_name, pipeline_index, outp
     _add_output(output_definitions, "RGB_IMAGEPIPELINE", pipeline_index)
 
     # Register in the engine so we know the correct index
-    # when we draw the framebuffer during rendering
+    # when we draw the framebuffer during rendering (engine is None on
+    # engine-less paths like filesaver: skip registration, the props
+    # themselves are complete without it).
     key = output_name
     if output_id != -1:
         key += str(output_id)
-    engine.aov_imagepipelines[key] = pipeline_index
+    if engine is not None:
+        engine.aov_imagepipelines[key] = pipeline_index
 
     return pipeline_index + 1
 

@@ -19,6 +19,8 @@ class SamplingOverlap:
 
 
 def convert(exporter, scene, context=None, engine=None):
+    config = scene.luxcore.config
+    simple_token = None
     try:
         prefix = ""
         # We collect the properties in this dictionary (ordered because we sometimes
@@ -30,9 +32,36 @@ def convert(exporter, scene, context=None, engine=None):
         config = scene.luxcore.config
         is_viewport_render = context is not None
 
+        # Compositor trap: rendering with compositing enabled but no
+        # Composite node in the tree yields a black output file even though
+        # the film itself is fine (measured on a production scene: lit film
+        # 0.27, black PNG). Warn loudly instead of silently delivering black.
+        try:
+            if (scene.render.use_compositing and scene.use_nodes and
+                    not is_viewport_render):
+                tree = getattr(scene, "compositing_node_group", None)
+                has_output = False
+                if tree is not None:
+                    for _n in tree.nodes:
+                        if _n.bl_idname == "CompositorNodeComposite":
+                            has_output = True
+                            break
+                if not has_output:
+                    LuxCoreErrorLog.add_warning(
+                        "Compositing is enabled but the node tree has no "
+                        "Composite output node: the saved image will be black. "
+                        "Disable compositing or add a Composite node")
+        except Exception:
+            pass
+
         # Quick Setup: map the single quality slider onto the underlying
-        # settings before the regular conversion picks them up
+        # settings before the regular conversion picks them up.
+        # Snapshot/restore: the mapping writes into the live Blender
+        # properties, so without this every (re-)export — viewports
+        # re-export constantly — would silently eat the user's own values.
+        simple_token = None
         if config.simple.enabled:
+            simple_token = config.simple.snapshot(scene)
             config.simple.apply(config)
             config.simple.apply_halt(scene)
             # Caustics auto-detection (needs the scene, not just config)
@@ -82,10 +111,13 @@ def convert(exporter, scene, context=None, engine=None):
             light_strategy = config.light_strategy
 
         # Common properties that should be set regardless of engine configuration.
+        # NB: the engine's PMJ02 tag breaks the SOBOL/RANDOM convention
+        # ("PMJ02SAMPLER", see Sampler::String2SamplerType).
+        sampler_tag = "PMJ02SAMPLER" if sampler == "PMJ02" else sampler
         definitions.update(
             {
                 "renderengine.type": luxcore_engine,
-                "sampler.type": sampler,
+                "sampler.type": sampler_tag,
                 "film.width": width,
                 "film.height": height,
                 "film.filter.type": filter_type,
@@ -113,6 +145,9 @@ def convert(exporter, scene, context=None, engine=None):
             definitions["lightstrategy.restir.temporal.enable"] = (
                 config.restir_temporal_enable
             )
+            definitions["lightstrategy.restir.spatialreuse.enable"] = (
+                config.restir_spatial_enable
+            )
             if config.restir_candidates > 0:
                 definitions["lightstrategy.restir.candidates"] = (
                     config.restir_candidates
@@ -120,9 +155,17 @@ def convert(exporter, scene, context=None, engine=None):
 
         if config.mnee_enable:
             definitions["path.mnee.enable"] = True
+            if config.mnee_maxspecular > 1:
+                definitions["path.mnee.maxspecular"] = config.mnee_maxspecular
+
+        if config.guiding_enable and luxcore_engine in (
+            "PATHCPU", "PATHOCL", "TILEPATHCPU", "TILEPATHOCL",
+        ):
+            definitions["path.guiding.enable"] = True
 
         if config.photongi.enabled and not is_viewport_render:
-            _convert_photongi_settings(context, scene, definitions, config)
+            _convert_photongi_settings(context is not None, scene,
+                                       definitions, config)
 
         if (
             config.path.use_clamping
@@ -171,6 +214,8 @@ def convert(exporter, scene, context=None, engine=None):
         aov_props = aovs.convert(exporter, scene, context, engine)
         config_props.Set(aov_props)
 
+        if simple_token is not None:
+            config.simple.restore(simple_token)
         return config_props
     except Exception as error:
         msg = "Config: %s" % error
@@ -179,6 +224,11 @@ def convert(exporter, scene, context=None, engine=None):
         import traceback
 
         traceback.print_exc()
+        try:
+            if simple_token is not None:
+                config.simple.restore(simple_token)
+        except Exception:
+            pass
         return pyluxcore.Properties()
 
 
@@ -351,7 +401,9 @@ def _convert_final_engine(scene, definitions, config):
     else:
         sampler = config.get_sampler()
 
-    if sampler in {"SOBOL", "RANDOM"}:
+    # Sampler (SOBOL/RANDOM/PMJ02 share the stratified adaptive scheme;
+    # PMJ02 has no blue-noise dithering switch)
+    if sampler in {"SOBOL", "RANDOM", "PMJ02"}:
         sampler_type = sampler.lower()
 
         # Adaptive sampling
@@ -550,7 +602,7 @@ def _convert_dlscache_settings(scene, definitions, config, is_viewport_render):
     )
 
 
-def _convert_photongi_settings(context, scene, definitions, config):
+def _convert_photongi_settings(is_viewport_render, scene, definitions, config):
     photongi = config.photongi
 
     if photongi.indirect_lookup_radius_auto:
@@ -573,7 +625,8 @@ def _convert_photongi_settings(context, scene, definitions, config):
     )
 
     file_path = utils.get_persistent_cache_file_path(
-        photongi.file_path, photongi.save_or_overwrite, context, scene
+        photongi.file_path, photongi.save_or_overwrite, is_viewport_render,
+        scene
     )
 
     definitions.update(

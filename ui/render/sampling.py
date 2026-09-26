@@ -9,7 +9,7 @@ from bl_ui.properties_render import RenderButtonsPanel
 def calc_samples_per_pass(config):
     if config.using_tiled_path():
         return config.tile.path_sampling_aa_size**2
-    elif config.get_sampler() in {"SOBOL", "RANDOM"}:
+    elif config.get_sampler() in {"SOBOL", "RANDOM", "PMJ02"}:
         if config.using_out_of_core():
             return int(config.out_of_core_supersampling) * SamplingOverlap.OUT_OF_CORE
         else:
@@ -62,7 +62,7 @@ class LUXCORE_RENDER_PT_sampling(RenderButtonsPanel, Panel):
             else:
                 row.prop(config, "sampler")
 
-            if sampler in ["SOBOL", "RANDOM"]:
+            if sampler in ["SOBOL", "RANDOM", "PMJ02"]:
                 col = layout.column()
                 col.active = not config.using_out_of_core()
                 col.prop(config, "sampler_pattern")
@@ -136,7 +136,7 @@ class LUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
         if simple.enabled and not simple.show_advanced:
             return False
         config = context.scene.luxcore.config
-        return config.get_sampler() in {"SOBOL", "RANDOM"} and not config.using_tiled_path()
+        return config.get_sampler() in {"SOBOL", "RANDOM", "PMJ02"} and not config.using_tiled_path()
 
     def draw(self, context):
         layout = self.layout
@@ -228,6 +228,11 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
 
         if config.light_strategy == "RESTIR_DI":
             col.prop(config, "restir_temporal_enable")
+            col.prop(config, "restir_spatial_enable")
             col.prop(config, "restir_candidates")
 
         col.prop(config, "mnee_enable")
+        if config.mnee_enable:
+            col.prop(config, "mnee_maxspecular")
+
+        col.prop(config, "guiding_enable")

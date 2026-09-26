@@ -21,9 +21,11 @@ class LuxCoreNodeTexPointiness(LuxCoreNodeTexture, bpy.types.Node):
         
         self.outputs.new("LuxCoreSocketFloatUnbounded", "Value")
         
-        # This node potentially requires a mesh re-export in viewport, 
-        # because it depends on a LuxCore shape to pre-process the data
-        utils_node.force_viewport_mesh_update2(self.id_data)
+        # This node potentially requires a mesh re-export in viewport,
+        # because it depends on a LuxCore shape to pre-process the data.
+        # (id_data is None while the node is being created.)
+        if self.id_data is not None:
+            utils_node.force_viewport_mesh_update2(self.id_data)
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "curvature_mode", expand=True)

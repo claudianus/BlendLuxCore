@@ -30,7 +30,7 @@ def start_session(engine):
     except ReferenceError:
         # Could not start render session because RenderEngine struct was deleted (caused
         # by the user cancelling the viewport render before this function is called)
-        return
+        pass
     except Exception as error:
         engine.session = None
         # Reset the exporter to invalidate all caches
@@ -42,10 +42,12 @@ def start_session(engine):
         import traceback
 
         traceback.print_exc()
-
-    # Note: Due to CPython implementation details, it's not necessary to use a
-    # lock here (this modification is atomic)
-    engine.starting_session = False
+    finally:
+        # Note: Due to CPython implementation details, it's not necessary to use a
+        # lock here (this modification is atomic). It MUST run on every path:
+        # the early return below used to skip it, permanently deadlocking
+        # view_update() on starting_session == True.
+        engine.starting_session = False
 
 
 def force_session_restart(engine):
@@ -77,6 +79,10 @@ def view_update(engine, context, depsgraph, changes=None):
     LuxCoreErrorLog.clear(force_ui_update=False)
 
     if engine.session is None:
+        # A fresh start clears any earlier fatal error (recovery beats a
+        # permanently dead viewport; genuinely fatal errors reappear).
+        engine.viewport_fatal_error = None
+        engine.kernel_check_cache = None
         if not engine.viewport_starting_message_shown:
             # Let one engine.view_draw() happen so it shows a message in the UI
             return
@@ -98,7 +104,7 @@ def view_update(engine, context, depsgraph, changes=None):
                 return
         else:
             display_luxcore_logs = get_addon_preferences(
-                bpy.context
+                context
             ).display_luxcore_logs
             if display_luxcore_logs:
                 pyluxcore.SetLogHandler(LuxCoreLog.add)
@@ -115,9 +121,13 @@ def view_update(engine, context, depsgraph, changes=None):
             # Start in separate thread to avoid blocking the UI
             engine.starting_session = True
             engine.is_first_viewport_start = False
-            import _thread
+            import threading
 
-            _thread.start_new_thread(start_session, (engine,))
+            session_thread = threading.Thread(
+                target=start_session, args=(engine,), daemon=True,
+                name="LuxCoreViewportStart",
+            )
+            session_thread.start()
         except Exception as error:
             if engine.session is not None:
                 # in case engine.session was already set in the try block
@@ -199,26 +209,34 @@ def view_draw(engine, context, depsgraph):
         message = ""
 
         if luxcore_engine.endswith("OCL"):
-            # Create dummy renderconfig to check if we have to compile OpenCL kernels
-            luxcore_scene = pyluxcore.Scene()
-            definitions = {
-                "scene.camera.type": "perspective",
-            }
-            luxcore_scene.Parse(utils.luxutils.create_props("", definitions))
+            # The dummy Scene/RenderConfig below costs a full kernel-config
+            # build per redraw; HasCachedKernels() only changes when the
+            # config does, so cache it on the engine for the sessionless
+            # phase (cleared on every fresh start above).
+            if engine.kernel_check_cache is None:
+                # Create dummy renderconfig to check if we have to compile OpenCL kernels
+                luxcore_scene = pyluxcore.Scene()
+                definitions = {
+                    "scene.camera.type": "perspective",
+                }
+                luxcore_scene.Parse(utils.luxutils.create_props("", definitions))
 
-            devices = scene.luxcore.devices
-            definitions = {
-                "renderengine.type": "RTPATHOCL",
-                "sampler.type": "TILEPATHSAMPLER",
-                "scene.epsilon.min": config.min_epsilon,
-                "scene.epsilon.max": config.max_epsilon,
-                "opencl.devices.select": devices.devices_to_selection_string(),
-            }
-            config_props = utils.luxutils.create_props("", definitions)
-            renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
-
-            if not renderconfig.HasCachedKernels():
-                gpu_backend = utils.get_addon_preferences(context).gpu_backend
+                devices = scene.luxcore.devices
+                definitions = {
+                    "renderengine.type": "RTPATHOCL",
+                    "sampler.type": "TILEPATHSAMPLER",
+                    "scene.epsilon.min": config.min_epsilon,
+                    "scene.epsilon.max": config.max_epsilon,
+                    "opencl.devices.select": devices.devices_to_selection_string(),
+                }
+                config_props = utils.luxutils.create_props("", definitions)
+                renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
+                engine.kernel_check_cache = (
+                    renderconfig.HasCachedKernels(),
+                    utils.get_addon_preferences(context).gpu_backend,
+                )
+            has_cached_kernels, gpu_backend = engine.kernel_check_cache
+            if not has_cached_kernels:
                 message = (
                     f"Compiling {gpu_backend} kernels ("
                     "((just once, usually takes 15-30 minutes)"
@@ -317,7 +335,11 @@ def view_draw(engine, context, depsgraph):
         # ...and denoise
         use_oidn = context.scene.luxcore.viewport.get_denoiser(context) == "OIDN"
         if use_oidn and not framebuffer.denoised:
-            if not framebuffer.is_denoiser_active():
+            # The background worker only computes OIDN; the upload/draw
+            # happens here on the main thread (GL-safe).
+            if framebuffer.consume_denoise_result(engine):
+                pass  # fresh denoised image is already uploaded
+            elif not framebuffer.is_denoiser_active():
                 print("Starting OIDN denoiser...")
                 framebuffer.start_denoiser(engine)
             status_message = "(Paused, OIDN Denoiser Working ...)"

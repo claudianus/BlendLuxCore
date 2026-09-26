@@ -40,6 +40,7 @@ LIGHT_STRATEGY_TO_STR = {
     "POWER": "Power",
     "UNIFORM": "Uniform",
     "DLS_CACHE": "Direct Light Cache",
+    "RESTIR_DI": "ReSTIR DI",
 }
 
 
@@ -47,21 +48,21 @@ def engine_to_str(engine):
     try:
         return ENGINE_TO_STR[engine]
     except KeyError:
-        return "Unkown"
+        return "Unknown"
 
 
 def sampler_to_str(sampler):
     try:
         return SAMPLER_TO_STR[sampler]
     except KeyError:
-        return "Unkown"
+        return "Unknown"
 
 
 def light_strategy_to_str(light_strategy):
     try:
         return LIGHT_STRATEGY_TO_STR[light_strategy]
     except KeyError:
-        return "Unkown"
+        return "Unknown"
 
 
 def update_stats(session):

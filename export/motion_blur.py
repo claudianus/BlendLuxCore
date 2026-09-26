@@ -62,11 +62,22 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph, expor
         frame_int = math.floor(frame)
         subframe = frame - frame_int
         engine.frame_set(frame_int, subframe)
+        # frame_set() alone does not re-evaluate the depsgraph: without an
+        # explicit update every step would read the center-frame matrices
+        # and motion blur would silently render static.
+        try:
+            depsgraph.update()
+        except Exception:
+            pass
         if motion_blur.object_blur:
             _append_object_matrices(depsgraph, exported_objects, matrices, step)
 
         if motion_blur.camera_blur and not context:
-            matrix = scene.camera.matrix_world
+            # Evaluated camera, not the original: original matrix_world
+            # does not follow frame animation.
+            camera_eval = depsgraph.objects.get(scene.camera.name)
+            matrix = (camera_eval.matrix_world if camera_eval is not None
+                      else scene.camera.matrix_world)
 
             prefix = "scene.camera."
             _append_matrix(matrices, prefix, matrix, step)
