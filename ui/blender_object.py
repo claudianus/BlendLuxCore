@@ -34,6 +34,8 @@ class LUXCORE_OBJECT_PT_object(ObjectButtonsPanel, Panel):
         col.prop(obj.luxcore, "id")
         col.prop(obj.luxcore, "visible_to_camera")
         col.prop(obj.luxcore, "exclude_from_render")
+        if obj.type == "MESH":
+            col.prop(obj.luxcore, "is_light_portal")
 
         # Motion blur settings
         cam = context.scene.camera

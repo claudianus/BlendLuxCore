@@ -1,4 +1,6 @@
 from time import sleep
+import threading
+
 _needs_reload = "bpy" in locals()
 
 import bpy
@@ -66,18 +68,38 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
         self.aov_imagepipelines = {}
         self.is_first_viewport_start = True
         self.viewport_start_time = 0
-        self.starting_session = False
         self.viewport_starting_message_shown = False
         self.viewport_fatal_error = None
+        self.viewport_phase = ""
         self.time_of_last_viewport_resize = 0
         self.last_viewport_size = (0, 0)
+        # Camera-only edit deferred while a film reset awaited content;
+        # flushed by view_draw once the pending frame lands.
+        self._deferred_edit_jobs = None
+        # Dynamic resolution override (sparse passes while interacting):
+        # the new session starts at the configured reduction anyway.
+        self._dyn_res_active = False
+        self._dyn_res_until = 0
+        # Async session worker (created lazily by the viewport on first
+        # use; final/preview renders never start it). A previous worker
+        # must not survive a reset: it would keep mutating a stale session.
+        worker = getattr(self, "session_worker", None)
+        if worker is not None:
+            worker.shutdown()
+        self.session_worker = None
+        self.session_lock = threading.Lock()
 
     def __del__(self):
         # Note: this method is also called when unregister() is called (for some reason I don't understand)
         # Broad guard: anything (including Stop itself) may fail here since
         # Blender can call this from GC/unregister contexts.
         try:
-            if getattr(self, "session", None):
+            worker = getattr(self, "session_worker", None)
+            if worker is not None:
+                # The worker owns session teardown now (Stop on its own
+                # thread); shutdown() also stops the live session.
+                worker.shutdown()
+            elif getattr(self, "session", None):
                 if not self.is_preview:
                     print("[Engine] del: stopping session")
                 if self.session.IsStarted():
@@ -167,6 +189,12 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
             # instead of reusing a half-torn one. No fatal flag: viewport
             # errors are usually transient (resize races), recovery is better
             # than a permanently dead viewport.
+            worker = getattr(self, "session_worker", None)
+            if worker is not None:
+                # The worker owns the live session; without this an
+                # in-flight job could re-publish the session we are
+                # discarding here.
+                worker.submit_stop()
             try:
                 if getattr(self, "session", None) is not None and self.session.IsStarted():
                     self.session.Stop()

@@ -13,67 +13,164 @@ from ..utils import get_addon_preferences
 from ..utils.log import LuxCoreLog
 from ..utils.errorlog import LuxCoreErrorLog
 from ..export.config import convert_viewport_engine
+from . import session_worker
 
 if _needs_reload:
     import importlib
 
+    importlib.reload(session_worker)
     importlib.reload(export)
     importlib.reload(utils)
     importlib.reload(draw)
 
 
-# Executed in separate thread
-def start_session(engine):
+def _worker(engine):
+    """Lazily create the session worker (one per RenderEngine)."""
+    worker = getattr(engine, "session_worker", None)
+    if worker is None:
+        # Attribute access (not the stale `from`-import) so addon reload
+        # picks up the reloaded class.
+        worker = session_worker.SessionWorker(engine)
+        engine.session_worker = worker
+    return worker
+
+
+_LOCK_BUSY = object()
+
+# Dynamic resolution switching: while the user interacts (scene edits
+# arriving), RTPATHOCL runs sparse coverage passes - every pixel carries
+# weight 1.0 regardless of reduction, so passes stay unbiased but finish
+# in ~1/16 of the time. That shrinks both the frame-boundary wait before
+# an edit applies and the first-post-reset-sample latency. Once edits
+# stop arriving for _DYN_RES_TAIL_S the configured reduction is restored.
+_DYN_RES_VALUE = 16
+_DYN_RES_TAIL_S = 0.4
+
+
+def _set_stats(engine, text, sub):
+    """update_stats() with dedup: each call triggers a stats-region
+    redraw, and alternating/identical writes every frame make the
+    viewport text flicker. Only write when the text actually changed."""
+    new = (text, sub)
+    if new != getattr(engine, "_vp_stats_shown", None):
+        engine._vp_stats_shown = new
+        engine.update_stats(text, sub)
+
+
+def _submit_jobs(engine, worker, framebuffer, jobs, has_camera):
+    """Forward exporter jobs to the session worker, pacing scene edits.
+
+    Every applied edit resets the film at the next frame boundary, and
+    the film stays empty until the first preview pass lands (~20-80 ms).
+    Submitting edits faster than that (a camera orbit or object drag
+    fires one per draw, ~16 ms) leaves the film perpetually empty - the
+    viewport renders black for the entire drag. While a reset is still
+    waiting for content, edits are deferred (newest wins) and flushed
+    once the film has a frame again, so the effective edit rate adapts
+    to scene speed. Deferral is bounded by the pending deadline, so a
+    starved film (paused session, empty scene) still releases the job.
+    """
+    # Sparse fast passes for the whole interaction burst - also while the
+    # edit sits deferred behind a pending reset, so that reset resolves
+    # faster and the deferred edit lands sooner.
+    worker.submit_resolution_reduction(_DYN_RES_VALUE)
+    engine._dyn_res_until = time() + _DYN_RES_TAIL_S
+    engine._dyn_res_active = True
+    if (
+        framebuffer is not None
+        and framebuffer._pending_reset
+        and time() < framebuffer._pending_reset_deadline
+    ):
+        engine._deferred_edit_jobs = (jobs, has_camera)
+        return
+    for kind, payload in jobs:
+        if kind == "edit":
+            worker.submit_edit(payload)
+        elif kind == "parse":
+            worker.submit_parse(payload)
+    # The edit resumes a paused session on the worker: re-anchor the
+    # halt timer so the resumed render isn't instantly re-paused when
+    # halt_time already elapsed (paused-lockup / black viewport).
+    engine.viewport_start_time = time()
+    if framebuffer is not None:
+        # Film was reset by the edit: hold the last frame until the new
+        # render has produced visible samples (no black flash on orbit).
+        # Camera moves get a shorter hold: the old viewpoint is wrong.
+        framebuffer.begin_reset(
+            FrameBuffer.HOLD_LAST_FRAME_CAMERA_S if has_camera else None,
+            engine=engine,
+        )
+        framebuffer.reset_denoiser()
+
+
+def _locked_session_call(engine, fn, *args):
+    """Call ``fn(*args)`` while holding the worker's session_lock.
+
+    Non-blocking: returns _LOCK_BUSY when the worker is mid-mutation
+    (scene edit / Stop / Parse), so view_draw skips the call this frame
+    instead of freezing the UI behind a full tile pass. Serializing every
+    session call matters for correctness too: an unsynchronized read
+    while the worker stops the session can crash Blender (the Solid ->
+    Rendered teardown race).
+    """
+    worker = getattr(engine, "session_worker", None)
+    lock = getattr(worker, "session_lock", None) if worker else None
+    if lock is None:
+        return fn(*args)
+    if not lock.acquire(blocking=False):
+        return _LOCK_BUSY
     try:
-        engine.session.Start()
-        engine.viewport_start_time = time()
-    except ReferenceError:
-        # Could not start render session because RenderEngine struct was deleted (caused
-        # by the user cancelling the viewport render before this function is called)
-        pass
-    except Exception as error:
-        engine.session = None
-        # Reset the exporter to invalidate all caches
-        engine.exporter = None
-
-        engine.update_stats("Error: ", str(error))
-        LuxCoreErrorLog.add_error(error)
-
-        import traceback
-
-        traceback.print_exc()
+        return fn(*args)
     finally:
-        # Note: Due to CPython implementation details, it's not necessary to use a
-        # lock here (this modification is atomic). It MUST run on every path:
-        # the early return below used to skip it, permanently deadlocking
-        # view_update() on starting_session == True.
-        engine.starting_session = False
+        lock.release()
+
+
+def _drain_worker_error(engine):
+    """Surface async worker failures to the user (error log + stats).
+
+    Start/config failures are persistent (bad config, missing kernels):
+    latch them so the viewport stops retrying and shows the error
+    instead of silently looping. Edit/parse failures already caused the
+    worker to drop the session - the next view_update re-exports.
+    """
+    worker = getattr(engine, "session_worker", None)
+    if worker is None:
+        return
+    err = worker.pop_error()
+    if err is None:
+        return
+    kind, error = err
+    LuxCoreErrorLog.add_error(error)
+    engine.update_stats("Error: ", str(error))
+    if kind in ("start", "config"):
+        engine.viewport_fatal_error = str(error)
 
 
 def force_session_restart(engine):
     """
     https://github.com/LuxCoreRender/BlendLuxCore/issues/577
-    For unknown reasons, the old way of handling changes to the renderconfig,
-    like a viewport resize or renderengine settings edit, now causes a memory
-    leak. I have not been able to track it down. (The original code is in
-    export/__init__.py in the method _update_config()) As a workaround, I stop
-    and delete the session to trigger a full re-export of the scene and a fresh
-    restart of the viewport render.
+    Mutating the RenderConfig of a running session leaks (every stopped
+    session kept its copy of the scene) and used to crash. The worker
+    stops the session off-thread; the next view_update() re-exports.
     """
-    if engine.session is not None:
+    if getattr(engine, "session_worker", None) is not None:
+        engine.session_worker.submit_stop()
+    elif engine.session is not None:
+        # No worker (final render / preview): stop directly.
         engine.session.Stop()
-        # Explicitly drop the last reference so the stopped session (and the
-        # copy of the scene it holds) is freed immediately instead of
-        # accumulating until the next garbage collection run
-        del engine.session
-        engine.session = None
+    # Drop the main-thread reference so the stopped session's scene copy
+    # is freed instead of accumulating until the next GC run.
+    engine.session = None
 
 
 def view_update(engine, context, depsgraph, changes=None):
-    start = time()
+    worker = _worker(engine)
+    _drain_worker_error(engine)
 
-    if engine.starting_session or engine.viewport_fatal_error:
-        # Prevent deadlock
+    if worker.is_starting or engine.viewport_fatal_error:
+        # Prevent deadlock: a start job is in flight (or failed
+        # persistently) - depsgraph updates accumulate meanwhile and are
+        # consumed by the first get_changes() after the session lands.
         return
 
     LuxCoreErrorLog.clear(force_ui_update=False)
@@ -115,24 +212,22 @@ def view_update(engine, context, depsgraph, changes=None):
             print("=" * 50)
             print("[Engine/Viewport] New session")
             engine.exporter = export.Exporter()
-            engine.session = engine.exporter.create_session(
+            engine.viewport_phase = "Exporting scene"
+            engine.is_first_viewport_start = False
+            engine.last_viewport_size = utils.calc_filmsize(
+                depsgraph.scene_eval, context
+            )
+            # Scene export needs the depsgraph: it has to stay on the main
+            # thread. Everything from RenderConfig onward (kernel compile,
+            # session start) runs on the worker so the UI never stalls.
+            result = engine.exporter.export_scene(
                 depsgraph, context, engine=engine
             )
-            # Start in separate thread to avoid blocking the UI
-            engine.starting_session = True
-            engine.is_first_viewport_start = False
-            import threading
-
-            session_thread = threading.Thread(
-                target=start_session, args=(engine,), daemon=True,
-                name="LuxCoreViewportStart",
-            )
-            session_thread.start()
+            if result is not None:
+                luxcore_scene, config_props = result
+                engine.viewport_phase = ""
+                worker.submit_start(luxcore_scene, config_props)
         except Exception as error:
-            if engine.session is not None:
-                # in case engine.session was already set in the try block
-                # before the error
-                del engine.session
             engine.session = None
             # Reset the exporter to invalidate all caches
             engine.exporter = None
@@ -146,62 +241,59 @@ def view_update(engine, context, depsgraph, changes=None):
             traceback.print_exc()
         return
 
-    s = time()
     changes = engine.exporter.get_changes(depsgraph, context, changes)
 
-    if changes:
-        if changes == export.Change.CONFIG:
-            # Config-only change (e.g. viewport resize, engine settings):
-            # rebuild just the RenderConfig on the existing LuxCore scene
-            # instead of re-exporting the whole scene
-            try:
-                engine.session = engine.exporter._update_config(
-                    engine.session, engine.exporter.config_cache.props
-                )
-                engine.viewport_start_time = time()
+    if not changes:
+        return
 
-                if engine.framebuffer:
-                    engine.framebuffer.begin_reset()
-                    engine.framebuffer.reset_denoiser()
-            except Exception as error:
-                # Fall back to the safe full-restart path if the fast path
-                # fails (e.g. unsupported config change in LuxCore)
-                LuxCoreErrorLog.add_error(error)
-                import traceback
+    # Config changes restart the session on the *reused* LuxCore scene -
+    # no scene re-export. Runs on the worker; the framebuffer keeps the
+    # last frame until the new session produces samples (begin_reset).
+    if changes & export.Change.CONFIG:
+        worker.submit_config(engine.exporter.config_cache.props)
+        changes &= ~export.Change.CONFIG
+        if engine.framebuffer:
+            engine.framebuffer.begin_reset(engine=engine)
+            engine.framebuffer.reset_denoiser()
 
-                traceback.print_exc()
-                force_session_restart(engine)
-            return
-        if changes & export.Change.REQUIRES_VIEW_UPDATE:
-            # Only restart the session if the view transform didn't change by
-            # itself
-            if engine.framebuffer:
-                # Keep the last frame on screen while the new session boots
-                engine.framebuffer.begin_reset()
+    if changes & (
+        export.Change.REQUIRES_SCENE_EDIT
+        | export.Change.REQUIRES_SESSION_PARSE
+    ):
+        try:
+            jobs = engine.exporter.update(depsgraph, context, changes)
+        except Exception as error:
+            # A half-recorded edit must not be replayed; rebuild the
+            # scene from scratch instead.
+            LuxCoreErrorLog.add_error(error)
+            import traceback
+
+            traceback.print_exc()
             force_session_restart(engine)
             return
-        s = time()
-        # We have to re-assign the session because it might have been replaced
-        # due to filmsize change
-        engine.session = engine.exporter.update(
-            depsgraph, context, engine.session, changes
+        _submit_jobs(
+            engine, worker, engine.framebuffer, jobs,
+            has_camera=bool(changes & export.Change.CAMERA),
         )
-        engine.viewport_start_time = time()
-
-        if engine.framebuffer:
-            engine.framebuffer.begin_reset()
-            engine.framebuffer.reset_denoiser()
 
 
 def view_draw(engine, context, depsgraph):
     scene = depsgraph.scene_eval
+    worker = _worker(engine)
+    _drain_worker_error(engine)
 
-    if engine.starting_session:
+    if worker.is_starting:
+        # Show what the worker is doing (export > config > kernels >
+        # session start) instead of a frozen window.
+        phase = worker.phase or getattr(engine, "viewport_phase", "")
+        _set_stats(engine, "Starting viewport render", phase)
+        if engine.framebuffer:
+            engine.framebuffer.draw(context, scene)
         engine.tag_redraw()
         return
 
     if engine.viewport_fatal_error:
-        engine.update_stats("Error:", engine.viewport_fatal_error)
+        _set_stats(engine, "Error:", engine.viewport_fatal_error)
         engine.tag_redraw()
         return
 
@@ -247,12 +339,17 @@ def view_draw(engine, context, depsgraph):
                     "((just once, usually takes 15-30 minutes)"
                 )
 
-        engine.update_stats("Starting viewport render", message)
+        phase = worker.phase if worker is not None else ""
+        _set_stats(
+            engine,
+            "Starting viewport render",
+            phase or getattr(engine, "viewport_phase", "") or message,
+        )
         engine.viewport_starting_message_shown = True
         # Keep showing the previous session's last frame while the new
         # session exports/starts instead of flashing black.
         if engine.framebuffer:
-            engine.framebuffer.draw()
+            engine.framebuffer.draw(context, scene)
         engine.tag_update()
         engine.tag_redraw()
         return
@@ -270,85 +367,141 @@ def view_draw(engine, context, depsgraph):
     # camera) do not trigger a view_update() call, but only a view_draw() call.
     changes = engine.exporter.get_viewport_changes(depsgraph, context)
 
-    if changes == export.Change.CONFIG:
+    if changes & export.Change.CONFIG:
         # Config-only change detected during draw (e.g. viewport resize):
-        # rebuild the RenderConfig on the existing scene right away. The
-        # framebuffer transition above keeps the last image on screen, so
-        # the user sees the resized old frame instead of a black flash, and
-        # the new session replaces it as soon as it has its first frame.
+        # the worker rebuilds the RenderConfig on the existing scene. The
+        # framebuffer keeps the last image on screen (begin_reset), so the
+        # user sees the resized old frame instead of a black flash.
+        worker.submit_config(engine.exporter.config_cache.props)
+        changes &= ~export.Change.CONFIG
+        engine.viewport_start_time = time()
+        framebuffer.begin_reset(engine=engine)
+        framebuffer.reset_denoiser()
+        if not changes:
+            engine.tag_redraw()
+            framebuffer.draw(context, scene)
+            return
+
+    if changes & (export.Change.CAMERA | export.Change.MATERIAL):
+        # Only update in view_draw if it is a camera/material update,
+        # for everything else we call view_update(). The ops are replayed
+        # by the worker inside one scene-edit block.
         try:
-            engine.session = engine.exporter._update_config(
-                engine.session, engine.exporter.config_cache.props
-            )
-            engine.viewport_start_time = time()
-            framebuffer.begin_reset()
-            framebuffer.reset_denoiser()
+            jobs = engine.exporter.update(depsgraph, context, changes)
         except Exception as error:
             LuxCoreErrorLog.add_error(error)
             import traceback
 
             traceback.print_exc()
             force_session_restart(engine)
-        engine.tag_redraw()
-        framebuffer.draw()
-        return
-    elif changes & export.Change.REQUIRES_VIEW_UPDATE:
-        engine.tag_redraw()
-        # Keep the last frame up while the session restarts (the session-None
-        # branch in the next draw keeps drawing it until the new session's
-        # first real samples arrive).
-        framebuffer.begin_reset()
-        # view_update(engine, context, depsgraph, changes)  # Disabled, see comment on force_session_restart()
-        force_session_restart(engine)
-        framebuffer.draw()
-        return
-    elif changes & (export.Change.CAMERA | export.Change.MATERIAL):
-        # Only update in view_draw if it is a camera update,
-        # for everything else we call view_update().
-        # We have to re-assign the session because it might have been
-        # replaced due to filmsize change.
-        engine.session = engine.exporter.update(
-            depsgraph, context, engine.session, changes
+            engine.tag_redraw()
+            return
+        _submit_jobs(
+            engine, worker, framebuffer, jobs,
+            has_camera=bool(changes & export.Change.CAMERA),
         )
-        engine.viewport_start_time = time()
-        # Film was reset by the edit: hold the last frame until the new
-        # render has produced visible samples (no black flash on orbit).
-        framebuffer.begin_reset()
-        framebuffer.reset_denoiser()
+    elif changes:
+        # Non-camera changes noticed in draw: let view_update handle them.
+        engine.tag_update()
+
+    # Snapshot the session: the worker may publish a new one (or None
+    # during a restart) at any time; a stale-but-alive object degrades
+    # gracefully to RuntimeError while engine.session itself may turn
+    # into None and raise AttributeError mid-draw.
+    session = engine.session
+
+    # Flush a camera edit deferred while the film was still empty. The
+    # pending reset clears when post-reset content lands (or on the
+    # bounded deadline), so this fires as soon as the last edit produced
+    # a frame - the effective camera-edit rate adapts to scene speed.
+    deferred = getattr(engine, "_deferred_edit_jobs", None)
+    if deferred is not None:
+        still_waiting = (
+            framebuffer._pending_reset
+            and time() < framebuffer._pending_reset_deadline
+        )
+        if still_waiting:
+            # Keep draws flowing until the deferred edit can fire: while
+            # paused, nothing tags a redraw and the final camera position
+            # would never be submitted.
+            engine.tag_redraw()
+        else:
+            engine._deferred_edit_jobs = None
+            deferred_jobs, deferred_has_camera = deferred
+            for kind, payload in deferred_jobs:
+                if kind == "edit":
+                    worker.submit_edit(payload)
+                elif kind == "parse":
+                    worker.submit_parse(payload)
+            # Deferred edit finally firing: still interacting.
+            worker.submit_resolution_reduction(_DYN_RES_VALUE)
+            engine._dyn_res_until = time() + _DYN_RES_TAIL_S
+            engine._dyn_res_active = True
+            engine.viewport_start_time = time()
+            framebuffer.begin_reset(
+                FrameBuffer.HOLD_LAST_FRAME_CAMERA_S
+                if deferred_has_camera
+                else None,
+                engine=engine,
+            )
+            framebuffer.reset_denoiser()
+
+    # Interaction settled: restore the configured (dense) reduction so
+    # steady-state passes converge at full quality.
+    if getattr(engine, "_dyn_res_active", False) and (
+        time() > getattr(engine, "_dyn_res_until", 0)
+    ):
+        engine._dyn_res_active = False
+        worker.submit_resolution_reduction(0)
 
     if utils.in_material_shading_mode(context):
-        if not engine.session.IsInPause():
+        paused = (
+            session is not None
+            and _locked_session_call(engine, session.IsInPause) is True
+        )
+        if not paused:
             # Non-blocking: draw whatever the film holds instead of waiting
             # for a full frame (avoids UI freezes on session restarts)
             try:
-                engine.session.UpdateStats()
-                framebuffer.update(engine.session)
-            except RuntimeError:
+                if session is not None:
+                    _locked_session_call(engine, session.UpdateStats)
+                    framebuffer.update_async(session, engine)
+            except Exception:
                 pass
-            engine.update_stats("", "")
+            _set_stats(engine, "", "")
 
-            stats = engine.session.GetStats()
-            samples = stats.Get("stats.renderengine.pass").GetInt()
+            samples = 0
+            if session is not None:
+                try:
+                    stats = _locked_session_call(engine, session.GetStats)
+                    samples = stats.Get("stats.renderengine.pass").GetInt()
+                except Exception:
+                    pass
 
             if samples >= 5:
-                engine.session.Pause()
+                _locked_session_call(engine, session.Pause)
             else:
                 engine.tag_redraw()
-        framebuffer.draw()
+        framebuffer.draw(context, scene)
         return
 
     # Check if we need to pause the viewport render
     # (note: the LuxCore stat "stats.renderengine.time" is not reliable here)
     rendered_time = time() - engine.viewport_start_time
     halt_time = scene.luxcore.viewport.halt_time
-    status_message = ""
+    status_message = worker.phase if worker is not None else ""
 
     if rendered_time > halt_time:
-        # Put in pause...
-        if not engine.session.IsInPause():
+        # Put in pause... (non-blocking: if the worker is mid-edit the
+        # pause is simply retried on the next draw instead of freezing)
+        paused = (
+            session is not None
+            and _locked_session_call(engine, session.IsInPause) is True
+        )
+        if not paused and session is not None:
             print("[Engine/Viewport] Pausing session")
-            engine.session.Pause()
-        status_message = "(Paused)"
+            _locked_session_call(engine, session.Pause)
+        status_message = status_message or "(Paused)"
 
         # ...and denoise
         use_oidn = context.scene.luxcore.viewport.get_denoiser(context) == "OIDN"
@@ -359,7 +512,7 @@ def view_draw(engine, context, depsgraph):
                 pass  # fresh denoised image is already uploaded
             elif not framebuffer.is_denoiser_active():
                 print("Starting OIDN denoiser...")
-                framebuffer.start_denoiser(engine)
+                framebuffer.start_denoiser(engine, session)
             status_message = "(Paused, OIDN Denoiser Working ...)"
             engine.tag_redraw()
         else:
@@ -377,32 +530,51 @@ def view_draw(engine, context, depsgraph):
         # the next view_draw() pick up the new frame (it is called again
         # because of tag_redraw() below).
         try:
-            engine.session.UpdateStats()
-            vp = scene.luxcore.viewport
-            interactive = (
-                vp.denoise_interactive
-                and vp.get_denoiser(context) == "OIDN"
-                and not utils.in_material_shading_mode(context)
-            )
-            handled = (
-                framebuffer.interactive_denoise_tick(engine, vp.min_samples)
-                if interactive
-                else False
-            )
-            if not handled:
-                # Async film readback: the device-queue drain runs on a
-                # worker thread, the finished frame is consumed here.
-                framebuffer.update_async(engine.session)
+            if session is not None:
+                _locked_session_call(engine, session.UpdateStats)
+                vp = scene.luxcore.viewport
+                interactive = (
+                    vp.denoise_interactive
+                    and vp.get_denoiser(context) == "OIDN"
+                    and not utils.in_material_shading_mode(context)
+                )
+                handled = (
+                    framebuffer.interactive_denoise_tick(
+                        engine, vp.min_samples
+                    )
+                    if interactive
+                    else False
+                )
+                if not handled:
+                    # Async film readback: the device-queue drain runs on a
+                    # worker thread, the finished frame is consumed here.
+                    framebuffer.update_async(session, engine)
         except RuntimeError:
             # Session not started yet / no film available: keep showing the
             # last framebuffer contents instead of flashing black
             pass
         engine.tag_redraw()
 
-    framebuffer.draw()
+    framebuffer.draw(context, scene)
 
     # Show formatted statistics in Blender UI
-    config = engine.session.GetRenderConfig()
-    stats = engine.session.GetStats()
-    pretty_stats = utils_render.get_pretty_stats(config, stats, scene, context)
-    engine.update_stats(pretty_stats, status_message)
+    try:
+        if session is None:
+            raise RuntimeError("no session")
+        config = _locked_session_call(engine, session.GetRenderConfig)
+        stats = _locked_session_call(engine, session.GetStats)
+        if config is _LOCK_BUSY or stats is _LOCK_BUSY:
+            raise RuntimeError("session busy")
+        pretty_stats = utils_render.get_pretty_stats(
+            config, stats, scene, context
+        )
+        engine._vp_stats_cache = (pretty_stats, status_message)
+    except Exception:
+        # Session being swapped by the worker mid-draw: keep the last
+        # real stats instead of flashing a phase/blank line (the stats
+        # text flickers badly if it alternates every frame).
+        cached = getattr(engine, "_vp_stats_cache", None)
+        pretty_stats = cached[0] if cached else (
+            worker.phase if worker is not None else ""
+        )
+    _set_stats(engine, pretty_stats, status_message)

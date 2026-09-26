@@ -274,22 +274,15 @@ def _motion_blur(scene, definitions, context, is_camera_moving):
 
 
 def _fieldofview_deg(cam_data, scene):
-    """FOV along the effective sensor fit direction. Blender resolves an
-    AUTO sensor fit by the frame aspect (BKE_camera_sensor_fit), so e.g.
-    a portrait frame uses sensor_height even though Camera.angle is
-    always based on sensor_width."""
-    render = scene.render
-    frame_aspect = (render.resolution_y * render.pixel_aspect_y) / (
-        render.resolution_x * render.pixel_aspect_x
+    """FOV from the pixsize sensor: BKE_camera_sensor_size uses the *raw*
+    sensor_fit - AUTO resolves the fit *axis* on the frame aspect in
+    BKE_camera_params_compute_viewplane but always keeps sensor_width as
+    the pixel scale (only an explicit VERTICAL uses sensor_height)."""
+    sensor_size = (
+        cam_data.sensor_height
+        if cam_data.sensor_fit == "VERTICAL"
+        else cam_data.sensor_width
     )
-    sensor_fit = cam_data.sensor_fit
-    if sensor_fit == "VERTICAL" or (
-        sensor_fit == "AUTO" and frame_aspect > 1.0
-    ):
-        sensor_size = cam_data.sensor_height
-    else:
-        sensor_size = cam_data.sensor_width
-
     return math.degrees(2 * math.atan(sensor_size / (2 * cam_data.lens)))
 
 

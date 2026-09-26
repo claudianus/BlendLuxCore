@@ -143,6 +143,14 @@ check(
 )
 
 scene2.luxcore.config.path.suggested_clamping_value = 42.0
+# Auto-clamp only applies while the scene signature matches the one
+# stamped when the suggestion was measured (5ab09647).
+from bl_ext.user_default.blendluxcore.utils.render import (
+    compute_clamp_signature,
+)
+scene2.luxcore.config.path.suggested_clamping_sig = compute_clamp_signature(
+    scene2
+)
 props = export_config.convert(None, scene2)
 check(
     "clamp.auto-applied",

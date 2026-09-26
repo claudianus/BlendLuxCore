@@ -22,6 +22,7 @@ from . import (
     halt,
     world,
     mesh_converter,
+    recorded_scene,
 )
 from .light import WORLD_BACKGROUND_LIGHT_NAME
 from .caches.object_cache import (
@@ -33,6 +34,7 @@ from .caches.object_cache import (
     _apply_cycles_displacement,
 )
 from .caches import persistent_scene
+from .recorded_scene import RecordedScene  # noqa: F811 keep name for reload
 
 if _needs_reload:
     import importlib
@@ -40,6 +42,7 @@ if _needs_reload:
     modules = (
         caches,
         persistent_scene,
+        recorded_scene,
         camera,
         config,
         imagepipeline,
@@ -169,6 +172,106 @@ class Exporter(object):
     def create_session(
         self, depsgraph, context=None, engine=None, view_layer=None
     ):
+        """Synchronous session creation (final render, preview).
+
+        The viewport uses the split path instead: export_scene() on the
+        main thread, then create_render_session() on the session worker.
+        """
+        export_start = time()
+        result = self.export_scene(depsgraph, context, engine, view_layer)
+        if result is None:
+            return None
+        luxcore_scene, config_props = result
+
+        scene = depsgraph.scene_eval
+        renderengine_type = config_props.Get("renderengine.type").GetString()
+
+        # Inform about pre-computations that can take a long time to
+        # complete, like caches
+        if engine:
+            message = "Creating RenderSession"
+            is_viewport_render = context is not None
+            # Caches are never used in viewport render
+            if not is_viewport_render:
+                # The second argument of Get() is used as fallback if the
+                # property is not set
+                cache_indirect = config_props.Get(
+                    "path.photongi.indirect.enabled", [False]
+                ).GetBool()
+                cache_caustics = config_props.Get(
+                    "path.photongi.caustic.enabled", [False]
+                ).GetBool()
+                cache_envlight = scene.luxcore.config.envlight_cache.enabled
+                cache_dls = (
+                    config_props.Get("lightstrategy.type", [""]).GetString()
+                    == "DLS_CACHE"
+                )
+                stats = self.stats
+                if stats:
+                    stats.cache_indirect.value = cache_indirect
+                    stats.cache_caustics.value = cache_caustics
+                    stats.cache_envlight.value = cache_envlight
+                    stats.cache_dls.value = cache_dls
+
+                cache_state = {
+                    "Indirect Light": cache_indirect,
+                    "Caustics": cache_caustics,
+                    "Env. Light": cache_envlight,
+                    "DLSC": cache_dls,
+                }
+                enabled_caches = [
+                    key for key, value in cache_state.items() if value
+                ]
+                if any(enabled_caches):
+                    message += (
+                        ", computing caches ("
+                        + ", ".join(enabled_caches)
+                        + ")"
+                    )
+            message += " ..."
+            engine.update_stats(
+                "Export Finished (%.1f s)" % (time() - export_start),
+                message,
+            )
+
+        progress_cb = None
+        if engine and renderengine_type.endswith("OCL"):
+            # Reported once compilation actually starts (the callback only
+            # fires when the kernel cache is cold). The backend name is
+            # captured now: the callback may fire on a native worker
+            # thread where bpy.context access is unsafe.
+            gpu_backend = utils.get_addon_preferences(
+                bpy.context
+            ).gpu_backend
+
+            def progress_cb(index, count):
+                if index == 0:
+                    engine.report(
+                        {"INFO"},
+                        f"Compiling {gpu_backend} kernels (just once, "
+                        "usually takes 15-30 minutes)",
+                    )
+                engine.update_stats(
+                    f"Compiling {gpu_backend} kernels "
+                    f"({index + 1}/{count})",
+                    "just once, usually takes 15-30 minutes"
+                    if index == 0
+                    else "",
+                )
+
+        return self.create_render_session(
+            config_props, luxcore_scene, progress_cb
+        )
+
+    def export_scene(
+        self, depsgraph, context=None, engine=None, view_layer=None
+    ):
+        """Convert the Blender scene to a pyluxcore scene + config props.
+
+        Returns ``(luxcore_scene, config_props)`` or None when the user
+        cancelled. Runs on the main thread (depsgraph access); the worker
+        takes over from create_render_session() onward.
+        """
         # Notes:
         # In final render, context is None
 
@@ -250,6 +353,7 @@ class Exporter(object):
                 utils.make_key(o): (
                     o.hide_render,
                     o.luxcore.exclude_from_render,
+                    getattr(o.luxcore, "is_light_portal", False),
                     o.visible_camera,
                     o.visible_diffuse,
                     o.visible_glossy,
@@ -707,7 +811,6 @@ class Exporter(object):
             print("DEBUG: Config Properties:\n")
             print(config_props)
             print("-" * 50)
-        renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
 
         # Regularly check if we should abort the export (important in heavy
         # scenes)
@@ -751,89 +854,24 @@ class Exporter(object):
                 )
             self._init_stats(stats, config_props, scene)
 
-        # Pre-compile CUDA or OpenCL kernels for viewport and final.
-        renderengine_type = config_props.Get("renderengine.type").GetString()
-        if (
-            renderengine_type.endswith("OCL")
-            and not renderconfig.HasCachedKernels()
-        ):
-            if engine:
-                gpu_backend = utils.get_addon_preferences(
-                    bpy.context
-                ).gpu_backend
-                message = (
-                    f"Compiling {gpu_backend} kernels (just once, "
-                    "usually takes 15-30 minutes)"
-                )
-                engine.report({"INFO"}, message)
-                engine.update_stats(message, "")
-
-            # Copy config props so we can pass scene.epsilon.min,
-            # scene.epsilon.max and opencl.devices.select to the kernel
-            config_props_copy = pyluxcore.Properties(config_props)
-            engines = ["PATHOCL", "RTPATHOCL"]
-            if renderengine_type == "TILEPATHOCL":
-                # Only pre-compile for tiled path if requested, since it's
-                # rarely used
-                engines.append("TILEPATHOCL")
-            config_props_copy.Set(
-                pyluxcore.Property(
-                    "kernelcachefill.renderengine.types", engines
-                )
-            )
-            pyluxcore.KernelCacheFill(config_props_copy)
-
-        # Inform about pre-computations that can take a long time to complete,
-        # like caches
-        if engine:
-            message = "Creating RenderSession"
-
-            # Caches are never used in viewport render
-            if not is_viewport_render:
-                # The second argument of Get() is used as fallback if the
-                # property is not set
-                cache_indirect = config_props.Get(
-                    "path.photongi.indirect.enabled", [False]
-                ).GetBool()
-                cache_caustics = config_props.Get(
-                    "path.photongi.caustic.enabled", [False]
-                ).GetBool()
-                cache_envlight = scene.luxcore.config.envlight_cache.enabled
-                cache_dls = (
-                    config_props.Get("lightstrategy.type", [""]).GetString()
-                    == "DLS_CACHE"
-                )
-
-                if stats:
-                    stats.cache_indirect.value = cache_indirect
-                    stats.cache_caustics.value = cache_caustics
-                    stats.cache_envlight.value = cache_envlight
-                    stats.cache_dls.value = cache_dls
-
-                cache_state = {
-                    "Indirect Light": cache_indirect,
-                    "Caustics": cache_caustics,
-                    "Env. Light": cache_envlight,
-                    "DLSC": cache_dls,
-                }
-                enabled_caches = [
-                    key for key, value in cache_state.items() if value
-                ]
-
-                if any(enabled_caches):
-                    message += (
-                        ", computing caches ("
-                        + ", ".join(enabled_caches)
-                        + ")"
-                    )
-
-            message += " ..."
-            engine.update_stats(
-                "Export Finished (%.1f s)" % export_time, message
-            )
-
         # Do not hold reference to temporary data
         self.scene = None
+        return luxcore_scene, config_props
+
+    def create_render_session(
+        self, config_props, luxcore_scene, progress_cb=None
+    ):
+        """RenderConfig + kernel pre-compile + RenderSession.
+
+        Pure pyluxcore - no depsgraph/bpy-scene access, so it is safe on
+        the session worker thread (that is where the viewport runs it).
+        ``progress_cb`` receives ``(index, count)`` while GPU kernels
+        compile; pass None for a silent fill.
+        """
+        from ..engine.session_worker import precompile_kernels
+
+        renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
+        precompile_kernels(config_props, renderconfig, progress_cb)
         return pyluxcore.RenderSession(renderconfig)
 
     def _apply_transform_deltas(
@@ -1448,89 +1486,51 @@ class Exporter(object):
         self.scene = None
         return changes
 
-    def update(self, depsgraph, context, session, changes):
+    def update(self, depsgraph, context, changes):
+        """Prepare deferred session work for the session worker.
+
+        Runs on the main thread (depsgraph access) but never touches the
+        live pyluxcore session: scene mutations are recorded on a
+        RecordedScene and session-level parses become props payloads.
+        Returns a list of ``(kind, payload)`` jobs - ``("edit", ops)``
+        and/or ``("parse", props)`` - for the caller to submit.
+
+        Raises on export failure: a half-recorded edit must not be
+        replayed, so the caller falls back to a full session restart.
+        """
         self.scene = depsgraph.scene_eval
         print("[Exporter] Update because of:", Change.to_string(changes))
         # Invalidate node cache
         self.node_cache.clear()
 
-        if changes & Change.CONFIG:
-            # We already converted the new config settings during
-            # get_changes(), re-use them
-            session = self._update_config(session, self.config_cache.props)
-
-        if changes & Change.REQUIRES_SCENE_EDIT:
-            luxcore_scene = session.GetRenderConfig().GetScene()
-            session.BeginSceneEdit()
-
-            try:
+        jobs = []
+        try:
+            if changes & Change.REQUIRES_SCENE_EDIT:
+                recorded = RecordedScene()
                 props = self._update_scene(
-                    depsgraph, context, changes, luxcore_scene
+                    depsgraph, context, changes, recorded
                 )
-                luxcore_scene.Parse(props)
-            except Exception as error:
-                LuxCoreErrorLog.add_error(error)
-                import traceback
+                recorded.Parse(props)
+                jobs.append(("edit", recorded.drain()))
 
-                traceback.print_exc()
+            if changes & Change.REQUIRES_SESSION_PARSE:
+                props = pyluxcore.Properties()
+                if changes & Change.IMAGEPIPELINE:
+                    props.Set(self.imagepipeline_cache.props)
+                if changes & Change.HALT:
+                    props.Set(self.halt_cache.props)
+                jobs.append(("parse", props))
+        finally:
+            # Do not hold reference to temporary data
+            self.scene = None
 
-            try:
-                session.EndSceneEdit()
-            except RuntimeError as error:
-                import traceback
-
-                traceback.print_exc()
-                LuxCoreErrorLog.add_error(error)
-                print("Fatal error, stopping session.")
-                session.Stop()  # TODO not sure if this works
-                raise
-
-            if session.IsInPause():
-                session.Resume()
-
-        if changes & Change.REQUIRES_SESSION_PARSE:
-            self.update_session(changes, session)
-
-        # Do not hold reference to temporary data
-        self.scene = None
-
-        # We have to return and re-assign the session in the RenderEngine,
-        # because it might have been replaced in _update_config()
-        return session
+        return jobs
 
     def update_session(self, changes, session):
         if changes & Change.IMAGEPIPELINE:
             session.Parse(self.imagepipeline_cache.props)
         if changes & Change.HALT:
             session.Parse(self.halt_cache.props)
-
-    def _update_config(self, session, config_props):
-        # https://github.com/LuxCoreRender/BlendLuxCore/issues/577
-        # The historical implementations of this method mutated the existing
-        # RenderConfig via Parse() after stopping the session. That path leaks
-        # (each stopped session keeps its copy of the scene alive) and in some
-        # LuxCore versions crashed Blender.
-        #
-        # Instead of mutating the old config, we build a fresh RenderConfig
-        # from the new props while REUSING the LuxCore scene of the running
-        # session. Re-exporting the whole Blender scene is therefore not
-        # necessary (meshes, materials and lights stay defined in the reused
-        # scene) - this is what makes viewport config changes fast.
-        #
-        # Note: renderengine.type changes and film size changes are handled
-        # fine by this too (a new session is started with the new config).
-        renderconfig = session.GetRenderConfig()
-        luxcore_scene = renderconfig.GetScene()
-
-        session.Stop()
-        # Explicitly drop our reference to the old session so the scene copy
-        # it owns is freed before we create the replacement
-        del session
-
-        new_renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
-        new_session = pyluxcore.RenderSession(new_renderconfig)
-        new_session.Start()
-        return new_session
 
     def _update_scene(self, depsgraph, context, changes, luxcore_scene):
         props = pyluxcore.Properties()

@@ -254,6 +254,10 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
             col.prop(config, "mnee_seedcache")
 
         col.prop(config, "guiding_enable")
+        if config.guiding_enable:
+            # Caps the aperture-proposal share; only takes effect when a
+            # mesh object is flagged "Light Portal" (object properties).
+            col.prop(config, "portal_weight")
 
         if config.engine == "PATH":
             col.prop(config, "spectral_enable")

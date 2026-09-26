@@ -18,6 +18,13 @@ DESC_EXCLUDE_FROM_RENDER = (
     "The object will be excluded from render. "
     "Useful if you need objects to render for other engines, but not for LuxCore"
 )
+DESC_LIGHT_PORTAL = (
+    "Use this mesh's quad faces as light portals: aperture guides that tell the path "
+    "tracer where light enters the space (windows, doorways, slits). The object itself "
+    "is NOT rendered - it is a sampling aid only, so it can sit inside the opening "
+    "without blocking light. Requires Path Guiding enabled (the learned field decides "
+    "how much each bounce trusts the portal). CPU engines only"
+)
 
 
 class LuxCoreObjectProps(PropertyGroup):
@@ -31,6 +38,9 @@ class LuxCoreObjectProps(PropertyGroup):
     )
     enable_motion_blur: BoolProperty(
         name="Motion Blur", default=True, description=DESC_MOTION_BLUR
+    )
+    is_light_portal: BoolProperty(
+        name="Light Portal", default=False, description=DESC_LIGHT_PORTAL
     )
     id: IntProperty(
         name="Object ID",

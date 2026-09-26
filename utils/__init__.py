@@ -188,24 +188,23 @@ def calc_filmsize(scene, context=None):
             height = int(height_raw * border_max_y) - int(
                 height_raw * border_min_y
             )
-        else:
-            # Camera viewport
-            zoom = 0.25 * (
-                (math.sqrt(2) + context.region_data.view_camera_zoom / 50) ** 2
+        elif render.use_border and is_valid_camera(scene.camera):
+            # Camera viewport with border rendering. The film shows the
+            # render border rect of the camera image: its content is
+            # zoom-independent, so anchor the resolution at the fitted
+            # frame. camzoom only rescales the on-screen quad
+            # (FrameBuffer), meaning zooming the camera view no longer
+            # restarts the render session.
+            frame_w, frame_h, _ = calc_camera_frame_size(
+                width_raw, height_raw, scene
             )
-            if render.use_border:
-                # The film covers the camera frame's border rect on screen:
-                # the frame is drawn at frame size * zoom inside the region
-                frame_w, frame_h, _ = calc_camera_frame_size(
-                    width_raw, height_raw, scene
-                )
-                frame_h /= render.pixel_aspect_y / render.pixel_aspect_x
-                width = int(zoom * frame_w * border_max_x) - int(
-                    zoom * frame_w * border_min_x
-                )
-                height = int(zoom * frame_h * border_max_y) - int(
-                    zoom * frame_h * border_min_y
-                )
+            frame_h /= render.pixel_aspect_y / render.pixel_aspect_x
+            width = int(frame_w * border_max_x) - int(
+                frame_w * border_min_x
+            )
+            height = int(frame_h * border_max_y) - int(
+                frame_h * border_min_y
+            )
 
         pixel_size = int(scene.luxcore.viewport.pixel_size)
         width //= pixel_size
@@ -286,7 +285,13 @@ def calc_screenwindow(zoom, shift_x, shift_y, scene, context=None):
             if scene.camera and scene.camera.data.type == "ORTHO":
                 scale = 0.5 * scene.camera.data.ortho_scale
 
-            if render.use_border:
+            if scene.camera is None:
+                # Camera object deleted mid-render: fall back to the
+                # region aspect so we don't crash on .data access below.
+                aspectratio, xaspect, yaspect = calc_aspect(
+                    width_raw, height_raw
+                )
+            elif render.use_border:
                 offset_x = 0
                 offset_y = 0
                 zoom = 1
@@ -301,19 +306,14 @@ def calc_screenwindow(zoom, shift_x, shift_y, scene, context=None):
                     zoom = scale
 
             else:
-                # No border
-                # The pixel scale is normalized by the size of the camera
-                # frame fitted inside the region (the viewfac used by
-                # BKE_camera_params_compute_viewplane), not by the region
-                # aspect. Otherwise the render appears zoomed in by
-                # max(W,H)/viewfac when the render aspect differs from
-                # the region aspect (e.g. a square render resolution).
-                frame_w, frame_h, viewfac = calc_camera_frame_size(
-                    width_raw, height_raw, scene
+                # No border: the viewport viewplane is normalized by the
+                # region dimension along the *resolved* sensor fit and
+                # always uses unit pixel aspect
+                # (BKE_camera_params_compute_viewplane called with
+                # aspx=aspy=1 in view3d_camera_border).
+                _, xaspect, yaspect = calc_aspect(
+                    width_raw, height_raw, scene.camera.data.sensor_fit
                 )
-                ycor = render.pixel_aspect_y / render.pixel_aspect_x
-                xaspect = width_raw / viewfac
-                yaspect = height_raw * ycor / viewfac
 
         else:
             # Normal viewport
@@ -377,6 +377,74 @@ def calc_camera_frame_size(width, height, scene):
     return frame_w, frame_h, viewfac
 
 
+def calc_camera_frame_rect(scene, context):
+    """On-screen rect (region px, bottom-left origin) of the camera frame.
+
+    Replicates view3d_camera_border(): the camera's own viewplane (render
+    resolution + pixel aspect) mapped into the viewport viewplane (region
+    dims, unit pixel aspect). camzoom rescales the frame on screen,
+    view_camera_offset pans it; camera shift cancels out because the
+    pixsize sensor and the viewplane shift scale identically.
+    """
+    render = scene.render
+    cam = scene.camera.data
+    rv3d = context.region_data
+    region_w, region_h = context.region.width, context.region.height
+
+    frame_asp = (render.resolution_y * render.pixel_aspect_y) / (
+        render.resolution_x * render.pixel_aspect_x
+    )
+    # Viewplane normalization: the fit axis resolves on the region aspect
+    # (square pixels); the pixsize sensor uses the raw fit - AUTO always
+    # means sensor_x (BKE_camera_sensor_size never resolves AUTO to
+    # sensor_y).
+    viewfac = (
+        region_h
+        if cam.sensor_fit == "VERTICAL"
+        or (cam.sensor_fit == "AUTO" and region_w < region_h)
+        else region_w
+    )
+    sensor_c = (
+        cam.sensor_height
+        if cam.sensor_fit == "VERTICAL"
+        else cam.sensor_width
+    )
+
+    # Camera frame world size: the camera's own fit resolves on the
+    # render aspect (incl. pixel aspect). For ORTHO cameras ortho_scale
+    # is shared by the viewport viewplane and the frame, so it cancels
+    # out and the frame covers the fit dimension at zoomfac=1.
+    vert_cam = cam.sensor_fit == "VERTICAL" or (
+        cam.sensor_fit == "AUTO" and frame_asp > 1.0
+    )
+    zoomfac = 0.25 * (math.sqrt(2) + rv3d.view_camera_zoom / 50) ** 2
+    if cam.type == "ORTHO":
+        base = viewfac * zoomfac
+        frame_w, frame_h = (
+            (base / frame_asp, base)
+            if vert_cam
+            else (base, base * frame_asp)
+        )
+    else:
+        if vert_cam:
+            frame_w_world = sensor_c / frame_asp
+            frame_h_world = sensor_c
+        else:
+            frame_w_world = sensor_c
+            frame_h_world = sensor_c * frame_asp
+        px_per_unit = viewfac * zoomfac / sensor_c
+        frame_w = frame_w_world * px_per_unit
+        frame_h = frame_h_world * px_per_unit
+    camdx, camdy = rv3d.view_camera_offset
+    left = (
+        region_w * 0.5 - frame_w * 0.5 - 2 * region_w * camdx * zoomfac
+    )
+    bottom = (
+        region_h * 0.5 - frame_h * 0.5 - 2 * region_h * camdy * zoomfac
+    )
+    return left, bottom, frame_w, frame_h
+
+
 def calc_aspect(width, height, fit="AUTO"):
     horizontal_fit = False
     if fit == "AUTO":
@@ -426,6 +494,12 @@ def is_instance_visible(dg_obj_instance, obj, context):
 
 def is_obj_visible(obj):
     if obj.luxcore.exclude_from_render:
+        return False
+
+    # Light portals are pure sampling guides: they mark apertures for the
+    # path tracer but must never appear as render geometry (a plane placed
+    # inside an opening would physically block the light it guides).
+    if getattr(obj.luxcore, "is_light_portal", False):
         return False
 
     if obj.type not in EXPORTABLE_OBJECTS and (

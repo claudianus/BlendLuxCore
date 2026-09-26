@@ -100,6 +100,42 @@ def _auto_light_strategy(scene, luxcore_engine):
     return "LOG_POWER"
 
 
+def _collect_light_portals(scene):
+    """Quad faces of objects flagged "Light Portal" as world-space rects.
+
+    Returns a list of 12-float lists (4 corners, CCW around the face
+    normal) for path.portal.<i>. Non-quad faces are skipped - the engine
+    side only models planar rects.
+    """
+    rects = []
+    skipped_tris = 0
+    for obj in scene.objects:
+        if obj.type != "MESH" or not getattr(
+            obj.luxcore, "is_light_portal", False
+        ):
+            continue
+        mesh = obj.data
+        if mesh is None:
+            continue
+        mw = obj.matrix_world
+        verts = mesh.vertices
+        for poly in mesh.polygons:
+            if len(poly.vertices) != 4:
+                skipped_tris += 1
+                continue
+            corners = []
+            for vi in poly.vertices:
+                co = mw @ verts[vi].co
+                corners.extend((co.x, co.y, co.z))
+            rects.append(corners)
+    if skipped_tris:
+        LuxCoreErrorLog.add_warning(
+            f"Light portal: skipped {skipped_tris} non-quad face(s) "
+            "(portals must be planar quads)"
+        )
+    return rects
+
+
 def convert(exporter, scene, context=None, engine=None):
     config = scene.luxcore.config
     simple_token = None
@@ -272,6 +308,18 @@ def convert(exporter, scene, context=None, engine=None):
             "PATHCPU", "PATHOCL", "TILEPATHCPU", "TILEPATHOCL",
         ):
             definitions["path.guiding.enable"] = True
+
+        # Light portals (M5): quad faces of objects flagged
+        # "Light Portal" become aperture rects for the portal bounce
+        # proposal. The objects themselves are excluded from render
+        # geometry (utils.is_obj_visible). CPU path engines only.
+        if luxcore_engine in ("PATHCPU", "TILEPATHCPU", "RTPATHCPU"):
+            portal_rects = _collect_light_portals(scene)
+            if portal_rects:
+                definitions["path.portal.count"] = len(portal_rects)
+                definitions["path.portal.weight"] = config.portal_weight
+                for i, rect in enumerate(portal_rects):
+                    definitions[f"path.portal.{i}"] = rect
 
         if config.spectral_enable and luxcore_engine in (
             "PATHCPU", "PATHOCL", "TILEPATHCPU", "TILEPATHOCL",
@@ -467,13 +515,26 @@ def convert_viewport_engine(context, scene, definitions, config):
             definitions["rtpath.resolutionreduction"] = 1
             """
 
-            # TODO figure out good settings
-            # 4, 2, 2 seems to be quite ok for now. Maybe make resolutionreduction dependent on film size later.
+            # First passes after a reset run at 1/(preview^2) of the film
+            # resolution and splat into blocks (weight ~0) so a single
+            # pass covers the whole frame. Camera edits reset the film at
+            # every frame boundary - if the first preview pass takes
+            # longer than the orbit edit rate (~16 ms/draw) the film stays
+            # empty and the viewport renders black for the entire drag.
+            # A coarse preview (1/64 res) is what makes the first frame
+            # land within a few dozen ms even mid-orbit.
             definitions["rtpath.resolutionreduction.preview"] = (
-                resolutionreduction
+                max(resolutionreduction, 8)
+                if viewport.reduce_resolution_on_edit
+                else 1
             )
             definitions["rtpath.resolutionreduction.preview.step"] = 2
-            definitions["rtpath.resolutionreduction"] = 2
+            # Steady-state passes also render 1/(N^2) of the film per
+            # pass; edits only apply at frame boundaries, so a pass
+            # longer than ~50 ms makes every camera move wait that long
+            # for its first samples. N=4 (upstream default) keeps
+            # boundaries ~4x faster than 2 at identical throughput.
+            definitions["rtpath.resolutionreduction"] = 4
 
         _convert_opencl_settings(scene, definitions, using_hybridbackforward)
 

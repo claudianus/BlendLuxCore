@@ -991,6 +991,17 @@ class LuxCoreConfig(PropertyGroup):
                                              "glossy bounces toward it (one-sample MIS vs BSDF, unbiased). "
                                              "Helps indirect and glossy transport; needs some passes to warm up")
 
+    # Light portals (M5): caps the one-sample MIS share of the aperture
+    # proposal. Only used when at least one mesh object is flagged as a
+    # Light Portal; the learned field adaptively spends less than this
+    # wherever the portal is not the dominant light path.
+    portal_weight: FloatProperty(name="Portal Weight", default=.5,
+                                 min=0., max=1.,
+                                 description="Max sampling share for light portal objects (meshes "
+                                             "flagged 'Light Portal' in their object settings). Higher "
+                                             "puts more samples through windows/openings; the field "
+                                             "adapts per location so it is safe to raise")
+
     # Spectral rendering (hero-wavelength transport, 3 wavelength bins)
     spectral_enable: BoolProperty(name="Spectral Rendering", default=False,
                                   description="Simulate light at sampled wavelengths instead of RGB "
