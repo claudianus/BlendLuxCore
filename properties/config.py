@@ -322,38 +322,58 @@ class SuperLuxCoreConfigSimple(PropertyGroup):
         default=True,
         description="Automatically denoise the result when rendering finishes",
     )
+    time_limit: IntProperty(
+        name="Time Limit (min)",
+        default=0, min=0, soft_max=60,
+        description="Stop the render after this many minutes of sampling "
+                    "(0 = off — stop by samples/noise instead). Kernel "
+                    "compilation does not count against the budget",
+    )
+    detect_features: BoolProperty(
+        name="Auto Scene Settings",
+        default=True,
+        description="Analyze the scene at render time and enable the engine "
+                    "features it needs (spectral dispersion, temporal denoise "
+                    "for animation, mesh proxies for heavy geometry)",
+    )
     show_advanced: BoolProperty(
         name="Show Advanced Settings",
         default=False,
         description="Temporarily show the advanced render settings panels",
     )
 
+    @staticmethod
+    def _lerp(q, keys):
+        """Piecewise-linear interpolation over sorted (q, value) keyframes."""
+        for (qa, va), (qb, vb) in zip(keys, keys[1:]):
+            if q <= qb:
+                return va + (vb - va) * (q - qa) / (qb - qa)
+        return keys[-1][1]
+
     def quality_map(self):
         """Pure mapping quality -> effective values (no writes).
 
         Used by apply() and by the UI summary labels, so the panel always
-        shows exactly what a render will use.
+        shows exactly what a render will use. Values interpolate smoothly
+        so the slider feels continuous, not stepped.
         """
         q = self.quality
-        if q < 0.2:
-            samples = 8
-        elif q < 0.4:
-            samples = 32
-        elif q < 0.6:
-            samples = 128
-        elif q < 0.8:
-            samples = 384
-        else:
-            samples = 1024
+        samples = round(self._lerp(q, [
+            (0.0, 8), (0.2, 24), (0.4, 64), (0.6, 192),
+            (0.8, 512), (0.9, 1024), (1.0, 1536),
+        ]) / 4) * 4
         return {
-            "depth_total": 4 if q < 0.4 else (8 if q < 0.7 else 12),
-            "depth_diffuse": 2 if q < 0.4 else (4 if q < 0.7 else 6),
-            "depth_glossy": 2 if q < 0.4 else (4 if q < 0.7 else 5),
-            "depth_specular": 3 if q < 0.4 else (6 if q < 0.7 else 8),
-            "use_clamping": q < 0.7,
-            "clamping": 1.0 if q < 0.3 else 5.0,
-            "adaptive": 0.5 if q < 0.4 else 0.9,
+            "depth_total": round(self._lerp(q, [(0, 4), (0.7, 8), (1, 12)])),
+            "depth_diffuse": round(self._lerp(q, [(0, 2), (0.7, 4), (1, 6)])),
+            "depth_glossy": round(self._lerp(q, [(0, 2), (0.7, 4), (1, 5)])),
+            "depth_specular": round(self._lerp(q, [(0, 3), (0.7, 6), (1, 8)])),
+            "use_clamping": q < 0.75,
+            "clamping": 1.0 if q < 0.3 else
+                round(self._lerp(q, [(0.3, 1.0), (0.7, 5.0)]), 2),
+            "adaptive": round(self._lerp(q, [(0, 0.5), (0.4, 0.7), (1, 0.95)]), 2),
             "halt_samples": samples,
+            # Stricter convergence stop as quality rises (units of 1/256)
+            "noise_thresh": 8 if q < 0.4 else (5 if q < 0.8 else 3),
             # Path guiding pays off once the field can warm up (mid quality
             # and above); below that it only dilutes against BSDF sampling.
             "guiding": q >= 0.5,
@@ -365,19 +385,14 @@ class SuperLuxCoreConfigSimple(PropertyGroup):
         Returns an opaque token for restore().
         """
         config = scene.superluxcore.config
-        halt = scene.superluxcore.halt
+        denoiser = scene.superluxcore.denoiser
         targets = [
             (config.path, "depth_total"), (config.path, "depth_diffuse"),
             (config.path, "depth_glossy"), (config.path, "depth_specular"),
             (config.path, "use_clamping"), (config.path, "clamping"),
             (config, "sobol_adaptive_strength"), (config, "guiding_enable"),
-            (halt, "enable"), (halt, "samples"),
-            (scene.superluxcore.denoiser, "enabled"),
-            (config.photongi, "enabled"), (config.photongi, "caustic_enabled"),
-            (config.photongi, "caustic_periodic_update"),
-            (config.photongi, "caustic_updatespp"),
-            (config.path, "hybridbackforward_enable"),
-            (config.path, "hybridbackforward_lightpartition"),
+            (denoiser, "enabled"),
+            (config, "spectral_enable"),
         ]
         return [(obj, name, getattr(obj, name)) for obj, name in targets]
 
@@ -405,79 +420,55 @@ class SuperLuxCoreConfigSimple(PropertyGroup):
         config.path.depth_glossy = m["depth_glossy"]
         config.path.depth_specular = m["depth_specular"]
 
-        # Clamping: aggressive at draft (kills fireflies), off at high quality
-        config.path.use_clamping = m["use_clamping"]
-        config.path.clamping = m["clamping"]
+        # Clamping: aggressive at draft (kills fireflies), off at high
+        # quality. A measured auto-clamp suggestion outranks the generic
+        # map — it was tuned for this exact scene.
+        has_suggestion = (config.path.auto_clamping
+                          and config.path.suggested_clamping_value > 0)
+        if not has_suggestion:
+            config.path.use_clamping = m["use_clamping"]
+            config.path.clamping = m["clamping"]
 
         # Adaptive sampling strength (sobol): more adaptivity at high quality
         config.sobol_adaptive_strength = m["adaptive"]
         # Path guiding from mid quality up (field needs passes to warm up)
         config.guiding_enable = m["guiding"]
 
-    # Material node types that transmit light (=> caustics candidates)
-    TRANSMISSIVE_NODE_TYPES = {
-        "SuperLuxCoreNodeMatGlass",   # glass / roughglass / archglass
-        "SuperLuxCoreNodeMatMix",     # can contain glass via mix
-    }
-
     def apply_scene_scan(self, scene):
-        """Auto-enable caustics support when the scene needs it.
+        """Auto-configure the engine features this scene actually needs.
 
-        Corona-style behavior: the user should not have to hunt for the
-        caustics switches. If any material in the scene transmits light
-        (glass etc.), turn on the PhotonGI caustic cache; at higher
-        quality also enable light tracing (hybrid back/forward) which
-        resolves sharp caustics.
+        Profiles the scene (both Cycles and SuperLuxCore node trees) and
+        enables:
+
+        - Spectral rendering when dispersive glass is used (plain RGB
+          smears dispersion away — this is a correctness feature)
+        - Temporal denoise accumulation for animated scenes (consumed
+          by the imagepipeline/AOV exporters via
+          scene_analysis.wants_temporal_denoise)
+        - Automatic mesh proxies for very heavy geometry (consumed by
+          the object cache via scene_analysis.wants_mesh_proxy)
+
+        Pre-pass caches (PhotonGI, env-light cache, light tracing) are
+        intentionally NOT touched: the engine's unbiased path handles
+        what they accelerated. Runs only when "Auto Scene Settings" is
+        on; every write is covered by snapshot()/restore().
         """
+        if not self.detect_features:
+            return
+
         config = scene.superluxcore.config
-        q = self.quality
+        prof = utils.scene_analysis.analyze_scene(scene)
 
-        has_transmission = False
-        for mat in bpy.data.materials:
-            lux_mat = getattr(mat, "superluxcore", None)
-            if lux_mat is None:
-                continue
-            node_tree = getattr(lux_mat, "node_tree", None)
-            if node_tree is None:
-                continue
-            for node in node_tree.nodes:
-                if node.bl_idname in self.TRANSMISSIVE_NODE_TYPES:
-                    if node.bl_idname == "SuperLuxCoreNodeMatMix":
-                        # Look through the mix inputs instead of trusting
-                        # the node name: glass behind either input counts.
-                        try:
-                            linked = {
-                                link.from_node.bl_idname
-                                for inp in node.inputs
-                                for link in inp.links
-                            }
-                        except Exception:
-                            linked = set()
-                        if "SuperLuxCoreNodeMatGlass" not in linked and \
-                                "glass" not in node.name.lower():
-                            continue
-                    has_transmission = True
-                    break
-            if has_transmission:
-                break
-
-        if has_transmission:
-            config.photongi.enabled = True
-            config.photongi.caustic_enabled = True
-            # Progressive caustics: refine the cache every few SPP instead of
-            # a single upfront pass, so caustics sharpen during the render
-            config.photongi.caustic_periodic_update = True
-            config.photongi.caustic_updatespp = 16 if q < 0.7 else 8
-            # Sharp caustics via light tracing at mid quality and above
-            if q >= 0.5 and config.effective_device() == "CPU":
-                config.path.hybridbackforward_enable = True
-                config.path.hybridbackforward_lightpartition = 20
+        # Dispersion needs a spectral engine, plain RGB smears it away
+        if prof["dispersion"]:
+            config.spectral_enable = True
 
     def apply_halt(self, scene):
-        """Map quality onto halt conditions (samples per pixel) and the
-        Denoise checkbox onto the final denoiser."""
-        scene.superluxcore.halt.enable = True
-        scene.superluxcore.halt.samples = self.quality_map()["halt_samples"]
+        """Wire the Denoise toggle onto the final denoiser.
+
+        Halt values are NOT written here: export/halt.convert() runs
+        after the snapshot is restored, so it reads the quality map
+        directly instead."""
         scene.superluxcore.denoiser.enabled = self.denoise
 
 
@@ -560,6 +551,46 @@ class SuperLuxCoreConfigPath(PropertyGroup):
     )
     # path.clamping.variance.maxvalue
     clamping: FloatProperty(name="Max Brightness", default=10, min=0,soft_max=10000,  description=CLAMPING_DESC)
+    # path.clamping.variance.scope - Cycles-style clamp scope: fireflies
+    # almost always come from indirect paths, so clamping only the indirect
+    # share preserves legitimate direct highlights, sun glints and emissive
+    # surfaces untouched.
+    clamp_scope: EnumProperty(
+        name="Scope",
+        default="INDIRECT",
+        description="Which path classes the clamp is applied to",
+        items=[
+            ("INDIRECT", "Indirect Only",
+             "Clamp only indirect (multi-bounce) contributions - direct "
+             "lights, sun glints and emissive surfaces are never dimmed. "
+             "Recommended for most scenes"),
+            ("DIRECT", "Direct Only",
+             "Clamp only emission and first-vertex direct light - indirect "
+             "contributions pass through"),
+            ("ALL", "Everything",
+             "Clamp every contribution (legacy behaviour)"),
+        ]
+    )
+    # path.clamping.variance.adaptive - robust per-pixel statistics:
+    # the clamp bound is estimated from the 3x3 neighbourhood median and
+    # median-absolute-deviation, so it is tight in flat/dark areas (kills
+    # fireflies) and relaxed in legitimately bright regions (keeps caustics
+    # and highlights).
+    clamp_adaptive: BoolProperty(
+        name="Adaptive Margin",
+        default=True,
+        description="Estimate the clamp margin from robust statistics of "
+                    "the pixel neighbourhood (median + MAD). Tighter in "
+                    "flat regions, more permissive in bright/variable ones"
+    )
+    # path.clamping.variance.sigma
+    clamp_sigma: FloatProperty(
+        name="Adaptive Sigma",
+        default=6, min=0.5, soft_max=16,
+        description="Neighbourhood deviation multiplier for the adaptive "
+                    "margin. Lower values suppress outliers more "
+                    "aggressively; higher values are more conservative"
+    )
     # This should only be set in the engine code after export. Only show a read-only label to the user.
     suggested_clamping_value: FloatProperty(name="", default=-1)
     # Fingerprint of the scene's light/emission content at the time the
@@ -1154,6 +1185,71 @@ class SuperLuxCoreConfig(PropertyGroup):
                                            "(0 = off, 1 degenerates to the plain mixture). Values >1 "
                                            "resample toward f*cos*incident-radiance - better on glossy "
                                            "paths at the cost of extra BSDF evaluations")
+
+    # P5 artist gates (path.guiding.*): strength scales the guide share
+    # in the one-sample mixture (still exact at any value); diffuse
+    # opts matte bounces in (their cosine lobe is already near-optimal,
+    # so it costs throughput on simple scenes but helps textured ones).
+    guiding_strength: FloatProperty(name="Strength", default=1.,
+                                    min=0., max=1.,
+                                    description="How much the learned field steers bounce sampling "
+                                                "(1 = full adaptive weight, 0 = BSDF only). Lower values "
+                                                "help scenes where the guide is still rough")
+    guiding_diffuse: BoolProperty(name="Guide Diffuse", default=False,
+                                  description="Also guide diffuse bounces - helps diffuse-indirect "
+                                              "heavy scenes at some extra cost. Glossy and volume "
+                                              "bounces are always guided")
+    guiding_min_depth: IntProperty(name="Min Depth", default=2,
+                                   min=0, max=16,
+                                   description="First bounce depth that may use the guide. 2 skips "
+                                               "camera-visible bounces where direct light already "
+                                               "dominates")
+    guiding_glossy_threshold: FloatProperty(name="Glossy Threshold", default=.3,
+                                            min=0., max=1.,
+                                            description="Minimum surface glossiness for a guided bounce "
+                                                        "(0 = guide even mirror-rough lobes, 1 = glossy "
+                                                        "only). Lower includes sharper lobes")
+    guiding_warmup: IntProperty(name="Warmup", default=256,
+                                min=1, max=65536,
+                                description="Samples a region needs before its learned field is trusted "
+                                            "(higher = slower start, steadier guide)")
+    guiding_components: IntProperty(name="Max Components", default=4,
+                                    min=1, max=4,
+                                    description="Max light-field lobes learned per region (BIC picks "
+                                                "fewer when the field is simple; lower caps memory and "
+                                                "avoids overfitting sparse areas)")
+    # Save the trained field on render stop: warm-start future renders
+    # via the Guiding Table path above.
+    guiding_savetable: StringProperty(name="Save Table", default="",
+                                      subtype="FILE_PATH",
+                                      description="Save the trained guiding field to this file when the "
+                                                  "render stops (CPU engines). Reload via Guiding Table "
+                                                  "for an instant warm start")
+    guiding_freeze: BoolProperty(name="Freeze Table", default=True,
+                                 description="Keep a loaded guiding table frozen instead of refining it "
+                                             "during the render")
+    # Expert spatial-tree knobs (path.guiding.split/.maxdepth/.maxleaves/
+    # .swaprecords) - finer tree = more local fields at more memory.
+    guiding_split: FloatProperty(name="Split Fraction", default=.004,
+                                 min=1e-6, max=.5,
+                                 description="A cell subdivides when it carries this fraction of the "
+                                             "round's light (smaller = finer spatial tree)")
+    guiding_max_depth: IntProperty(name="Max Depth", default=12,
+                                   min=1, max=12,
+                                   description="Spatial tree depth limit (12 = finest cells are "
+                                               "1/4096 of the scene)")
+    guiding_max_leaves: IntProperty(name="Max Leaves", default=8192,
+                                    min=16, max=65536,
+                                    description="Spatial tree leaf budget (each leaf ~1.6KB of "
+                                                "training state)")
+    guiding_swaprecords: IntProperty(name="Swap Records", default=1000000,
+                                     min=1000,
+                                     description="Training round length in recorded samples before the "
+                                                 "learned field is rebuilt (smaller = faster adaptation, "
+                                                 "noisier rounds)")
+    guiding_debug: BoolProperty(name="Debug Log", default=False,
+                                description="Log per-round tree statistics (leaf count, warm/borrowed "
+                                            "leaves) to stderr")
 
     # Light portals (M5): caps the one-sample MIS share of the aperture
     # proposal. Only used when at least one mesh object is flagged as a

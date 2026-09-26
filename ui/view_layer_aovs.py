@@ -215,3 +215,33 @@ class SUPERLUXCORE_RENDERLAYER_PT_aovs_render(ViewLayerButtonsPanel, Panel):
         col.prop(aovs, "noise")
         col.prop(aovs, "samplecount")
         col.prop(aovs, "variance")
+
+
+class SUPERLUXCORE_RENDERLAYER_PT_aovs_lpe(ViewLayerButtonsPanel, Panel):
+    bl_label = "Light Path Expressions"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDERLAYER_PT_aovs"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        active_layer = context.window.view_layer
+        aovs = active_layer.superluxcore.aovs
+        engine_is_path = context.scene.superluxcore.config.engine == "PATH"
+
+        layout.active = engine_is_path
+        for i, entry in enumerate(aovs.lpe_list):
+            box = layout.box()
+            row = box.row(align=True)
+            row.prop(entry, "name", text="")
+            op = row.operator("superluxcore.remove_lpe", text="", icon=icons.CLEAR)
+            op.index = i
+            box.prop(entry, "expression")
+
+        layout.operator("superluxcore.add_lpe", icon=icons.ADD)
+        if len(aovs.lpe_list):
+            layout.label(text="Examples: C<RD>L, C<RD><RD>+L, C<RS>.*L, C.*L", icon=icons.INFO)
+        if not engine_is_path:
+            layout.label(text="LPE requires the PATH engine", icon=icons.WARNING)

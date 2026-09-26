@@ -7,9 +7,14 @@ import pysuperluxcore
 from .. import utils
 from . import aovs
 from .imagepipeline import use_backgroundimage
+from . import cycles_compat
 from ..utils.errorlog import SuperLuxCoreErrorLog
 from ..utils import view_layer as utils_view_layer
 from ..utils import get_addon_preferences
+from ..utils.scene_analysis import (
+    AUTO_RESTIR_EMITTER_THRESHOLD as AUTO_LIGHT_STRATEGY_EMITTER_THRESHOLD,
+    count_emitters as _count_emitters,
+)
 
 
 class SamplingOverlap:
@@ -18,77 +23,12 @@ class SamplingOverlap:
     OUT_OF_CORE = 32
 
 
-# Emitters above this count switch the AUTO light strategy to ReSTIR DI:
-# below it, the log-power distribution is cheaper per sample and equally
-# accurate; reservoir resampling only pays off once plain light sampling
-# keeps missing most of the emitters.
-AUTO_LIGHT_STRATEGY_EMITTER_THRESHOLD = 16
-
 # Engines supporting the ReSTIR DI light strategy (see RESTIR_DI_DESC in
 # properties/config.py). AUTO falls back to LOG_POWER on any other engine.
 _RESTIR_ENGINES = {
     "PATHCPU", "TILEPATHCPU", "RTPATHCPU",
     "PATHOCL", "TILEPATHOCL", "RTPATHOCL",
 }
-
-_EMISSIVE_NODE_TYPES = {"SuperLuxCoreNodeMatEmission", "ShaderNodeEmission"}
-
-
-def _material_is_emissive(mat):
-    """Cheap heuristic: does this material emit light?
-
-    Looks for an emission node (SuperLuxCore or Cycles) or a Principled BSDF
-    with emission enabled. Linked-ness of the emission node is not
-    verified, so this may overcount emitters slightly — acceptable for a
-    strategy heuristic that only needs the order of magnitude.
-    """
-    if mat is None or not mat.use_nodes or mat.node_tree is None:
-        return False
-    for node in mat.node_tree.nodes:
-        if node.bl_idname in _EMISSIVE_NODE_TYPES:
-            return True
-        if node.bl_idname == "ShaderNodeBsdfPrincipled":
-            try:
-                if node.inputs["Emission Strength"].default_value > 0:
-                    return True
-            except (KeyError, AttributeError):
-                pass
-    return False
-
-
-def _count_emitters(scene):
-    """Estimate the number of distinct emitters for strategy selection.
-
-    Light objects count once each; a mesh with an emissive material is
-    weighted by polygon count because every triangle becomes a separate
-    light in the engine; a lit world background counts once.
-    """
-    count = 0
-    emissive_mats = set()
-    for obj in scene.objects:
-        if obj.type == "LIGHT":
-            count += 1
-        elif obj.type == "MESH" and obj.data is not None:
-            mats = getattr(obj.data, "materials", None)
-            if mats is None:
-                continue
-            for mat in mats:
-                if mat is None:
-                    continue
-                if mat not in emissive_mats:
-                    if not _material_is_emissive(mat):
-                        continue
-                    emissive_mats.add(mat)
-                # Polygons approximate the internal per-triangle light
-                # count without needing a triangulation pass.
-                count += max(1, len(obj.data.polygons))
-                break
-
-    world = scene.world
-    if world is not None and getattr(world, "use_nodes", False):
-        count += 1
-
-    return count
 
 
 def _auto_light_strategy(scene, superluxcore_engine):
@@ -182,7 +122,8 @@ def convert(exporter, scene, context=None, engine=None):
             simple_token = config.simple.snapshot(scene)
             config.simple.apply(config)
             config.simple.apply_halt(scene)
-            # Caustics auto-detection (needs the scene, not just config)
+            # Scene-aware auto configuration (needs the scene, not just
+            # config) — final renders only
             if not is_viewport_render:
                 config.simple.apply_scene_scan(scene)
 
@@ -321,6 +262,40 @@ def convert(exporter, scene, context=None, engine=None):
                 )
             if config.guiding_ris_k:
                 definitions["path.guiding.risk"] = config.guiding_ris_k
+            # P5 gates - emit only non-defaults so unchanged configs
+            # keep exporting the same property set.
+            # float props compare against the float32-rounded default -
+            # RNA stores float32, so a literal compare would always emit.
+            if config.guiding_strength != 1.:
+                definitions["path.guiding.strength"] = config.guiding_strength
+            if config.guiding_diffuse:
+                definitions["path.guiding.diffuse"] = True
+            if config.guiding_min_depth != 2:
+                definitions["path.guiding.mindepth"] = config.guiding_min_depth
+            if abs(config.guiding_glossy_threshold - .3) > 1e-6:
+                definitions["path.guiding.glossythreshold"] = (
+                    config.guiding_glossy_threshold)
+            if config.guiding_warmup != 256:
+                definitions["path.guiding.warmup"] = config.guiding_warmup
+            if config.guiding_components != 4:
+                definitions["path.guiding.components"] = config.guiding_components
+            if config.guiding_savetable:
+                definitions["path.guiding.savetable"] = (
+                    bpy.path.abspath(config.guiding_savetable)
+                )
+            if not config.guiding_freeze:
+                definitions["path.guiding.freeze"] = False
+            if abs(config.guiding_split - .004) > 1e-7:
+                definitions["path.guiding.split"] = config.guiding_split
+            if config.guiding_max_depth != 12:
+                definitions["path.guiding.maxdepth"] = config.guiding_max_depth
+            if config.guiding_max_leaves != 8192:
+                definitions["path.guiding.maxleaves"] = config.guiding_max_leaves
+            if config.guiding_swaprecords != 1000000:
+                definitions["path.guiding.swaprecords"] = (
+                    config.guiding_swaprecords)
+            if config.guiding_debug:
+                definitions["path.guiding.debug"] = True
 
         # Light portals (M5): quad faces of objects flagged
         # "Light Portal" become aperture rects for the portal bounce
@@ -332,6 +307,10 @@ def convert(exporter, scene, context=None, engine=None):
             "PATHOCL", "TILEPATHOCL", "RTPATHOCL",
         ):
             portal_rects = _collect_light_portals(scene)
+            # Cycles area lights flagged is_portal are sampling
+            # apertures too - their rects join the same table (the
+            # lights themselves are skipped in light export).
+            portal_rects += cycles_compat.cycles_portal_rects(scene)
             if portal_rects:
                 definitions["path.portal.count"] = len(portal_rects)
                 definitions["path.portal.weight"] = config.portal_weight
@@ -373,6 +352,9 @@ def convert(exporter, scene, context=None, engine=None):
             and not utils.using_photongi_debug_mode(is_viewport_render, scene)
         ):
             definitions["path.clamping.variance.maxvalue"] = clamping_value
+            definitions["path.clamping.variance.adaptive"] = config.path.clamp_adaptive
+            definitions["path.clamping.variance.scope"] = config.path.clamp_scope.lower()
+            definitions["path.clamping.variance.sigma"] = config.path.clamp_sigma
 
         # Filter
         if config.filter == "GAUSSIAN":

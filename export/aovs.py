@@ -7,6 +7,7 @@ from . import imagepipeline
 from .imagepipeline import use_backgroundimage
 from ..utils.errorlog import SuperLuxCoreErrorLog
 from ..utils import view_layer as utils_view_layer
+from . import cycles_compat
 
 # Set of channels that don't use an HDR format
 LDR_CHANNELS = {
@@ -62,12 +63,27 @@ def convert(exporter, scene, context=None, engine=None):
             # This is the layer that is currently being exported, not the active layer in the UI!
             current_layer = utils_view_layer.get_current_view_layer(scene)
             aovs = current_layer.superluxcore.aovs
+            # A Cycles-authored scene enables Blender's use_pass_*
+            # flags instead of the SuperLuxCore AOV panel - map the
+            # flags that have a real film output onto the AOV set.
+            cycles_passes = cycles_compat.cycles_pass_outputs(
+                current_layer, cycles_compat._warned_set(exporter))
         else:
             # AOVs should not be accessed in viewport render
             # (they are a render layer property and those are not evaluated for viewport)
             aovs = None
+            cycles_passes = ()
 
-        use_transparent_film = pipeline.transparent_film and not utils.using_filesaver(context, scene)
+        # Cycles "World > Ray Visibility > Camera" hides the environment
+        # from camera rays -> same result as transparent film.
+        world_cam_invisible = (
+            scene.world is not None
+            and scene.world.superluxcore.use_cycles_settings
+            and cycles_compat.world_camera_invisible(scene.world)
+        )
+        use_transparent_film = (
+            pipeline.transparent_film or world_cam_invisible
+        ) and not utils.using_filesaver(context, scene)
 
         # Some AOVs need tonemapping with a custom imagepipeline
         pipeline_index = 0
@@ -107,13 +123,30 @@ def convert(exporter, scene, context=None, engine=None):
                     # We already checked these
                     continue
 
-                # Check if AOV is enabled by user
-                if getattr(aovs, output_name.lower(), False):
+                # Check if AOV is enabled by user (SuperLuxCore panel
+                # or a mapped Cycles use_pass_* flag)
+                if getattr(aovs, output_name.lower(), False) \
+                        or output_name in cycles_passes:
                     _add_output(definitions, output_name)
 
                     if output_name in NEED_TONEMAPPING:
                         pipeline_index = _make_imagepipeline(pipeline_props, context, scene, output_name,
                                                              pipeline_index, definitions, engine)
+
+            # Light path expressions: film.lpe.N + one LPE output per
+            # expression (the output .index selects the expression)
+            lpe_out_index = 0
+            for entry in aovs.lpe_list:
+                expression = entry.expression.strip()
+                if not expression:
+                    continue
+                lpe_name = entry.name.strip() or ("lpe%d" % lpe_out_index)
+                pipeline_props.Set(pysuperluxcore.Property(
+                    "film.lpe.%d.expression" % lpe_out_index, expression))
+                pipeline_props.Set(pysuperluxcore.Property(
+                    "film.lpe.%d.name" % lpe_out_index, lpe_name))
+                _add_output(definitions, "LPE", pipeline_index=lpe_out_index)
+                lpe_out_index += 1
 
             # Light groups
             if exporter.lightgroup_cache == {0}:
@@ -245,7 +278,11 @@ def get_denoiser_imgpipeline_props(context, scene, pipeline_index):
     definitions = OrderedDict()
     index = 0
 
-    if scene.superluxcore.denoiser.temporal_enabled:
+    if scene.superluxcore.denoiser.temporal_enabled or (
+        context is None
+        and utils.scene_analysis.wants_temporal_denoise(
+            scene.superluxcore.config.simple, scene)
+    ):
         index = add_temporal_accumulate(definitions, index, scene)
 
     if scene.superluxcore.denoiser.type == "BCD":

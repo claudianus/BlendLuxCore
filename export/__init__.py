@@ -284,6 +284,12 @@ class Exporter(object):
         # reference to temporary data, even if only for a while
         self.scene = depsgraph.scene_eval
         scene = self.scene
+        # Evaluated view layer: needed to resolve layer_collection
+        # holdout/indirect_only and indirect_only_get/holdout_get for
+        # evaluated objects. Final render passes it explicitly; the
+        # viewport path falls back to the depsgraph's.
+        if view_layer is None:
+            view_layer = getattr(depsgraph, "view_layer_eval", None)
         stats = self.stats
         if stats:
             stats.reset()
@@ -297,6 +303,12 @@ class Exporter(object):
         # outlives single renders in the viewport, and stale groups would
         # otherwise export extra pipelines forever.
         self.lightgroup_cache = set()
+
+        # Same for the light-linking plan: membership edits between
+        # renders must not reuse a plan cached under the same (scene, dg)
+        # pointer pair.
+        from . import cycles_compat
+        cycles_compat.invalidate_link_plan()
 
         # Scene
         image_resize_policy_props = (
@@ -352,6 +364,10 @@ class Exporter(object):
             # Per-object visibility snapshot: toggles that do not
             # reliably dirty the depsgraph (hide_render etc.) are
             # caught by comparing it at reuse time.
+            from . import cycles_compat
+            _link_plan = cycles_compat.light_link_plan(
+                depsgraph.scene, depsgraph,
+                cycles_compat._warned_set(self))
             vis_sig = {
                 utils.make_key(o): (
                     o.hide_render,
@@ -363,6 +379,25 @@ class Exporter(object):
                     o.visible_transmission,
                     o.visible_volume_scatter,
                     o.visible_shadow,
+                    o.is_shadow_catcher,
+                    o.is_holdout,
+                    # View-layer resolved flags (cover layer_collection
+                    # holdout / indirect_only, which may not dirty the
+                    # objects themselves).
+                    o.holdout_get(view_layer=view_layer)
+                    if view_layer else False,
+                    o.indirect_only_get(view_layer=view_layer)
+                    if view_layer else False,
+                    # Cycles per-object blur flags gate emitted motion
+                    # properties (use_motion_blur / use_deform_motion).
+                    getattr(o.cycles, "use_motion_blur", True),
+                    getattr(o.cycles, "use_deform_motion", True),
+                    # Light-linking accept set (receivers) / emitter
+                    # group (lights): membership edits may not dirty
+                    # the objects themselves.
+                    tuple(sorted(
+                        _link_plan[0].get(utils.make_key(o), ()))),
+                    _link_plan[1].get(utils.make_key(o), ""),
                 )
                 for o in scene.objects
             }

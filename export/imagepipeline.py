@@ -28,7 +28,11 @@ def convert(scene, context=None, index=0):
         # Final renders: temporally accumulate the linear beauty first,
         # so the tonemapped display and every downstream plugin see the
         # stabilized image. The denoiser pipeline gets its own instance.
-        if context is None and scene.superluxcore.denoiser.temporal_enabled:
+        if context is None and (
+            scene.superluxcore.denoiser.temporal_enabled
+            or utils.scene_analysis.wants_temporal_denoise(
+                scene.superluxcore.config.simple, scene)
+        ):
             from .aovs import add_temporal_accumulate
             index = add_temporal_accumulate(definitions, index, scene)
 

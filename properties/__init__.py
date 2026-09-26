@@ -64,6 +64,7 @@ if _needs_reload:
 
 # Warning: order matters, for correct loading and reloading
 classes = (
+    aovs.SuperLuxCoreLPE,
     aovs.SuperLuxCoreAOVSettings,
     image_user.SuperLuxCoreImageUser,
     hair.SuperLuxCoreHair,

@@ -1,6 +1,16 @@
 import bpy
-from bpy.props import PointerProperty, BoolProperty
+from bpy.props import PointerProperty, BoolProperty, CollectionProperty, IntProperty, StringProperty
 from bpy.types import PropertyGroup
+
+
+class SuperLuxCoreLPE(PropertyGroup):
+    """One Light Path Expression -> one HDR output (EXR layer LPE.<name>)"""
+    name: StringProperty(name="Name", default="lpe",
+                         description="Channel name - saved as EXR layer LPE.<name>")
+    expression: StringProperty(name="Expression", default="",
+                               description="Light path expression, e.g. C<RD>L (direct diffuse), "
+                                           "C<RD><RD>+L (indirect), C<RS>.*L (specular chains), "
+                                           "C.*L (everything). Grammar: | ( ) * + ? . <preds>")
 
 
 # Attached to view layer
@@ -115,3 +125,8 @@ class SuperLuxCoreAOVSettings(PropertyGroup):
                        description="Screen-space velocity of the first visible surface in pixels/frame "
                                    "(HDR: x,y = velocity, z = valid flag, w = object-motion flag). "
                                    "Required by temporal denoisers; needs PATH engine")
+
+    # Light Path Expressions (PATH engine only; one HDR output each,
+    # EXR layer name LPE.<name>)
+    lpe_list: CollectionProperty(type=SuperLuxCoreLPE)
+    lpe_index: IntProperty()

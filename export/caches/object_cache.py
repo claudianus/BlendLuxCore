@@ -351,7 +351,8 @@ def get_material(obj, material_index, depsgraph):
 
 
 def export_material(
-    obj, material_index, exporter, depsgraph, is_viewport_render
+    obj, material_index, exporter, depsgraph, is_viewport_render,
+    view_layer=None,
 ):
     mat = get_material(obj, material_index, depsgraph)
 
@@ -368,12 +369,12 @@ def export_material(
         # catcher, holdout) live on the object, not the material - a
         # cloned material variant carries them (see cycles_compat).
         lux_mat_name = cycles_compat.apply_object_shading_flags(
-            obj, lux_mat_name, mat_props, exporter)
+            obj, lux_mat_name, mat_props, exporter, view_layer)
         return lux_mat_name, mat_props, node_tree
     else:
         lux_mat_name, mat_props = material.fallback()
         lux_mat_name = cycles_compat.apply_object_shading_flags(
-            obj, lux_mat_name, mat_props, exporter)
+            obj, lux_mat_name, mat_props, exporter, view_layer)
         return lux_mat_name, mat_props, None
 
 
@@ -879,7 +880,8 @@ class ObjectCache2:
                             )
 
                             lux_mat, mat_props, node_tree = export_material(
-                                obj, 0, exporter, depsgraph, is_viewport_render
+                                obj, 0, exporter, depsgraph,
+                                is_viewport_render, view_layer,
                             )
                             scene_props.Set(mat_props)
 
@@ -1048,7 +1050,8 @@ class ObjectCache2:
 
                 if lux_shape:
                     lux_mat, mat_props, node_tree = export_material(
-                        obj, mat_index, exporter, depsgraph, is_viewport_render
+                        obj, mat_index, exporter, depsgraph,
+                        is_viewport_render, view_layer,
                     )
                     scene_props.Set(mat_props)
                     set_hair_props(
@@ -1106,7 +1109,10 @@ class ObjectCache2:
         persistent-scene delta to veto in-place DefineMesh patching
         (a proxied object must re-export through _convert_mesh_obj)."""
         config = getattr(getattr(scene, "superluxcore", None), "config", None)
-        if not getattr(config, "proxy_auto", False):
+        if not getattr(config, "proxy_auto", False) and not (
+            utils.scene_analysis.wants_mesh_proxy(
+                getattr(config, "simple", None), scene)
+        ):
             return False
         if (
             obj.type != "MESH"
@@ -1308,7 +1314,8 @@ class ObjectCache2:
             ):
                 shape = shape_name
                 lux_mat_name, mat_props, node_tree = export_material(
-                    obj, mat_index, exporter, depsgraph, is_viewport_render
+                    obj, mat_index, exporter, depsgraph,
+                    is_viewport_render, view_layer,
                 )
                 scene_props.Set(mat_props)
                 mat_names.append(lux_mat_name)
@@ -1357,11 +1364,12 @@ class ObjectCache2:
                 obj.superluxcore.link_mode,
             )
             # Cycles light linking: emitter groups this object accepts
-            # (see cycles_compat.light_link_plan).
-            exported_obj.link_groups = tuple(
-                cycles_compat.object_link_groups(
-                    obj, depsgraph, cycles_compat._warned_set(exporter))
-                or ())
+            # (see cycles_compat.light_link_plan). Only override the
+            # manual UI link_groups when the plan covers this object.
+            plan_groups = cycles_compat.object_link_groups(
+                obj, depsgraph, cycles_compat._warned_set(exporter))
+            if plan_groups:
+                exported_obj.link_groups = tuple(plan_groups)
             # Geometry-delta metadata (A6-III): the ordered base shape
             # list lets the persistent-scene delta re-DefineMesh in
             # place and the shape signature replay the wrapper chain,

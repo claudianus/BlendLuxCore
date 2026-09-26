@@ -16,6 +16,7 @@ from .. import utils as blc_utils
 
 from . import (
     lol,
+    aovs,
     camera,
     debug,
     general,
@@ -42,6 +43,7 @@ from . import (
 if _needs_reload:
     import importlib
     modules = (
+        aovs,
         camera,
         debug,
         general,
@@ -68,6 +70,8 @@ if _needs_reload:
         importlib.reload(module)
 
 classes = (
+    aovs.SUPERLUXCORE_OT_add_lpe,
+    aovs.SUPERLUXCORE_OT_remove_lpe,
     camera.SUPERLUXCORE_OT_camera_new_volume_node_tree,
     camera.SUPERLUXCORE_OT_camera_unlink_volume_node_tree,
     camera.SUPERLUXCORE_OT_camera_set_volume_node_tree,

@@ -135,7 +135,10 @@ check(
 scene2.superluxcore.config.dls_cache.enabled = False
 
 # --- auto clamping ----------------------------------------------------
+# These checks exercise the manual/auto clamp plumbing, which Quick
+# Setup intentionally overrides with the quality slider — pin it off.
 
+scene2.superluxcore.config.simple.enabled = False
 props = export_config.convert(None, scene2)
 check(
     "clamp.off-no-suggestion",
@@ -167,6 +170,30 @@ check(
     abs(props.Get("path.clamping.variance.maxvalue").GetFloat() - 7.0)
     < 1e-6,
 )
+
+# Adaptive Robust Clamping settings are emitted alongside maxvalue
+check(
+    "clamp.arc-props",
+    props.IsDefined("path.clamping.variance.adaptive")
+    and props.Get("path.clamping.variance.adaptive").GetBool()
+    and props.Get("path.clamping.variance.scope").GetString() == "indirect"
+    and abs(props.Get("path.clamping.variance.sigma").GetFloat() - 6.0)
+    < 1e-6,
+)
+scene2.superluxcore.config.path.clamp_scope = "ALL"
+scene2.superluxcore.config.path.clamp_adaptive = False
+scene2.superluxcore.config.path.clamp_sigma = 3.0
+props = export_config.convert(None, scene2)
+check(
+    "clamp.arc-custom",
+    not props.Get("path.clamping.variance.adaptive").GetBool()
+    and props.Get("path.clamping.variance.scope").GetString() == "all"
+    and abs(props.Get("path.clamping.variance.sigma").GetFloat() - 3.0)
+    < 1e-6,
+)
+scene2.superluxcore.config.path.clamp_scope = "INDIRECT"
+scene2.superluxcore.config.path.clamp_adaptive = True
+scene2.superluxcore.config.path.clamp_sigma = 6.0
 scene2.superluxcore.config.path.use_clamping = False
 
 scene2.superluxcore.config.path.auto_clamping = False
@@ -176,6 +203,134 @@ check(
     not props.IsDefined("path.clamping.variance.maxvalue"),
 )
 scene2.superluxcore.config.path.auto_clamping = True
+
+# --- Quick Setup scene analysis ---------------------------------------
+# analyze_scene scans bpy.data.materials GLOBALLY, not per-scene slots:
+# a flagged-but-unused material still enables the feature (slower but
+# never wrong) — deliberate conservative bias. Purge leftover materials
+# from the sections above so the baseline is deterministic.
+from bl_ext.user_default.superluxcore.utils import scene_analysis
+
+for m in list(bpy.data.materials):
+    bpy.data.materials.remove(m)
+
+scene4 = bpy.data.scenes.new("scan-scene")
+scene4.render.engine = "SUPERLUXCORE"
+simple4 = scene4.superluxcore.config.simple
+
+prof = scene_analysis.analyze_scene(scene4)
+check(
+    "scan.plain-clean",
+    not prof["transmissive"] and not prof["volume"]
+    and not prof["emission"],
+)
+
+# A Cycles Glass BSDF anywhere in bpy.data.materials flags the scene
+# transmissive — detected in the profile, but Quick Setup must NOT
+# enable pre-pass caches (PhotonGI/env-light/light tracing): the
+# engine's unbiased path already covers what caches accelerated.
+mat_glass = bpy.data.materials.new("glass-mat")
+mat_glass.use_nodes = True
+nt = mat_glass.node_tree
+nt.nodes.clear()
+glass_node = nt.nodes.new("ShaderNodeBsdfGlass")
+out_node = nt.nodes.new("ShaderNodeOutputMaterial")
+nt.links.new(glass_node.outputs[0], out_node.inputs["Surface"])
+
+mat_vol = bpy.data.materials.new("vol-mat")
+mat_vol.use_nodes = True
+ntv = mat_vol.node_tree
+ntv.nodes.clear()
+vol_node = ntv.nodes.new("ShaderNodeVolumePrincipled")
+outv = ntv.nodes.new("ShaderNodeOutputMaterial")
+ntv.links.new(vol_node.outputs[0], outv.inputs["Volume"])
+
+prof = scene_analysis.analyze_scene(scene4)
+check(
+    "scan.glass-detected",
+    prof["transmissive"],
+    f"profile={prof}",
+)
+check("scan.volume-detected", prof["volume"])
+
+simple4.apply_scene_scan(scene4)
+cfg4 = scene4.superluxcore.config
+check(
+    "scan.glass-no-cache",
+    not cfg4.photongi.enabled and not cfg4.photongi.caustic_enabled
+    and not cfg4.envlight_cache.enabled
+    and not cfg4.path.hybridbackforward_enable,
+)
+
+# Auto Scene Settings off -> the scan is a strict no-op.
+scene5 = bpy.data.scenes.new("scan-off-scene")
+scene5.render.engine = "SUPERLUXCORE"
+scene5.superluxcore.config.simple.detect_features = False
+scene5.superluxcore.config.simple.apply_scene_scan(scene5)
+check(
+    "scan.off-noop",
+    not scene5.superluxcore.config.spectral_enable,
+)
+
+# Animation on an object -> temporal denoise accumulation.
+cam_data = bpy.data.cameras.new("cam")
+cam_obj = bpy.data.objects.new("cam", cam_data)
+scene4.collection.objects.link(cam_obj)
+cam_obj.keyframe_insert("location", frame=1)
+cam_obj.keyframe_insert("location", frame=10)
+prof = scene_analysis.analyze_scene(scene4)
+check("scan.animated", prof["animated"])
+# Post-restore consumers read the predicates, not mutated properties.
+check(
+    "scan.temporal-denoise",
+    scene_analysis.wants_temporal_denoise(simple4, scene4),
+)
+simple4.detect_features = False
+check(
+    "scan.temporal-gated",
+    not scene_analysis.wants_temporal_denoise(simple4, scene4),
+)
+simple4.detect_features = True
+
+# Mesh proxy predicate (threshold monkeypatched so the small test
+# scene qualifies).
+orig_tris = scene_analysis.PROXY_AUTO_TRIS
+try:
+    scene_analysis.PROXY_AUTO_TRIS = 0
+    check(
+        "scan.mesh-proxy",
+        scene_analysis.wants_mesh_proxy(simple4, scene4),
+    )
+finally:
+    scene_analysis.PROXY_AUTO_TRIS = orig_tris
+
+# Halt export reads the quality map directly (post-restore safe).
+from bl_ext.user_default.superluxcore.export import halt as export_halt
+simple4.time_limit = 3
+hprops = export_halt.convert(scene4)
+check(
+    "scan.halt-time",
+    hprops.Get("batch.halttime").GetInt() == 180,
+    f"got {hprops.Get('batch.halttime').GetInt()}",
+)
+check(
+    "scan.halt-noise",
+    abs(hprops.Get("batch.haltthreshold").GetFloat() - 5 / 256) < 1e-6,
+    f"got {hprops.Get('batch.haltthreshold').GetFloat()}",
+)
+check(
+    "scan.halt-spp",
+    hprops.Get("batch.haltspp").GetInt() == 192,
+    f"got {hprops.Get('batch.haltspp').GetInt()}",
+)
+simple4.time_limit = 0
+
+# snapshot/restore round-trips the user's own values.
+cfg4.path.depth_total = 7
+token = simple4.snapshot(scene4)
+cfg4.path.depth_total = 3
+simple4.restore(token)
+check("scan.snapshot-restore", cfg4.path.depth_total == 7)
 
 # --- production defaults on a fresh scene -----------------------------
 # NOTE: bpy.ops.scene.new copies the active scene's addon properties even

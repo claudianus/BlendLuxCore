@@ -7,6 +7,7 @@ import pysuperluxcore
 from .. import utils
 from .caches.exported_data import ExportedObject, ExportedLight
 from .caches.object_cache import _instance_key, _dupli_motion_enabled
+from . import cycles_compat
 from .mesh_converter import get_ndarray
 from .pointcloud import _read_pointcloud_data, _point_matrices
 from .hair import _read_curves_points
@@ -111,6 +112,7 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
             _append_object_matrices(
                 depsgraph, exported_objects, matrices, step,
                 instances, dupli_steps, vert_steps, strand_steps,
+                engine,
             )
 
         if motion_blur.camera_blur and not context:
@@ -130,7 +132,8 @@ def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
 
 def _append_object_matrices(depsgraph, exported_objects, matrices, step,
                             instances=None, dupli_steps=None,
-                            vert_steps=None, strand_steps=None):
+                            vert_steps=None, strand_steps=None,
+                            engine=None):
     for dg_obj_instance in depsgraph.object_instances:
         obj = dg_obj_instance.parent if dg_obj_instance.is_instance else dg_obj_instance.object
         # A5: opt-in is enable_motion_blur on the instanced object OR the
@@ -154,11 +157,26 @@ def _append_object_matrices(depsgraph, exported_objects, matrices, step,
         # The first dupli instance exists as a real scene object and is
         # covered by the object-level motion props below — extend the gate
         # with the A5 rule so flagging the instanced object blurs it too.
+        # Cycles 'use_motion_blur' is an opt-out: it vetoes blur even when
+        # the SuperLuxCore opt-in flag is set.
+        if not getattr(obj.cycles, "use_motion_blur", True):
+            continue
+        # Per-object Cycles 'motion_steps' overrides the global step
+        # count - not supported, the global shutter steps apply.
+        if getattr(obj.cycles, "motion_steps", 1) > 1:
+            cycles_compat._warn_once(
+                cycles_compat._warned_set(engine), (obj.name, "mbsteps"),
+                "Per-object motion steps are not supported - the "
+                "global shutter-step count applies", obj.name)
         if not (obj.superluxcore.enable_motion_blur or dupli_mb):
             continue
 
         obj_key = utils.make_key_from_instance(dg_obj_instance)
         matrix = dg_obj_instance.matrix_world.copy()
+
+        # Cycles 'use_deform_motion' off = transform blur only: keep the
+        # matrix series but skip the per-step vertex/strand samplers.
+        deform = getattr(obj.cycles, "use_deform_motion", True)
 
         try:
             exported_thing = exported_objects[obj_key]
@@ -167,14 +185,15 @@ def _append_object_matrices(depsgraph, exported_objects, matrices, step,
                     matrix = _collect_pointcloud_step(
                         exported_thing, dg_obj_instance, step
                     )
-                _collect_vertex_step(
-                    vert_steps, exported_thing, dg_obj_instance.object,
-                    depsgraph, step,
-                )
-                _collect_strand_step(
-                    strand_steps, exported_thing, dg_obj_instance.object,
-                    depsgraph, step,
-                )
+                if deform:
+                    _collect_vertex_step(
+                        vert_steps, exported_thing,
+                        dg_obj_instance.object, depsgraph, step,
+                    )
+                    _collect_strand_step(
+                        strand_steps, exported_thing,
+                        dg_obj_instance.object, depsgraph, step,
+                    )
                 for part in exported_thing.parts:
                     prefix = "scene.objects." + part.lux_obj + "."
                     _append_matrix(matrices, prefix, matrix, step)

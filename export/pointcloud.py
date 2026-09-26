@@ -170,7 +170,7 @@ def convert_pointcloud_obj(
     from .caches.object_cache import export_material
 
     lux_mat, mat_props, _node_tree = export_material(
-        obj, 0, exporter, depsgraph, is_viewport_render
+        obj, 0, exporter, depsgraph, is_viewport_render, view_layer
     )
     scene_props.Set(mat_props)
 

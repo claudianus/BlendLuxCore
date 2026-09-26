@@ -63,16 +63,29 @@ class SUPERLUXCORE_RENDER_PT_simple(RenderButtonsPanel, Panel):
         # Effective values: show exactly what a render will use, so the
         # mapping is transparent (same function as the exporter).
         m = simple.quality_map()
-        col.label(text="Depth %d · Clamp %s · %dspp · Guiding %s" % (
+        col.label(text="Depth %d · Clamp %s · %dspp · Noise %d/256 · Guiding %s" % (
             m["depth_total"],
             ("off" if not m["use_clamping"] else "%g" % m["clamping"]),
             m["halt_samples"],
+            m["noise_thresh"],
             ("on" if m["guiding"] else "off"),
         ), icon=icons.INFO)
 
-        # Denoiser toggle
+        col = layout.column(align=True)
+        col.prop(simple, "denoise")
+        col.prop(simple, "time_limit")
+
+        # Intelligent auto-configuration (scene analysis at export)
         row = layout.row()
-        row.prop(simple, "denoise")
+        row.prop(simple, "detect_features")
+        if simple.detect_features:
+            from ...utils import scene_analysis
+            prof = scene_analysis.cached_analysis(context.scene)
+            chips = scene_analysis.describe_auto_features(prof)
+            col = layout.column(align=True)
+            col.label(text="Auto: " + (" · ".join(chips) if chips
+                                       else "nothing extra needed"),
+                      icon=icons.INFO)
 
         # Advanced unlock
         row = layout.row()

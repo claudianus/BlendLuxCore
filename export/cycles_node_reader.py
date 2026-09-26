@@ -1345,6 +1345,11 @@ def _node(node, output_socket, props, material, superluxcore_name=None, obj_name
         }
     elif node.bl_idname == "ShaderNodeTexImage":
         if node.image:
+            if node.image.source == "TILED":
+                SuperLuxCoreErrorLog.add_warning(
+                    f'Image texture node "{node.name}": UDIM tiled images '
+                    "are not supported - only the base tile is used",
+                    obj_name=obj_name)
             prefix = "scene.textures."
             extension_map = {
                 "REPEAT": "repeat",

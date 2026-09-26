@@ -57,12 +57,19 @@ def convert_light(exporter, obj, obj_key, depsgraph, superluxcore_scene, transfo
 
         # Cycles light linking (receiver collection) -> linkgroups mask.
         # Engine-level property, so it applies to both light modes.
+        # Area lights are mesh lights: the group goes onto the exported
+        # scene object (linkGroupMask feeds the triangle light). A light
+        # entry with only linkgroups and no .type would parse as sky2,
+        # so it must never be emitted on its own.
         from . import cycles_compat
         link_group = cycles_compat.light_linking_link_group(
             obj, depsgraph, cycles_compat._warned_set(exporter))
         if link_group:
-            props.Set(pysuperluxcore.Property(
-                prefix + "linkgroups", link_group))
+            if isinstance(exported, ExportedObject):
+                exported.link_groups = (link_group,)
+            elif (prefix + "type") in props.GetAllNames():
+                props.Set(pysuperluxcore.Property(
+                    prefix + "linkgroups", link_group))
         return props, exported
     except Exception as error:
         msg = 'Light "%s": %s' % (obj.name, error)
@@ -74,8 +81,11 @@ def convert_light(exporter, obj, obj_key, depsgraph, superluxcore_scene, transfo
 
 def _convert_cycles_light(exporter, obj, depsgraph, superluxcore_scene, transform, is_viewport_render,
                           superluxcore_name, scene, prefix):
-    definitions = {}
+    from . import cycles_compat
     light = obj.data
+    cycles_compat.warn_cycles_light_flags(
+        light, cycles_compat._warned_set(exporter), obj.name)
+    definitions = {}
 
     color = list(light.color)
     gain = light.energy
@@ -176,6 +186,9 @@ def _convert_cycles_light(exporter, obj, depsgraph, superluxcore_scene, transfor
         gain *= 0.07
     elif light.type == "AREA":
         if getattr(light.cycles, "is_portal", False):
+            # A Cycles light portal emits no light - it is a sampling
+            # aperture. Its quad is emitted as a path.portal.<i> rect by
+            # export/config.py (cycles_compat.cycles_portal_rects).
             return pysuperluxcore.Properties(), None
 
         if light.shape not in {"SQUARE", "RECTANGLE"}:
@@ -461,6 +474,12 @@ def _convert_cycles_world(exporter, scene, world, is_viewport_render):
         "importance": world.superluxcore.importance,
     }
 
+    # Cycles world ray visibility -> the world light's visibility.*
+    # flags (camera visibility maps to transparent film in aovs.py)
+    from . import cycles_compat
+    cycles_compat.apply_world_cycles_visibility(
+        world, definitions, cycles_compat._warned_set(exporter))
+
     node_tree = world.node_tree
 
     if is_blender_5:
@@ -506,36 +525,27 @@ def _convert_cycles_world(exporter, scene, world, is_viewport_render):
                         definitions["gamma"] = 2.2 if image.colorspace_settings.name == "sRGB" else 1
                         definitions["cdfdim"] = world.superluxcore.cdfdim
 
-                        # Transformation
-                        mapping_node = utils_node.get_linked_node(color_node.inputs["Vector"])
-                        if mapping_node:
-                            # TODO fix transformation
-                            raise NotImplementedError("Mapping node not supported yet")
+                        # Transformation: the mirror fix matches Cycles'
+                        # direction convention. A Mapping node on the
+                        # Vector input is folded in via its INVERSE:
+                        # Cycles 'point' mode computes R*(v*S)+T on the
+                        # lookup direction (svm_mapping), and the engine
+                        # evaluates inv(lightToWorld)*(-dir) - so the
+                        # composed transform is fix @ inv(M).
+                        infinite_fix = Matrix.Scale(1.0, 4)
+                        infinite_fix[0][0] = -1.0  # mirror the hdri map to match Cycles and old LuxBlend
 
-                            # tex_loc = Matrix.Translation(mapping_node.inputs["Location"].default_value)
-                            #
-                            # tex_sca = Matrix()
-                            # scale = mapping_node.inputs["Scale"].default_value
-                            # tex_sca[0][0] = scale.x
-                            # tex_sca[1][1] = scale.y
-                            # tex_sca[2][2] = scale.z
-                            #
-                            # # Prevent "singular matrix in matrixinvert" error (happens if a scale axis equals 0)
-                            # for i in range(3):
-                            #     if tex_sca[i][i] == 0:
-                            #         tex_sca[i][i] = 0.0000000001
-                            #
-                            # rotation = mapping_node.inputs["Rotation"].default_value
-                            # tex_rot0 = Matrix.Rotation(rotation.x, 4, "X")
-                            # tex_rot1 = Matrix.Rotation(rotation.y, 4, "Y")
-                            # tex_rot2 = Matrix.Rotation(rotation.z, 4, "Z")
-                            # tex_rot = tex_rot0 @ tex_rot1 @ tex_rot2
-                            #
-                            # transformation = tex_loc @ tex_rot @ tex_sca
-                        else:
-                            infinite_fix = Matrix.Scale(1.0, 4)
-                            infinite_fix[0][0] = -1.0  # mirror the hdri map to match Cycles and old LuxBlend
-                            transformation = infinite_fix @ Matrix.Identity(4).inverted()
+                        mapping_node = utils_node.get_linked_node(color_node.inputs["Vector"])
+                        mapping_matrix = None
+                        if mapping_node:
+                            from . import cycles_compat
+                            mapping_matrix = cycles_compat.mapping_node_matrix(
+                                mapping_node, obj_name=world.name)
+
+                        transformation = infinite_fix @ (
+                            mapping_matrix.inverted()
+                            if mapping_matrix is not None
+                            else Matrix.Identity(4))
 
                         definitions["transformation"] = utils.luxutils.matrix_to_list(transformation)
                     except OSError as image_missing:

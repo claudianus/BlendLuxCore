@@ -55,6 +55,18 @@ def mat_glossy(name, color):
     return m
 
 
+def mat_glass(name):
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    gl = nt.nodes.new("ShaderNodeBsdfGlass")
+    gl.inputs["IOR"].default_value = 1.5
+    nt.links.new(gl.outputs["BSDF"], out.inputs["Surface"])
+    return m
+
+
 def cube(name, loc, scale, material):
     bpy.ops.mesh.primitive_cube_add(location=loc)
     o = bpy.context.active_object
@@ -89,6 +101,15 @@ def main():
     b1.rotation_euler[2] = 0.4
     cube("box2", (0.7, 1.1, 0.35), (0.35, 0.35, 0.35), glossy)
 
+    # Glass sphere: Quick Setup's scene scan must auto-enable the
+    # caustics cache for the refractive caustic under it.
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.45,
+                                         location=(-0.55, 0.35, 0.45))
+    sphere = bpy.context.active_object
+    sphere.name = "glass_sphere"
+    sphere.data.materials.append(mat_glass("glass"))
+    bpy.ops.object.shade_smooth()
+
     # Area light on ceiling
     bpy.ops.mesh.primitive_plane_add(location=(0, 0, 1.99), size=1.2)
     lamp = bpy.context.active_object
@@ -112,12 +133,19 @@ def main():
 
     scene.superluxcore.config.engine = "PATH"
     scene.superluxcore.config.sampler = "SOBOL"
-    scene.superluxcore.halt.enable = True
-    scene.superluxcore.halt.use_time = True
-    # batch.halttime measures sampling time only (the engine restarts
-    # the clock after kernel compilation), so this is a real budget
-    scene.superluxcore.halt.time = 60
+    # Drive the render through the Quick Setup controls themselves:
+    # quality 0.8 -> ~512spp cap, noise 3/256, clamp off (keeps caustic
+    # brightness), guiding on; 2-minute sampling budget (kernel compile
+    # and photon passes don't count against it).
+    simple = scene.superluxcore.config.simple
+    simple.quality = 0.8
+    simple.time_limit = 2
 
+    from bl_ext.user_default.superluxcore.utils import scene_analysis
+    print("[Verify] profile:", scene_analysis.analyze_scene(scene))
+    simple = scene.superluxcore.config.simple
+    print("[Verify] simple:", {k: getattr(simple, k) for k in
+          ("enabled", "quality", "denoise", "detect_features")})
     print("[Verify] Rendering 1280x720 ...")
     bpy.ops.render.render(write_still=True)
     print("[Verify] Saved:", OUT)

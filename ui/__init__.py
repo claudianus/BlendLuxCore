@@ -103,6 +103,7 @@ classes = (
     view_layer_aovs.SUPERLUXCORE_RENDERLAYER_PT_aovs_shadow,
     view_layer_aovs.SUPERLUXCORE_RENDERLAYER_PT_aovs_geometry,
     view_layer_aovs.SUPERLUXCORE_RENDERLAYER_PT_aovs_render,
+    view_layer_aovs.SUPERLUXCORE_RENDERLAYER_PT_aovs_lpe,
     world.SUPERLUXCORE_PT_context_world,
     world.SUPERLUXCORE_WORLD_PT_sky2,
     world.SUPERLUXCORE_WORLD_PT_infinite,

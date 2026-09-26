@@ -98,6 +98,7 @@ def _view_camera(scene, context, definitions):
         zoom *= 0.5 * camera.data.ortho_scale
     elif camera.data.type == "PANO":
         definitions["type"] = "environment"
+        _pano_compat(camera.data, definitions, camera.name)
     elif camera.data.type == "PERSP":
         definitions["type"] = "perspective"
         definitions["fieldofview"] = _fieldofview_deg(camera.data, scene)
@@ -128,7 +129,13 @@ def _final(scene, definitions):
 
     elif camera.data.type == "PANO":
         cam_type = "environment"
+        _pano_compat(camera.data, definitions, camera.name)
     else:
+        if camera.data.type != "PERSP":
+            SuperLuxCoreErrorLog.add_warning(
+                f'Camera "{camera.name}": camera type '
+                f'"{camera.data.type}" is not supported - rendering '
+                "as perspective", obj_name=camera.name)
         cam_type = "perspective"
     definitions["type"] = cam_type
 
@@ -139,6 +146,32 @@ def _final(scene, definitions):
 
     # screenwindow (for border rendering and camera shift)
     definitions["screenwindow"] = utils.calc_screenwindow(zoom, camera.data.shift_x, camera.data.shift_y, scene)
+
+
+def _pano_compat(cam_data, definitions, cam_name):
+    """Blender panorama camera -> environment camera mapping.
+
+    Only EQUIRECTANGULAR exists in the engine (full sphere). Its
+    longitude span maps to scene.camera.environment.degrees; the
+    latitude range and all fisheye/mirrorball/cylindrical variants
+    have no equivalent and render as a full equirect frame.
+    """
+    pano = getattr(cam_data, "panorama_type", "EQUIRECTANGULAR")
+    if pano != "EQUIRECTANGULAR":
+        SuperLuxCoreErrorLog.add_warning(
+            f'Camera "{cam_name}": panorama type "{pano}" is not '
+            "supported - rendering as equirectangular", obj_name=cam_name)
+        return
+    lon_span = math.degrees(cam_data.longitude_max - cam_data.longitude_min)
+    if abs(lon_span - 360.0) > 0.01:
+        definitions["environment.degrees"] = max(
+            0.0, min(360.0, lon_span))
+    if abs(cam_data.latitude_min + math.pi / 2) > 0.01 \
+            or abs(cam_data.latitude_max - math.pi / 2) > 0.01:
+        SuperLuxCoreErrorLog.add_warning(
+            f'Camera "{cam_name}": equirectangular latitude range is '
+            "not supported - the full -90..90 deg range renders",
+            obj_name=cam_name)
 
 
 def _depth_of_field(scene, definitions, context=None):

@@ -39,7 +39,13 @@ def convert(exporter, depsgraph, material, is_viewport_render, obj_name=""):
             is_asset_without_lux_mat or (node_tree is None and has_blender_tree)
 
         if matusenodes and use_cycles:
-            return cycles_node_reader.convert(material, props, superluxcore_name, obj_name)
+            name, props = cycles_node_reader.convert(
+                material, props, superluxcore_name, obj_name)
+            from . import cycles_compat
+            cycles_compat.apply_material_scene_flags(
+                material, props, cycles_compat._warned_set(exporter),
+                name)
+            return name, props
 
         if node_tree is None:
             SuperLuxCoreErrorLog.add_warning(f'Material "{material.name}": Missing node tree', obj_name=obj_name)
@@ -57,6 +63,11 @@ def convert(exporter, depsgraph, material, is_viewport_render, obj_name=""):
 
         # Now export the material node tree, starting at the output node
         active_output.export(exporter, depsgraph, props, superluxcore_name)
+
+        from . import cycles_compat
+        cycles_compat.apply_material_scene_flags(
+            material, props, cycles_compat._warned_set(exporter),
+            superluxcore_name)
 
         return superluxcore_name, props
     except Exception as error:

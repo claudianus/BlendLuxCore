@@ -235,6 +235,11 @@ def render(scene, engine, tag, samples, denoise=True):
     if engine == "SUPERLUXCORE":
         scene.superluxcore.config.engine = "PATH"
         scene.superluxcore.config.device = "CPU"
+        # Disable the camera tonemapper so the saved EXR carries raw
+        # scene-linear radiance (use_autolinear defaults to on, which would
+        # normalize every render to ~0.5 mean and break parity checks).
+        if scene.camera:
+            scene.camera.data.superluxcore.imagepipeline.tonemapper.enabled = False
         halt = scene.superluxcore.halt
         halt.enable = True
         halt.use_time = False
@@ -742,6 +747,8 @@ def check_stale_clamp():
     build_s04_emission(scene)
 
     scene.render.engine = "SUPERLUXCORE"
+    if scene.camera:
+        scene.camera.data.superluxcore.imagepipeline.tonemapper.enabled = False
     scene.render.resolution_x = scene.render.resolution_y = RES
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "OPEN_EXR"

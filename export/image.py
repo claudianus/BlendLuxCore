@@ -161,6 +161,20 @@ class ImageExporter:
                     f'"{len(indexed_filepaths)}" frames)'
                 ) from error
 
+        if image.source == "TILED":
+            # UDIM is not supported - export the active tile only.
+            tile = image.tiles.active
+            tile_path = image.filepath.replace("<UDIM>", str(tile.number))
+            try:
+                return utils.get_abspath(
+                    tile_path, library=image.library,
+                    must_exist=True, must_be_existing_file=True)
+            except OSError as error:
+                raise OSError(
+                    f"Could not find UDIM tile {tile.number} of image "
+                    f"'{image.name}' at path '{tile_path}' ({error})"
+                ) from error
+
         # Unhandled source
         raise NotImplementedError(
             f"Unsupported image source '{image.source}' "
@@ -193,6 +207,20 @@ class ImageExporter:
                 raise OSError(
                     f'Could not find image "{image.name}" '
                     f'at path "{image.filepath}" ({error})'
+                ) from error
+
+        if image.source == "TILED":
+            # UDIM is not supported - export the active tile only.
+            tile = image.tiles.active
+            tile_path = image.filepath.replace("<UDIM>", str(tile.number))
+            try:
+                return utils.get_abspath(
+                    tile_path, library=image.library,
+                    must_exist=True, must_be_existing_file=True)
+            except OSError as error:
+                raise OSError(
+                    f'Could not find UDIM tile {tile.number} of image '
+                    f'"{image.name}" at path "{tile_path}" ({error})'
                 ) from error
 
         raise NotImplementedError(

@@ -294,6 +294,8 @@ DEFAULT_CHECKS = [
     # Quick Setup is the front door (Corona-style quality slider)
     (sl.config.simple, "enabled", True),
     (sl.config.simple, "denoise", True),
+    (sl.config.simple, "detect_features", True),
+    (sl.config.simple, "time_limit", 0),
     # Pixel filtering: Blackman-Harris AA costs nothing
     (config, "filter_enabled", True),
     (config, "filter", "BLACKMANHARRIS"),
@@ -344,6 +346,35 @@ if slx.utils.get_halt_conditions(scene) != view_layer_0.superluxcore.halt:
     fail("get_halt_conditions ignored enabled view-layer override")
 view_layer_0.superluxcore.halt.enable = False
 slx.utils.view_layer.State.active_view_layer = ""
+
+
+# --- 3d) Quick Setup: smooth quality map + scene analysis ---------------------
+simple = sl.config.simple
+simple.quality = 0.5
+m05 = simple.quality_map()
+simple.quality = 1.0
+m1 = simple.quality_map()
+simple.quality = 0.0
+m0 = simple.quality_map()
+simple.quality = 0.6
+if not (m0["halt_samples"] < m05["halt_samples"] < m1["halt_samples"]):
+    fail(f"quality_map samples not monotonic: "
+         f"{m0['halt_samples']} {m05['halt_samples']} {m1['halt_samples']}")
+if not (m0["depth_total"] <= m05["depth_total"] <= m1["depth_total"]):
+    fail("quality_map depth not monotonic")
+if m0["guiding"] or not m1["guiding"]:
+    fail("guiding threshold broken in quality_map")
+if m0["noise_thresh"] <= m1["noise_thresh"]:
+    fail("noise threshold should tighten with quality")
+
+prof = slx.utils.scene_analysis.analyze_scene(scene)
+for k in ("transmissive", "dispersion", "sss", "emission", "volume",
+          "lights", "emitters", "polys", "animated"):
+    if k not in prof:
+        fail(f"analyze_scene missing key {k}")
+chips = slx.utils.scene_analysis.describe_auto_features(prof)
+if not isinstance(chips, list):
+    fail("describe_auto_features did not return a list")
 
 
 # --- 4) poll() smoke on the reorganised panels -------------------------------

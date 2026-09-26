@@ -322,6 +322,19 @@ def compute_clamp_signature(scene):
                             )
                         except (TypeError, AttributeError):
                             pass
+        # Light linking redistributes which objects a light reaches: the
+        # same light datablock with different receiver membership produces
+        # a different image, so it belongs in the staleness signature.
+        from ..export.cycles_compat import _link_member_sets
+        for ob in scene.objects:
+            ll = getattr(ob, "light_linking", None)
+            rc = getattr(ll, "receiver_collection", None) if ll else None
+            if rc is None:
+                continue
+            inc, exc = _link_member_sets(rc)
+            h.update(
+                f"LL:{ob.name}:{sorted(inc)}:{sorted(exc)}".encode()
+            )
     except Exception:
         # Signature failure must never block rendering; return a value that
         # never matches a stored one rather than disabling the safety check.

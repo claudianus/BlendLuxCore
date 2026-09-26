@@ -62,7 +62,7 @@ _FLAG_BITS = (
 )
 
 
-def object_shading_overrides(obj, warned):
+def object_shading_overrides(obj, warned, view_layer=None):
     """Material-property overrides for a depsgraph object.
 
     Returns a dict of ``scene.materials.X.<key>`` suffix -> value. The
@@ -102,13 +102,22 @@ def object_shading_overrides(obj, warned):
 
     if obj.is_shadow_catcher:
         overrides["shadowcatcher.enable"] = 1
-    if obj.is_holdout:
+    # Object flag OR view-layer collection holdout (holdout_get resolves
+    # layer_collection.holdout for this object).
+    holdout = obj.is_holdout
+    if view_layer is not None and not holdout:
+        try:
+            holdout = obj.holdout_get(view_layer=view_layer)
+        except TypeError:
+            pass
+    if holdout:
         overrides["holdout.enable"] = 1
 
     return overrides
 
 
-def apply_object_shading_flags(obj, lux_mat_name, mat_props, exporter):
+def apply_object_shading_flags(obj, lux_mat_name, mat_props, exporter,
+                               view_layer=None):
     """Return the material name to bind on this object.
 
     If the object's Cycles shading flags need it, a cloned material
@@ -117,7 +126,7 @@ def apply_object_shading_flags(obj, lux_mat_name, mat_props, exporter):
     """
     warned = _warned_set(exporter)
     warn_object_scene_flags(obj, warned)
-    overrides = object_shading_overrides(obj, warned)
+    overrides = object_shading_overrides(obj, warned, view_layer)
     if not overrides:
         return lux_mat_name
 
@@ -276,6 +285,15 @@ def _link_member_sets(coll):
 
     visit(coll, "INCLUDE")
     return inc, exc
+
+
+def invalidate_link_plan():
+    """Drop the cached plan; called once per export_scene() so collection
+    membership edits between renders are always picked up (the depsgraph
+    pointer is not a reliable invalidation token for those)."""
+    global _link_plan, _link_plan_key
+    _link_plan = None
+    _link_plan_key = None
 
 
 def light_link_plan(scene, dg, warned):
@@ -500,6 +518,12 @@ def warn_cycles_light_flags(light, warned, obj_name):
         _warn_once(warned, (obj_name, "lightnodes"),
                    "Cycles light node trees are not supported - the "
                    "light datablock settings are used", obj_name)
+    if (light.type == "AREA"
+            and getattr(light, "spread", math.pi) < math.pi - 1e-3):
+        _warn_once(warned, (obj_name, "spread"),
+                   "Area light 'Spread' directional limit is not "
+                   "supported - the light emits into the full "
+                   "hemisphere", obj_name)
 
 
 # ---------------------------------------------------------------------------
