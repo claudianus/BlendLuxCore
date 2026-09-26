@@ -45,7 +45,11 @@ class LUXCORE_RENDER_PT_caches(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         layout = self.layout
@@ -63,7 +67,11 @@ class LUXCORE_RENDER_PT_caches_photongi(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         self.layout.prop(context.scene.luxcore.config.photongi, "enabled", text="")
@@ -100,7 +108,11 @@ class LUXCORE_RENDER_PT_caches_photongi_indirect(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         self.layout.active = context.scene.luxcore.config.photongi.enabled and context.scene.luxcore.config.engine == "PATH"
@@ -140,7 +152,11 @@ class LUXCORE_RENDER_PT_caches_photongi_caustic(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         self.layout.active = context.scene.luxcore.config.photongi.enabled
@@ -189,7 +205,11 @@ class LUXCORE_RENDER_PT_caches_photongi_persistence(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE" and context.scene.luxcore.config.engine == "PATH"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced and context.scene.luxcore.config.engine == "PATH"
 
     def draw_header(self, context):
         self.layout.active = context.scene.luxcore.config.photongi.enabled
@@ -207,7 +227,11 @@ class LUXCORE_RENDER_PT_caches_envlight(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         self.layout.prop(context.scene.luxcore.config.envlight_cache, "enabled", text="")
@@ -229,7 +253,11 @@ class LUXCORE_RENDER_PT_caches_envlight_persistence(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE" and context.scene.luxcore.config.engine == "PATH"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced and context.scene.luxcore.config.engine == "PATH"
 
     def draw_header(self, context):
         self.layout.active = context.scene.luxcore.config.envlight_cache.enabled
@@ -247,7 +275,11 @@ class LUXCORE_RENDER_PT_caches_DLSC(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         self.layout.prop(context.scene.luxcore.config.dls_cache, "enabled", text="")
@@ -275,7 +307,11 @@ class LUXCORE_RENDER_PT_caches_DLSC_advanced(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced
 
     def draw(self, context):
         config = context.scene.luxcore.config
@@ -309,7 +345,11 @@ class LUXCORE_RENDER_PT_caches_DLSC_persistence(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE" and context.scene.luxcore.config.engine == "PATH"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced and context.scene.luxcore.config.engine == "PATH"
 
     def draw_header(self, context):
         self.layout.active = context.scene.luxcore.config.dls_cache.enabled

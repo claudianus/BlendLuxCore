@@ -28,8 +28,18 @@ def convert(exporter, scene, context=None, engine=None):
 
         # See properties/config.py
         config = scene.luxcore.config
-        width, height = utils.calc_filmsize(scene, context)
         is_viewport_render = context is not None
+
+        # Quick Setup: map the single quality slider onto the underlying
+        # settings before the regular conversion picks them up
+        if config.simple.enabled:
+            config.simple.apply(config)
+            config.simple.apply_halt(scene)
+            # Caustics auto-detection (needs the scene, not just config)
+            if not is_viewport_render:
+                config.simple.apply_scene_scan(scene)
+
+        width, height = utils.calc_filmsize(scene, context)
         in_material_shading_mode = utils.in_material_shading_mode(context)
         denoiser_enabled = (
             not is_viewport_render and scene.luxcore.denoiser.enabled

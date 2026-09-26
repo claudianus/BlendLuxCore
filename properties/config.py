@@ -1,3 +1,4 @@
+import bpy
 from bpy.types import PropertyGroup
 from bpy.props import (
     EnumProperty, BoolProperty, IntProperty, FloatProperty,
@@ -175,6 +176,133 @@ MINMEM_DESC = (
 FIXED_DESC = (
     "All images are scaled the same amount (set with the Scale parameter)"
 )
+
+
+class LuxCoreConfigSimple(PropertyGroup):
+    """Corona-style simplified settings.
+
+    A single quality slider that maps to a curated set of engine
+    parameters, plus a denoiser switch. When enabled, the advanced
+    render panels are hidden (see ui/render panels' poll()).
+    """
+    enabled: BoolProperty(
+        name="Quick Setup",
+        default=False,
+        description="Show a simplified interface with a single quality slider. "
+                    "Hide the advanced render settings panels",
+    )
+    quality: FloatProperty(
+        name="Quality",
+        default=0.6,
+        min=0.0, max=1.0,
+        soft_min=0.0, soft_max=1.0,
+        subtype="FACTOR",
+        description="Draft (fast, noisy) to Production (slow, clean). "
+                    "Adjusts path depths, clamping and sample counts at once",
+    )
+    denoise: BoolProperty(
+        name="Denoise",
+        default=True,
+        description="Automatically denoise the result when rendering finishes",
+    )
+    show_advanced: BoolProperty(
+        name="Show Advanced Settings",
+        default=False,
+        description="Temporarily show the advanced render settings panels",
+    )
+
+    def apply(self, config):
+        """Map the quality value onto the underlying LuxCore config.
+
+        Called by export/config.convert() when Quick Setup is enabled,
+        before the regular conversion.
+        """
+        q = self.quality
+
+        # Path depths: shallow and fast at draft, deep for production
+        config.path.depth_total = 4 if q < 0.4 else (8 if q < 0.7 else 12)
+        config.path.depth_diffuse = 2 if q < 0.4 else (4 if q < 0.7 else 6)
+        config.path.depth_glossy = 2 if q < 0.4 else (4 if q < 0.7 else 5)
+        config.path.depth_specular = 3 if q < 0.4 else (6 if q < 0.7 else 8)
+
+        # Clamping: aggressive at draft (kills fireflies), off at high quality
+        if q < 0.3:
+            config.path.use_clamping = True
+            config.path.clamping = 1.0
+        elif q < 0.7:
+            config.path.use_clamping = True
+            config.path.clamping = 5.0
+        else:
+            config.path.use_clamping = False
+
+        # Adaptive sampling strength (sobol): more adaptivity at high quality
+        config.sobol_adaptive_strength = 0.5 if q < 0.4 else 0.9
+
+    # Material node types that transmit light (=> caustics candidates)
+    TRANSMISSIVE_NODE_TYPES = {
+        "LuxCoreNodeMatGlass",   # glass / roughglass / archglass
+        "LuxCoreNodeMatMix",     # can contain glass via mix
+    }
+
+    def apply_scene_scan(self, scene):
+        """Auto-enable caustics support when the scene needs it.
+
+        Corona-style behavior: the user should not have to hunt for the
+        caustics switches. If any material in the scene transmits light
+        (glass etc.), turn on the PhotonGI caustic cache; at higher
+        quality also enable light tracing (hybrid back/forward) which
+        resolves sharp caustics.
+        """
+        config = scene.luxcore.config
+        q = self.quality
+
+        has_transmission = False
+        for mat in bpy.data.materials:
+            lux_mat = getattr(mat, "luxcore", None)
+            if lux_mat is None:
+                continue
+            node_tree = getattr(lux_mat, "node_tree", None)
+            if node_tree is None:
+                continue
+            for node in node_tree.nodes:
+                if node.bl_idname in self.TRANSMISSIVE_NODE_TYPES:
+                    # For mix nodes only count them as glass if they look
+                    # like glass (cheap heuristic: mix name contains glass)
+                    if node.bl_idname == "LuxCoreNodeMatMix" and "glass" not in node.name.lower():
+                        continue
+                    has_transmission = True
+                    break
+            if has_transmission:
+                break
+
+        if has_transmission:
+            config.photongi.enabled = True
+            config.photongi.caustic_enabled = True
+            # Progressive caustics: refine the cache every few SPP instead of
+            # a single upfront pass, so caustics sharpen during the render
+            config.photongi.caustic_periodic_update = True
+            config.photongi.caustic_updatespp = 16 if q < 0.7 else 8
+            # Sharp caustics via light tracing at mid quality and above
+            if q >= 0.5 and config.device == "CPU":
+                config.path.hybridbackforward_enable = True
+                config.path.hybridbackforward_lightpartition = 20
+
+    def apply_halt(self, scene):
+        """Map quality onto halt conditions (samples per pixel)."""
+        halt = scene.luxcore.halt
+        q = self.quality
+        if q < 0.2:
+            samples = 8
+        elif q < 0.4:
+            samples = 32
+        elif q < 0.6:
+            samples = 128
+        elif q < 0.8:
+            samples = 384
+        else:
+            samples = 1024
+        halt.enable = True
+        halt.samples = samples
 
 
 class LuxCoreConfigPath(PropertyGroup):
@@ -436,6 +564,11 @@ class LuxCoreConfig(PropertyGroup):
     # SOBOL properties
     sobol_adaptive_strength: FloatProperty(name="Adaptive Strength", default=0.9, min=0, max=0.95,
                                             description=SOBOL_ADAPTIVE_STRENGTH_DESC)
+
+    # Quick Setup (Corona-style simplified interface)
+    simple: PointerProperty(type=LuxCoreConfigSimple)
+    # Adaptive strength mapping for Quick Setup (draft = less adaptive)
+    simple_adaptive_strength: FloatProperty(name="Adaptive Strength (Simple)", default=0.9, min=0, max=0.95)
 
     # Noise estimation (used by adaptive samplers like SOBOL and RANDOM)
     noise_estimation: PointerProperty(type=LuxCoreConfigNoiseEstimation)

@@ -14,7 +14,11 @@ class LUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        if context.scene.render.engine != "LUXCORE":
+            return False
+        # Quick Setup: hide advanced panels unless explicitly shown
+        simple = context.scene.luxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         layout = self.layout

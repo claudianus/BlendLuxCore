@@ -34,6 +34,11 @@ def luxcore_render_draw(panel, context):
                     text="No CUDA support in this BlendLuxCore version",
                     icon=icons.ERROR,
                 )
+            if gpu_backend == "METAL" and not utils.luxutils.is_metal_build():
+                col_device.label(
+                    text="No Metal support in this BlendLuxCore version",
+                    icon=icons.ERROR,
+                )
     else:
         col_device.enabled = False
         col_device.prop(config, "bidir_device", text="Device")
@@ -108,6 +113,9 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
+        simple = context.scene.luxcore.config.simple
+        if simple.enabled and not simple.show_advanced:
+            return False
         config = context.scene.luxcore.config
         engine = context.scene.render.engine
         return (

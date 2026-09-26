@@ -63,6 +63,12 @@ class LuxCoreAddonPreferences(AddonPreferences):
             "OptiX acceleration is used only when supported hardware is detected",
             1,
         ),
+        (
+            "METAL",
+            "Metal",
+            "Use Metal for GPU acceleration (Apple silicon native backend)",
+            2,
+        ),
     ]
     gpu_backend: EnumProperty(items=gpu_backend_items, default="OPENCL")
 
@@ -71,6 +77,7 @@ class LuxCoreAddonPreferences(AddonPreferences):
         backend_to_type = {
             "OPENCL": "OPENCL_GPU",
             "CUDA": "CUDA_GPU",
+            "METAL": "METAL_GPU",
         }
 
         devices = context.scene.luxcore.devices.devices

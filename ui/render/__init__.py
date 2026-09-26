@@ -1,7 +1,8 @@
 from ... import utils
-from . import caches, config, debug, denoiser, devices, errorlog, halt, image_resize_policy, sampling, tools, viewport
+from . import caches, config, debug, denoiser, devices, errorlog, halt, image_resize_policy, sampling, simple, tools, viewport
 
 classes = (
+    simple.LUXCORE_RENDER_PT_simple,
     caches.LUXCORE_RENDER_PT_caches,
     caches.LUXCORE_RENDER_PT_caches_photongi,
     caches.LUXCORE_RENDER_PT_caches_photongi_indirect,

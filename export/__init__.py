@@ -483,18 +483,32 @@ class Exporter(object):
             session.Parse(self.halt_cache.props)
 
     def _update_config(self, session, config_props):
-        # Note: Currently not used, see the comment on force_session_restart() in engine/viewport.py
-        raise NotImplementedError(
-            "_update_config() currently not supported due to memory leak "
-            "(see https://github.com/LuxCoreRender/BlendLuxCore/issues/577)"
-        )
-        # renderconfig = session.GetRenderConfig()
-        # session.Stop()
+        # https://github.com/LuxCoreRender/BlendLuxCore/issues/577
+        # The historical implementations of this method mutated the existing
+        # RenderConfig via Parse() after stopping the session. That path leaks
+        # (each stopped session keeps its copy of the scene alive) and in some
+        # LuxCore versions crashed Blender.
         #
-        # renderconfig.Parse(config_props)
-        # session = pyluxcore.RenderSession(renderconfig)
-        # session.Start()
-        # return session
+        # Instead of mutating the old config, we build a fresh RenderConfig
+        # from the new props while REUSING the LuxCore scene of the running
+        # session. Re-exporting the whole Blender scene is therefore not
+        # necessary (meshes, materials and lights stay defined in the reused
+        # scene) - this is what makes viewport config changes fast.
+        #
+        # Note: renderengine.type changes and film size changes are handled
+        # fine by this too (a new session is started with the new config).
+        renderconfig = session.GetRenderConfig()
+        luxcore_scene = renderconfig.GetScene()
+
+        session.Stop()
+        # Explicitly drop our reference to the old session so the scene copy
+        # it owns is freed before we create the replacement
+        del session
+
+        new_renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
+        new_session = pyluxcore.RenderSession(new_renderconfig)
+        new_session.Start()
+        return new_session
 
     def _update_scene(self, depsgraph, context, changes, luxcore_scene):
         props = pyluxcore.Properties()

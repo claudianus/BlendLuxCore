@@ -89,6 +89,7 @@ classes = (
     config.LuxCoreConfigEnvLightCache,
     config.LuxCoreConfigNoiseEstimation,
     config.LuxCoreConfigImageResizePolicy,
+    config.LuxCoreConfigSimple,
     config.LuxCoreConfig,
     debug.LuxCoreDebugSettings,
     denoiser.LuxCoreDenoiser,

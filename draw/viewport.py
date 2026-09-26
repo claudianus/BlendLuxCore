@@ -62,6 +62,43 @@ class FrameBuffer:
         # Denoiser
         self.denoised = False  # Set to true after denoising
         self._denoiser_thread = None
+        self._last_pixels = None  # Last rendered pixels (h, w, depth), used for resize transitions
+        self._from_transition = False  # True while showing a resampled frame from before a restart
+
+    @classmethod
+    def _transition_from(cls, old_framebuffer, engine, context, scene):
+        """Create a replacement FrameBuffer that starts out showing the
+        previous framebuffer's last image, resampled to the new size.
+
+        This keeps the viewport from flashing black during resizes: the
+        previous image is stretched over the new area while the render
+        session restarts, then converges normally."""
+        new_fb = cls(engine, context, scene)
+        if (
+            old_framebuffer is not None
+            and getattr(old_framebuffer, "_last_pixels", None) is not None
+            and new_fb._width > 0
+            and new_fb._height > 0
+        ):
+            try:
+                old_h, old_w = old_framebuffer._last_pixels.shape[:2]
+                old_depth = old_framebuffer._last_pixels.shape[2]
+                new_depth = 4 if new_fb._transparent else 3
+                if old_depth == new_depth and old_h > 0 and old_w > 0:
+                    # Nearest-neighbor resample of the last rendered frame
+                    ys = (np.arange(new_fb._height) * old_h / new_fb._height).astype(np.intp)
+                    xs = (np.arange(new_fb._width) * old_w / new_fb._width).astype(np.intp)
+                    resampled = old_framebuffer._last_pixels[np.ix_(ys, xs)]
+                    new_fb.buffer = gpu.types.Buffer(
+                        "FLOAT",
+                        [new_fb._width * new_fb._height * new_depth],
+                        resampled.reshape(-1).astype(np.float32),
+                    )
+                    new_fb._from_transition = True
+            except Exception:
+                # Any failure here just falls back to the default (black) buffer
+                pass
+        return new_fb
 
     def _initialize_transparency(self, scene, context):
         if utils.is_valid_camera(
@@ -219,18 +256,21 @@ class FrameBuffer:
             execute_imagepipeline
         )
         data[data > 65519] = 65519
+        # Keep a copy of the last rendered pixels so a replacement framebuffer
+        # can show them (resampled) while the new session starts up
+        self._last_pixels = data.reshape(self._height, self._width, bufferdepth).copy()
         self.buffer = gpu.types.Buffer(
             "FLOAT", [self._width * self._height * bufferdepth], data
         )
 
     def draw(self):
         format = "RGBA16F" if self._transparent else "RGB16F"
-        image = gpu.types.GPUTexture(
+        self._texture = gpu.types.GPUTexture(
             size=(self._width, self._height),
             layers=0,
             is_cubemap=False,
             format=format,
             data=self.buffer,
         )
-        self.shader.uniform_sampler("image", image)
+        self.shader.uniform_sampler("image", self._texture)
         self.batch.draw(self.shader)

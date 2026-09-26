@@ -49,3 +49,11 @@ def is_cuda_build():
         .Get("compile.LUXRAYS_ENABLE_CUDA")
         .GetBool()
     )
+
+def is_metal_build():
+    """Check if pyluxcore has been built with Metal support."""
+    return (
+        pyluxcore.GetPlatformDesc()
+        .Get("compile.LUXRAYS_ENABLE_METAL")
+        .GetBool()
+    )
