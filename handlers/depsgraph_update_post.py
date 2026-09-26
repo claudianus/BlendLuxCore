@@ -8,7 +8,7 @@ def handler(scene):
     for mat in bpy.data.materials:
         if mat.library is not None:
             continue
-        node_tree = mat.luxcore.node_tree
+        node_tree = mat.superluxcore.node_tree
 
         if node_tree and node_tree.name != mat.name:
             node_tree.name = mat.name

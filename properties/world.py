@@ -11,7 +11,7 @@ from .light import (
     VIS_INDIRECT_GLOSSY_DESC, VIS_INDIRECT_SPECULAR_DESC,
     SUN_SKY_GAIN_DESC,
 )
-from .image_user import LuxCoreImageUser
+from .image_user import SuperLuxCoreImageUser
 from .config import ENVLIGHT_CACHE_DESC
 
 USE_SUN_GAIN_FOR_SKY_DESC = (
@@ -41,7 +41,7 @@ GROUND_ENABLE_DESC = (
 GROUND_COLOR_DESC = GROUND_ENABLE_DESC
 
 
-class LuxCoreWorldProps(bpy.types.PropertyGroup):
+class SuperLuxCoreWorldProps(bpy.types.PropertyGroup):
     use_cycles_settings: BoolProperty(name="Use Cycles Settings", default=False)
 
     lights = [
@@ -95,7 +95,7 @@ class LuxCoreWorldProps(bpy.types.PropertyGroup):
         self.image_user.update(self.image)
 
     image: PointerProperty(name="Image", type=bpy.types.Image, update=update_image)
-    image_user: PointerProperty(type=LuxCoreImageUser)
+    image_user: PointerProperty(type=SuperLuxCoreImageUser)
     gamma: FloatProperty(name="Gamma", default=1, min=0, description=GAMMA_DESCRIPTION)
     sampleupperhemisphereonly: BoolProperty(name="Sample Upper Hemisphere Only", default=False,
                                              description=SAMPLEUPPERHEMISPHEREONLY_DESCRIPTION)
@@ -121,13 +121,13 @@ class LuxCoreWorldProps(bpy.types.PropertyGroup):
     
     @classmethod
     def register(cls):
-        bpy.types.World.luxcore = PointerProperty(
-            name="LuxCore World Settings",
-            description="LuxCore World settings",
+        bpy.types.World.superluxcore = PointerProperty(
+            name="SuperLuxCore World Settings",
+            description="SuperLuxCore World settings",
             type=cls,
         )
 
     @classmethod
     def unregister(cls):
-        del bpy.types.World.luxcore
+        del bpy.types.World.superluxcore
     

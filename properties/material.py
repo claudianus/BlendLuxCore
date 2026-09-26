@@ -6,7 +6,7 @@ from ..utils import node as utils_node
 from ..utils.node import show_nodetree
 
 
-class LuxCoreMaterialPreviewProps(PropertyGroup):
+class SuperLuxCoreMaterialPreviewProps(PropertyGroup):
     def update_preview(self, context):
         material = self.id_data
         # A trick to force a material preview refresh (update_tag() does not work)
@@ -23,7 +23,7 @@ class LuxCoreMaterialPreviewProps(PropertyGroup):
     )
 
 
-class LuxCoreMaterialProps(PropertyGroup):
+class SuperLuxCoreMaterialProps(PropertyGroup):
     def update_auto_vp_color(self, context):
         if self.auto_vp_color:
             utils_node.update_opengl_materials(None, context)
@@ -36,14 +36,14 @@ class LuxCoreMaterialProps(PropertyGroup):
         "from the first nodes in the node tree",
     )
     node_tree: PointerProperty(name="Node Tree", type=bpy.types.NodeTree)
-    preview: PointerProperty(type=LuxCoreMaterialPreviewProps)
+    preview: PointerProperty(type=SuperLuxCoreMaterialPreviewProps)
 
     def update_use_cycles_nodes(self, context):
         mat = self.id_data
         node_tree = (
             mat.node_tree
-            if mat.luxcore.use_cycles_nodes
-            else mat.luxcore.node_tree
+            if mat.superluxcore.use_cycles_nodes
+            else mat.superluxcore.node_tree
         )
         if node_tree:
             show_nodetree(context, node_tree)
@@ -52,7 +52,7 @@ class LuxCoreMaterialProps(PropertyGroup):
         name="Use Cycles Nodes",
         default=False,
         update=update_use_cycles_nodes,
-        description="Use the Cycles nodes of this material instead of the LuxCore node tree "
+        description="Use the Cycles nodes of this material instead of the SuperLuxCore node tree "
         "(WARNING: This option is not fully implemented yet, only very few nodes work)",
     )
 
@@ -72,12 +72,12 @@ class LuxCoreMaterialProps(PropertyGroup):
 
     @classmethod
     def register(cls):
-        bpy.types.Material.luxcore = PointerProperty(
-            name="LuxCore Material Settings",
-            description="LuxCore material settings",
+        bpy.types.Material.superluxcore = PointerProperty(
+            name="SuperLuxCore Material Settings",
+            description="SuperLuxCore material settings",
             type=cls,
         )
 
     @classmethod
     def unregister(cls):
-        del bpy.types.Material.luxcore
+        del bpy.types.Material.superluxcore

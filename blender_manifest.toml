@@ -2,10 +2,10 @@ schema_version = "1.0.0"
 
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
-id = "blendluxcore"
-name = "BlendLuxCore"
-tagline = "LuxCore"
-maintainer = "Johannes Hinrichs (CodeFHD)"
+id = "superluxcore"
+name = "SuperLuxCore"
+tagline = "SuperLuxCore"
+maintainer = "SuperLuxCore contributors (fork of BlendLuxCore by Johannes Hinrichs)"
 type = "add-on"  # Supported types: "add-on", "theme"
 
 
@@ -16,7 +16,7 @@ type = "add-on"  # Supported types: "add-on", "theme"
 version = "2.11.2"
 
 # Optional: link to documentation, support, source files, etc
-website = "https://luxcorerender.org"
+website = "https://claudianus.github.io/SuperLuxCore/"
 
 # Optional: tag list defined by Blender and server, see:
 # https://docs.blender.org/manual/en/dev/advanced/extensions/tags.html

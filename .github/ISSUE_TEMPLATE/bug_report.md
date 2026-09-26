@@ -24,6 +24,6 @@ Error message from Blender console:
 
 Operating System: 
 Blender version:
-BlendLuxCore version:
-Pyluxcore version:
+SuperLuxCore version:
+Pysuperluxcore version:
 CPU and GPU model: 

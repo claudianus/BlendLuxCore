@@ -4,12 +4,12 @@ Deformation motion-blur regression test for compacted submeshes.
     Blender -b --python dev-tools/motion_blur_submesh_test.py
 
 A two-material mesh is deformed by an animated shape key while camera
-motion blur is enabled. Each LuxCore submesh only carries the loops its
+motion blur is enabled. Each SuperLuxCore submesh only carries the loops its
 material's triangles use, so the per-step vertex series must be
 compacted with the same map before SetMeshVertexMotion — otherwise the
 vertex count mismatches and motion data is rejected or corrupted.
 
-Renders 720p and saves /tmp/luxcore_mbtest_720p.png for inspection:
+Renders 720p and saves /tmp/superluxcore_mbtest_720p.png for inspection:
 the mesh should show a visible deformation streak between shutter
 steps while both material halves stay intact.
 """
@@ -19,7 +19,7 @@ import math
 import bpy
 import mathutils
 
-OUT = "/tmp/luxcore_mbtest_720p.png"
+OUT = "/tmp/superluxcore_mbtest_720p.png"
 
 
 def mat_diffuse(name, color):
@@ -124,26 +124,26 @@ def main():
     scene.camera = cam
 
     # Motion blur on the camera datablock; shutter straddles the frame
-    cam.data.luxcore.motion_blur.enable = True
-    cam.data.luxcore.motion_blur.object_blur = True
-    cam.data.luxcore.motion_blur.steps = 3
-    cam.data.luxcore.motion_blur.shutter = 1.0
-    obj.luxcore.enable_motion_blur = True
+    cam.data.superluxcore.motion_blur.enable = True
+    cam.data.superluxcore.motion_blur.object_blur = True
+    cam.data.superluxcore.motion_blur.steps = 3
+    cam.data.superluxcore.motion_blur.shutter = 1.0
+    obj.superluxcore.enable_motion_blur = True
 
     scene.frame_set(1)  # shape key mid-transition across the shutter
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.filepath = OUT
     scene.render.image_settings.file_format = "PNG"
 
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.sampler = "SOBOL"
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 30
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.sampler = "SOBOL"
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 30
 
     print("[MBTest] Rendering 1280x720 with vertex motion blur ...")
     bpy.ops.render.render(write_still=True)

@@ -35,7 +35,7 @@ def find_addon_key():
     return next(
         a.module
         for a in bpy.context.preferences.addons
-        if "luxcore" in a.module.lower()
+        if "superluxcore" in a.module.lower()
     )
 
 
@@ -45,13 +45,13 @@ for me in list(bpy.data.meshes):
     bpy.data.meshes.remove(me)
 
 scene = bpy.context.scene
-scene.luxcore.config.engine = "PATH"
-scene.luxcore.config.device = "OCL"
-scene.luxcore.devices.use_native_cpu = False
-scene.luxcore.halt.enable = True
-scene.luxcore.halt.use_samples = True
-scene.luxcore.halt.samples = 32
-scene.render.engine = "LUXCORE"
+scene.superluxcore.config.engine = "PATH"
+scene.superluxcore.config.device = "OCL"
+scene.superluxcore.devices.use_native_cpu = False
+scene.superluxcore.halt.enable = True
+scene.superluxcore.halt.use_samples = True
+scene.superluxcore.halt.samples = 32
+scene.render.engine = "SUPERLUXCORE"
 scene.render.resolution_x = 160
 scene.render.resolution_y = 120
 scene.render.resolution_percentage = 100
@@ -106,14 +106,14 @@ scene.collection.objects.link(cam)
 cam.location = (0, 0, 3)
 scene.camera = cam
 
-mb = cam_data.luxcore.motion_blur
+mb = cam_data.superluxcore.motion_blur
 mb.enable = True
 mb.object_blur = True
 mb.camera_blur = False
 mb.shutter = 8.0
 mb.steps = 3
 
-quad.luxcore.enable_motion_blur = True
+quad.superluxcore.enable_motion_blur = True
 scene.render.filepath = os.path.join(OUT_DIR, "e9topo.png")
 bpy.ops.render.render(write_still=True)
 print("[E9-TEST] rendered")

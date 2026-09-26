@@ -3,10 +3,10 @@ from bpy.types import Panel
 from .. import utils
 from .. import icons
 
-class LUXCORE_VIEWLAYER_PT_layer(ViewLayerButtonsPanel, Panel):
+class SUPERLUXCORE_VIEWLAYER_PT_layer(ViewLayerButtonsPanel, Panel):
     bl_label = "View Layer"
     bl_order = 1
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
 
     def draw(self, context):
         layout = self.layout
@@ -27,12 +27,12 @@ class LUXCORE_VIEWLAYER_PT_layer(ViewLayerButtonsPanel, Panel):
         col.prop(rd, "use_single_layer", text="Render Single Layer")
 
 
-class LUXCORE_VIEWLAYER_PT_override(ViewLayerButtonsPanel, Panel):
+class SUPERLUXCORE_VIEWLAYER_PT_override(ViewLayerButtonsPanel, Panel):
     bl_label = "Override"
     bl_options = {'DEFAULT_CLOSED'}
     bl_context = "view_layer"
     bl_order = 3
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
 
     def draw(self, context):
         layout = self.layout

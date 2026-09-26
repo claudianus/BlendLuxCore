@@ -1,11 +1,11 @@
 import bpy
 from mathutils import Matrix
 import math
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from .caches.exported_data import ExportedObject, ExportedLight
 from .image import ImageExporter
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from ..utils import node as utils_node
 from ..utils.node import get_active_output
 
@@ -17,7 +17,7 @@ is_blender_5 = bpy.app.version[0] >= 5 # only test of Blender 5 for now
 
 def _ies_node_to_blob(ies_node, obj_name):
     """Read a Cycles ShaderNodeTexIES photometric profile into a byte blob
-    for LuxCore's `<light>.iesblob` property. Returns None (with a warning)
+    for SuperLuxCore's `<light>.iesblob` property. Returns None (with a warning)
     when the profile cannot be resolved."""
     try:
         if ies_node.mode == "EXTERNAL":
@@ -27,41 +27,41 @@ def _ies_node_to_blob(ies_node, obj_name):
         else:
             # INTERNAL mode: the profile lives in a Text datablock
             if ies_node.ies is None:
-                LuxCoreErrorLog.add_warning("IES node has no text datablock", obj_name)
+                SuperLuxCoreErrorLog.add_warning("IES node has no text datablock", obj_name)
                 return None
             return ies_node.ies.as_string().encode("utf-8")
     except Exception as error:
-        LuxCoreErrorLog.add_warning(f"Could not read IES profile: {error}", obj_name)
+        SuperLuxCoreErrorLog.add_warning(f"Could not read IES profile: {error}", obj_name)
         return None
 
-def convert_light(exporter, obj, obj_key, depsgraph, luxcore_scene, transform, is_viewport_render):
+def convert_light(exporter, obj, obj_key, depsgraph, superluxcore_scene, transform, is_viewport_render):
     try:
-        luxcore_name = obj_key
+        superluxcore_name = obj_key
         scene = depsgraph.scene_eval
 
         # If this light was previously defined as an area lamp, delete the area lamp mesh
-        luxcore_scene.DeleteObject(_get_area_obj_name(luxcore_name))
+        superluxcore_scene.DeleteObject(_get_area_obj_name(superluxcore_name))
         # If this light was previously defined as a light, delete it
-        luxcore_scene.DeleteLight(luxcore_name)
+        superluxcore_scene.DeleteLight(superluxcore_name)
 
-        prefix = "scene.lights." + luxcore_name + "."
+        prefix = "scene.lights." + superluxcore_name + "."
 
-        if obj.data.luxcore.use_cycles_settings:
-            return _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is_viewport_render,
-                                         luxcore_name, scene, prefix)
+        if obj.data.superluxcore.use_cycles_settings:
+            return _convert_cycles_light(exporter, obj, depsgraph, superluxcore_scene, transform, is_viewport_render,
+                                         superluxcore_name, scene, prefix)
         else:
-            return _convert_luxcore_light(exporter, obj, depsgraph, luxcore_scene, transform, is_viewport_render,
-                                          luxcore_name, scene, prefix)
+            return _convert_superluxcore_light(exporter, obj, depsgraph, superluxcore_scene, transform, is_viewport_render,
+                                          superluxcore_name, scene, prefix)
     except Exception as error:
         msg = 'Light "%s": %s' % (obj.name, error)
-        LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+        SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
         import traceback
         traceback.print_exc()
-        return pyluxcore.Properties(), None
+        return pysuperluxcore.Properties(), None
 
 
-def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is_viewport_render,
-                          luxcore_name, scene, prefix):
+def _convert_cycles_light(exporter, obj, depsgraph, superluxcore_scene, transform, is_viewport_render,
+                          superluxcore_name, scene, prefix):
     definitions = {}
     light = obj.data
 
@@ -86,17 +86,17 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
                     if strength_node:
                         if strength_node.bl_idname == "ShaderNodeTexIES":
                             # Cycles IES: Fac drives the emission strength.
-                            # LuxCore maps the photometric profile to
+                            # SuperLuxCore maps the photometric profile to
                             # mappoint/mapsphere via the iesblob property.
                             ies_blob = _ies_node_to_blob(strength_node, obj.name)
                             if utils_node.get_linked_node(strength_node.inputs["Vector"]):
-                                LuxCoreErrorLog.add_warning(
+                                SuperLuxCoreErrorLog.add_warning(
                                     "IES node Vector input not supported, "
                                     "the light's local direction is used", obj.name)
                             # The IES node's own Strength socket scales Fac
                             node_gain = strength_node.inputs["Strength"].default_value
                         else:
-                            LuxCoreErrorLog.add_warning("Light strength nodes not supported", obj.name)
+                            SuperLuxCoreErrorLog.add_warning("Light strength nodes not supported", obj.name)
 
                     color_socket = surface_node.inputs["Color"]
                     color_node = utils_node.get_linked_node(color_socket)
@@ -105,11 +105,11 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
                         if color_node.bl_idname == "ShaderNodeRGB":
                             node_color = list(color_node.outputs[0].default_value)[:3]
                         else:
-                            LuxCoreErrorLog.add_warning("Unsupported color node type: " + color_node.bl_idname, obj.name)
+                            SuperLuxCoreErrorLog.add_warning("Unsupported color node type: " + color_node.bl_idname, obj.name)
                     else:
                          node_color = list(color_socket.default_value)[:3]
                 else:
-                    LuxCoreErrorLog.add_warning("Unsupported surface node type: " + surface_node.bl_idname, obj.name)
+                    SuperLuxCoreErrorLog.add_warning("Unsupported surface node type: " + surface_node.bl_idname, obj.name)
 
                 gain *= node_gain
                 color = [a * b for a, b in zip(color, node_color)]
@@ -119,10 +119,10 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
             definitions["type"] = "mappoint" if light.shadow_soft_size == 0 else "mapsphere"
             definitions["iesblob"] = [ies_blob]
             # Cycles measures the IES vertical angle from the light's
-            # local -Z (nadir for a light pointing down), while LuxCore's
+            # local -Z (nadir for a light pointing down), while SuperLuxCore's
             # emission map places nadir at +Z. flipz corrects the mapping.
             definitions["flipz"] = True
-            # Match the LuxCore light UI defaults (export_ies)
+            # Match the SuperLuxCore light UI defaults (export_ies)
             definitions["map.width"] = 512
             definitions["map.height"] = 256
         else:
@@ -146,10 +146,10 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
             gain *= _get_distant_light_normalization_factor(half_angle)
     elif light.type == "SPOT":
         if light.shadow_soft_size > 0:
-            LuxCoreErrorLog.add_warning("Size (soft shadows) not supported by LuxCore spotlights", obj.name)
+            SuperLuxCoreErrorLog.add_warning("Size (soft shadows) not supported by SuperLuxCore spotlights", obj.name)
 
         definitions["type"] = "spot"
-        # TODO Cycles has a different falloff, probably needs to be implemented in LuxCore
+        # TODO Cycles has a different falloff, probably needs to be implemented in SuperLuxCore
         definitions["coneangle"] = math.degrees(light.spot_size) / 2
         definitions["conedeltaangle"] = math.degrees(light.spot_size / 2 * light.spot_blend)
 
@@ -164,12 +164,12 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
         gain *= 0.07
     elif light.type == "AREA":
         if getattr(light.cycles, "is_portal", False):
-            return pyluxcore.Properties(), None
+            return pysuperluxcore.Properties(), None
 
         if light.shape not in {"SQUARE", "RECTANGLE"}:
-            LuxCoreErrorLog.add_warning("Unsupported area light shape: " + light.shape.title(), obj.name)
+            SuperLuxCoreErrorLog.add_warning("Unsupported area light shape: " + light.shape.title(), obj.name)
 
-        props = pyluxcore.Properties()
+        props = pysuperluxcore.Properties()
 
         # Calculate gain similar to Cycles (scaling with light surface area)
         transform_matrix = calc_area_light_transformation(light, transform)
@@ -180,7 +180,7 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
         area_gain *= 0.06504
 
         # Material
-        mat_name = luxcore_name + "_AREA_LIGHT_MAT"
+        mat_name = superluxcore_name + "_AREA_LIGHT_MAT"
         mat_prefix = "scene.materials." + mat_name + "."
         mat_definitions = {
             "type": "matte",
@@ -191,7 +191,7 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
             "emission.power": 0.0,
             "emission.efficency": 0.0,
             "emission.normalizebycolor": False,
-            "emission.importance": light.luxcore.importance,
+            "emission.importance": light.superluxcore.importance,
             "transparency.shadow": [1, 1, 1],
         }
 
@@ -201,8 +201,8 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
         # Object
         use_instancing = utils.use_instancing(obj, scene, is_viewport_render)
         visible_to_camera = False
-        obj_props, exported_obj = _create_luxcore_meshlight(obj, transform, use_instancing, luxcore_name,
-                                                            luxcore_scene, mat_name, visible_to_camera)
+        obj_props, exported_obj = _create_superluxcore_meshlight(obj, transform, use_instancing, superluxcore_name,
+                                                            superluxcore_scene, mat_name, visible_to_camera)
         props.Set(obj_props)
         return props, exported_obj
     else:
@@ -210,7 +210,7 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
         raise Exception("Unkown light type", light.type, 'in light "%s"' % obj.name)
 
     if ies_blob is not None and light.type != "POINT":
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             "IES profile nodes are only supported on point lights",
             obj.name)
 
@@ -219,18 +219,18 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
     definitions["efficency"] = 0.0
     definitions["power"] = 0.0
     definitions["normalizebycolor"] = False
-    definitions["importance"] = light.luxcore.importance
+    definitions["importance"] = light.superluxcore.importance
 
     # Cycles light settings in Blender 4.2+ no longer expose cast_shadow
     if not getattr(light.cycles, "cast_shadow", True):
-        LuxCoreErrorLog.add_warning("Cast Shadow is disabled, but unsupported by LuxCore", obj.name)
+        SuperLuxCoreErrorLog.add_warning("Cast Shadow is disabled, but unsupported by SuperLuxCore", obj.name)
 
     props = utils.luxutils.create_props(prefix, definitions)
-    return props, ExportedLight(luxcore_name)
+    return props, ExportedLight(superluxcore_name)
 
 
-def _convert_luxcore_light(exporter, obj, depsgraph, luxcore_scene, transform, is_viewport_render,
-                           luxcore_name, scene, prefix):
+def _convert_superluxcore_light(exporter, obj, depsgraph, superluxcore_scene, transform, is_viewport_render,
+                           superluxcore_name, scene, prefix):
     definitions = {}
     light = obj.data
     sun_dir = _calc_sun_dir(transform)
@@ -238,39 +238,39 @@ def _convert_luxcore_light(exporter, obj, depsgraph, luxcore_scene, transform, i
     # Common light settings shared by all light types
     # Note: these variables are also passed to the area light export function
     gain, importance, lightgroup_id = _convert_common_props(exporter, scene, light)
-    definitions["gain"] = apply_exposure(gain, light.luxcore.exposure)
+    definitions["gain"] = apply_exposure(gain, light.superluxcore.exposure)
     definitions["importance"] = importance
     definitions["id"] = lightgroup_id
 
     if light.type == "POINT":
-        if light.luxcore.image or light.luxcore.ies.use:
+        if light.superluxcore.image or light.superluxcore.ies.use:
             # mappoint/mapsphere
             definitions["type"] = "mappoint" if light.shadow_soft_size == 0 else "mapsphere"
 
             has_image = False
-            if light.luxcore.image:
+            if light.superluxcore.image:
                 try:
-                    filepath = ImageExporter.export(light.luxcore.image,
-                                                    light.luxcore.image_user,
+                    filepath = ImageExporter.export(light.superluxcore.image,
+                                                    light.superluxcore.image_user,
                                                     scene)
                     definitions["mapfile"] = filepath
-                    definitions["gamma"] = light.luxcore.gamma
+                    definitions["gamma"] = light.superluxcore.gamma
                     has_image = True
                 except OSError as error:
                     msg = 'Light "%s": %s' % (obj.name, error)
-                    LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+                    SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
                     # Fallback
                     definitions["type"] = "point" if light.shadow_soft_size == 0 else "sphere"
                     # Signal that the image is missing
-                    definitions["gain"] = [x * light.luxcore.gain * pow(2, light.luxcore.exposure)
+                    definitions["gain"] = [x * light.superluxcore.gain * pow(2, light.superluxcore.exposure)
                                            for x in MISSING_IMAGE_COLOR]
 
             has_ies = False
             try:
-                has_ies = export_ies(definitions, light.luxcore.ies, light.library)
+                has_ies = export_ies(definitions, light.superluxcore.ies, light.library)
             except OSError as error:
                 msg = 'Light "%s": %s' % (obj.name, error)
-                LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+                SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
             finally:
                 if not has_ies and not has_image:
                     # Fallback
@@ -293,26 +293,26 @@ def _convert_luxcore_light(exporter, obj, depsgraph, luxcore_scene, transform, i
 
         _define_brightness_and_color(light, definitions)
 
-        if light.luxcore.light_type == "sun":
+        if light.superluxcore.light_type == "sun":
             # sun
             definitions["type"] = "sun"
             definitions["dir"] = sun_dir
-            definitions["turbidity"] = light.luxcore.turbidity
-            definitions["relsize"] = light.luxcore.relsize
+            definitions["turbidity"] = light.superluxcore.turbidity
+            definitions["relsize"] = light.superluxcore.relsize
 
-            if light.luxcore.color_mode == "rgb":
+            if light.superluxcore.color_mode == "rgb":
                 # The sun doesn't support have a "color" property, but its color can be tinted via the gain
-                tint_color = light.luxcore.rgb_gain
+                tint_color = light.superluxcore.rgb_gain
                 for i in range(3):
                     definitions["gain"][i] *= tint_color[i]
-        elif light.luxcore.light_type == "hemi":
+        elif light.superluxcore.light_type == "hemi":
             # hemi
-            if light.luxcore.image:
+            if light.superluxcore.image:
                 _convert_infinite(definitions, light, scene, transform)
             else:
                 # Fallback
                 definitions["type"] = "constantinfinite"
-        elif light.luxcore.theta < 0.05:
+        elif light.superluxcore.theta < 0.05:
             # sharpdistant
             definitions["type"] = "sharpdistant"
             definitions["direction"] = distant_dir
@@ -320,31 +320,31 @@ def _convert_luxcore_light(exporter, obj, depsgraph, luxcore_scene, transform, i
             # distant
             definitions["type"] = "distant"
             definitions["direction"] = distant_dir
-            definitions["theta"] = light.luxcore.theta
-            if light.luxcore.normalize_distant:
-                normalization_factor = _get_distant_light_normalization_factor(light.luxcore.theta)
+            definitions["theta"] = light.superluxcore.theta
+            if light.superluxcore.normalize_distant:
+                normalization_factor = _get_distant_light_normalization_factor(light.superluxcore.theta)
                 definitions["gain"] = [normalization_factor * x for x in definitions["gain"]]
 
     elif light.type == "SPOT":
         coneangle = math.degrees(light.spot_size) / 2
         conedeltaangle = math.degrees(light.spot_size / 2 * light.spot_blend)
 
-        if light.luxcore.image:
+        if light.superluxcore.image:
             # projection
             try:
-                definitions["mapfile"] = ImageExporter.export(light.luxcore.image,
-                                                              light.luxcore.image_user,
+                definitions["mapfile"] = ImageExporter.export(light.superluxcore.image,
+                                                              light.superluxcore.image_user,
                                                               scene)
                 definitions["type"] = "projection"
                 definitions["fov"] = coneangle * 2
-                definitions["gamma"] = light.luxcore.gamma
+                definitions["gamma"] = light.superluxcore.gamma
             except OSError as error:
                 msg = 'Light "%s": %s' % (obj.name, error)
-                LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+                SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
                 # Fallback
                 definitions["type"] = "spot"
                 # Signal that the image is missing
-                definitions["gain"] = [x * light.luxcore.gain * pow(2, light.luxcore.exposure)
+                definitions["gain"] = [x * light.superluxcore.gain * pow(2, light.superluxcore.exposure)
                                        for x in MISSING_IMAGE_COLOR]
         else:
             # spot
@@ -362,7 +362,7 @@ def _convert_luxcore_light(exporter, obj, depsgraph, luxcore_scene, transform, i
         definitions["transformation"] = utils.luxutils.matrix_to_list(transform @ spot_fix)
 
     elif light.type == "AREA":
-        if light.luxcore.is_laser:
+        if light.superluxcore.is_laser:
             # laser
             definitions["type"] = "laser"
             definitions["radius"] = light.size / 2
@@ -377,8 +377,8 @@ def _convert_luxcore_light(exporter, obj, depsgraph, luxcore_scene, transform, i
             definitions["transformation"] = utils.luxutils.matrix_to_list(transform @ spot_fix)
         else:
             # area (mesh light)
-            return _convert_area_light(obj, scene, is_viewport_render, exporter, depsgraph, luxcore_scene, gain,
-                                       importance, luxcore_name, transform)
+            return _convert_area_light(obj, scene, is_viewport_render, exporter, depsgraph, superluxcore_scene, gain,
+                                       importance, superluxcore_name, transform)
 
     else:
         # Can only happen if Blender changes its light types
@@ -392,32 +392,32 @@ def _convert_luxcore_light(exporter, obj, depsgraph, luxcore_scene, transform, i
     props = utils.luxutils.create_props(prefix, definitions)
 
     # Exterior volume of the light
-    volume_node_tree = light.luxcore.volume
+    volume_node_tree = light.superluxcore.volume
 
     if volume_node_tree:
-        luxcore_name = utils.get_luxcore_name(volume_node_tree)
+        superluxcore_name = utils.get_superluxcore_name(volume_node_tree)
         active_output = get_active_output(volume_node_tree)
 
         try:
-            active_output.export(exporter, depsgraph, props, luxcore_name)
-            props.Set(pyluxcore.Property(prefix + "volume", luxcore_name))
+            active_output.export(exporter, depsgraph, props, superluxcore_name)
+            props.Set(pysuperluxcore.Property(prefix + "volume", superluxcore_name))
         except Exception as error:
             msg = f'Light "{obj.name}": {error}'
-            LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+            SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
 
-    return props, ExportedLight(luxcore_name)
+    return props, ExportedLight(superluxcore_name)
 
 
 def convert_world(exporter, world, scene, is_viewport_render):
     try:
         assert isinstance(world, bpy.types.World)
-        luxcore_name = WORLD_BACKGROUND_LIGHT_NAME
-        prefix = "scene.lights." + luxcore_name + "."
+        superluxcore_name = WORLD_BACKGROUND_LIGHT_NAME
+        prefix = "scene.lights." + superluxcore_name + "."
 
-        if world.luxcore.use_cycles_settings:
+        if world.superluxcore.use_cycles_settings:
             definitions = _convert_cycles_world(exporter, scene, world, is_viewport_render)
         else:
-            definitions = _convert_luxcore_world(exporter, scene, world, is_viewport_render)
+            definitions = _convert_superluxcore_world(exporter, scene, world, is_viewport_render)
 
         if definitions:
             return utils.luxutils.create_props(prefix, definitions)
@@ -425,7 +425,7 @@ def convert_world(exporter, world, scene, is_viewport_render):
             return None
     except Exception as error:
         msg = 'World "%s": %s' % (world.name, error)
-        LuxCoreErrorLog.add_warning(msg)
+        SuperLuxCoreErrorLog.add_warning(msg)
         import traceback
         traceback.print_exc()
         return None
@@ -437,7 +437,7 @@ def _define_constantinfinite(definitions, color):
 
 def _convert_cycles_world(exporter, scene, world, is_viewport_render):
     definitions = {
-        "importance": world.luxcore.importance,
+        "importance": world.superluxcore.importance,
     }
 
     node_tree = world.node_tree
@@ -483,7 +483,7 @@ def _convert_cycles_world(exporter, scene, world, is_viewport_render):
                         definitions["type"] = "infinite"
                         definitions["file"] = filepath
                         definitions["gamma"] = 2.2 if image.colorspace_settings.name == "sRGB" else 1
-                        definitions["cdfdim"] = world.luxcore.cdfdim
+                        definitions["cdfdim"] = world.superluxcore.cdfdim
 
                         # Transformation
                         mapping_node = utils_node.get_linked_node(color_node.inputs["Vector"])
@@ -518,14 +518,14 @@ def _convert_cycles_world(exporter, scene, world, is_viewport_render):
 
                         definitions["transformation"] = utils.luxutils.matrix_to_list(transformation)
                     except OSError as image_missing:
-                        LuxCoreErrorLog.add_warning("World: " + str(image_missing))
+                        SuperLuxCoreErrorLog.add_warning("World: " + str(image_missing))
                         image_missing = True
 
                 if image_missing:
                     _define_constantinfinite(definitions, MISSING_IMAGE_COLOR)
             elif color_node.bl_idname == "ShaderNodeTexSky":
                 if color_node.sky_type != "HOSEK_WILKIE":
-                    LuxCoreErrorLog.add_warning("World: Unsupported sky type: " + color_node.sky_type)
+                    SuperLuxCoreErrorLog.add_warning("World: Unsupported sky type: " + color_node.sky_type)
 
                 definitions["type"] = "sky2"
                 definitions["ground.enable"] = False
@@ -551,51 +551,51 @@ def _convert_cycles_world(exporter, scene, world, is_viewport_render):
     return definitions
 
 
-def _convert_luxcore_world(exporter, scene, world, is_viewport_render):
-    if world.luxcore.light == "none":
+def _convert_superluxcore_world(exporter, scene, world, is_viewport_render):
+    if world.superluxcore.light == "none":
         return None
 
     definitions = {}
 
     gain, importance, lightgroup_id = _convert_common_props(exporter, scene, world)
-    definitions["gain"] = apply_exposure(gain, world.luxcore.exposure)
+    definitions["gain"] = apply_exposure(gain, world.superluxcore.exposure)
     definitions["importance"] = importance
     definitions["id"] = lightgroup_id
 
-    if world.luxcore.color_mode == "rgb":
-        tint_color = list(world.luxcore.rgb_gain)
-    elif world.luxcore.color_mode == "temperature":
+    if world.superluxcore.color_mode == "rgb":
+        tint_color = list(world.superluxcore.rgb_gain)
+    elif world.superluxcore.color_mode == "temperature":
         tint_color = [1, 1, 1]
-        definitions["temperature"] = world.luxcore.temperature
+        definitions["temperature"] = world.superluxcore.temperature
         definitions["temperature.normalize"] = True
     else:
         raise Exception("Unkown color mode")
 
-    light_type = world.luxcore.light
+    light_type = world.superluxcore.light
     if light_type == "sky2":
         definitions["type"] = "sky2"
-        definitions["ground.enable"] = world.luxcore.ground_enable
-        definitions["ground.color"] = list(world.luxcore.ground_color)
-        definitions["groundalbedo"] = list(world.luxcore.groundalbedo)
+        definitions["ground.enable"] = world.superluxcore.ground_enable
+        definitions["ground.color"] = list(world.superluxcore.ground_color)
+        definitions["groundalbedo"] = list(world.superluxcore.groundalbedo)
 
-        if world.luxcore.sun and world.luxcore.sun.data:
+        if world.superluxcore.sun and world.superluxcore.sun.data:
             # Use sun turbidity and direction so the user does not have to keep two values in sync
-            definitions["turbidity"] = world.luxcore.sun.data.luxcore.turbidity
-            definitions["dir"] = _calc_sun_dir(world.luxcore.sun.matrix_world)
-            if world.luxcore.use_sun_gain_for_sky:
-                sun = world.luxcore.sun.data
+            definitions["turbidity"] = world.superluxcore.sun.data.superluxcore.turbidity
+            definitions["dir"] = _calc_sun_dir(world.superluxcore.sun.matrix_world)
+            if world.superluxcore.use_sun_gain_for_sky:
+                sun = world.superluxcore.sun.data
                 gain, _, _ = _convert_common_props(exporter, scene, sun)
-                definitions["gain"] = apply_exposure(gain, sun.luxcore.exposure)
+                definitions["gain"] = apply_exposure(gain, sun.superluxcore.exposure)
         else:
             # Use world turbidity
-            definitions["turbidity"] = world.luxcore.turbidity
+            definitions["turbidity"] = world.superluxcore.turbidity
         
         for i in range(3):
             definitions["gain"][i] *= tint_color[i]
 
     elif light_type == "infinite":
-        if world.luxcore.image:
-            transformation = Matrix.Rotation(world.luxcore.rotation, 4, "Z")
+        if world.superluxcore.image:
+            transformation = Matrix.Rotation(world.superluxcore.rotation, 4, "Z")
             _convert_infinite(definitions, world, scene, transformation)
             for i in range(3):
                 definitions["gain"][i] *= tint_color[i]
@@ -628,50 +628,50 @@ def _calc_sun_dir(transform):
 
 def _convert_common_props(exporter, scene, light_or_world):
     if isinstance(light_or_world, bpy.types.Light):
-        if light_or_world.type == "SUN" and light_or_world.luxcore.light_type == "sun":
-            raw_gain = light_or_world.luxcore.sun_sky_gain
+        if light_or_world.type == "SUN" and light_or_world.superluxcore.light_type == "sun":
+            raw_gain = light_or_world.superluxcore.sun_sky_gain
         else:
-            raw_gain = light_or_world.luxcore.gain
+            raw_gain = light_or_world.superluxcore.gain
     else:
         # It's a bpy.types.World
-        if light_or_world.luxcore.light == "sky2":
-            raw_gain = light_or_world.luxcore.sun_sky_gain
+        if light_or_world.superluxcore.light == "sky2":
+            raw_gain = light_or_world.superluxcore.sun_sky_gain
         else:
-            raw_gain = light_or_world.luxcore.gain
+            raw_gain = light_or_world.superluxcore.gain
 
     gain = [raw_gain] * 3
 
 
-    importance = light_or_world.luxcore.importance
-    lightgroup_id = scene.luxcore.lightgroups.get_id_by_name(light_or_world.luxcore.lightgroup)
+    importance = light_or_world.superluxcore.importance
+    lightgroup_id = scene.superluxcore.lightgroups.get_id_by_name(light_or_world.superluxcore.lightgroup)
     exporter.lightgroup_cache.add(lightgroup_id)
     return gain, importance, lightgroup_id
 
 
 def _convert_infinite(definitions, light_or_world, scene, transformation=None):
-    assert light_or_world.luxcore.image is not None
+    assert light_or_world.superluxcore.image is not None
 
     try:
-        filepath = ImageExporter.export(light_or_world.luxcore.image,
-                                        light_or_world.luxcore.image_user,
+        filepath = ImageExporter.export(light_or_world.superluxcore.image,
+                                        light_or_world.superluxcore.image_user,
                                         scene)
     except OSError as error:
         error_context = "Light" if isinstance(light_or_world, bpy.types.Light) else "World"
         msg = '%s "%s": %s' % (error_context, light_or_world.name, error)
-        LuxCoreErrorLog.add_warning(msg)
+        SuperLuxCoreErrorLog.add_warning(msg)
         # Fallback
         definitions["type"] = "constantinfinite"
         # Signal that the image is missing
-        definitions["gain"] = [x * light_or_world.luxcore.gain for x in MISSING_IMAGE_COLOR]
+        definitions["gain"] = [x * light_or_world.superluxcore.gain for x in MISSING_IMAGE_COLOR]
         return
 
     definitions["type"] = "infinite"
     definitions["file"] = filepath
-    definitions["gamma"] = light_or_world.luxcore.gamma
-    definitions["sampleupperhemisphereonly"] = light_or_world.luxcore.sampleupperhemisphereonly
+    definitions["gamma"] = light_or_world.superluxcore.gamma
+    definitions["sampleupperhemisphereonly"] = light_or_world.superluxcore.sampleupperhemisphereonly
     # CDF resolution cap is a world-level control; plain lights reuse the
     # same property name when they exist (guarded — light props lack it)
-    cdfdim = getattr(light_or_world.luxcore, "cdfdim", None)
+    cdfdim = getattr(light_or_world.superluxcore, "cdfdim", None)
     if cdfdim is not None:
         definitions["cdfdim"] = cdfdim
 
@@ -697,21 +697,21 @@ def calc_area_light_transformation(light, transform_matrix):
     return transform_matrix
 
 
-def _get_area_obj_name(luxcore_name):
+def _get_area_obj_name(superluxcore_name):
     fake_material_index = 0
-    # The material index after the luxcore_name is expected by ExportedObject
-    return luxcore_name + str(fake_material_index)
+    # The material index after the superluxcore_name is expected by ExportedObject
+    return superluxcore_name + str(fake_material_index)
 
 
-def _create_luxcore_meshlight(obj, transform, use_instancing, luxcore_name, luxcore_scene,
+def _create_superluxcore_meshlight(obj, transform, use_instancing, superluxcore_name, superluxcore_scene,
                               mat_name, visible_to_camera):
     light = obj.data
     transform_matrix = calc_area_light_transformation(light, transform)
     if light.shape not in {"SQUARE", "RECTANGLE"}:
-        LuxCoreErrorLog.add_warning("Unsupported area light shape: " + light.shape.title(), obj_name=obj.name)
+        SuperLuxCoreErrorLog.add_warning("Unsupported area light shape: " + light.shape.title(), obj_name=obj.name)
 
     if transform_matrix.determinant() == 0:
-        # Objects with non-invertible matrices cannot be loaded by LuxCore (RuntimeError)
+        # Objects with non-invertible matrices cannot be loaded by SuperLuxCore (RuntimeError)
         # This happens if the light size is set to 0
         raise Exception("Area light has size 0 (can not be exported)")
 
@@ -727,8 +727,8 @@ def _create_luxcore_meshlight(obj, transform, use_instancing, luxcore_name, luxc
         obj_transform = None
         mesh_transform = transform_list
 
-    shape_name = luxcore_name
-    if not luxcore_scene.IsMeshDefined(shape_name):
+    shape_name = superluxcore_name
+    if not superluxcore_scene.IsMeshDefined(shape_name):
         vertices = [
             (1, 1, 0),
             (1, -1, 0),
@@ -751,11 +751,11 @@ def _create_luxcore_meshlight(obj, transform, use_instancing, luxcore_name, luxc
             (0, 0),
             (0, 1),
         ]
-        luxcore_scene.DefineMesh(shape_name, vertices, faces, normals, uvs, None, None, mesh_transform)
+        superluxcore_scene.DefineMesh(shape_name, vertices, faces, normals, uvs, None, None, mesh_transform)
 
     fake_material_index = 0
-    # The material index after the luxcore_name is expected by ExportedObject
-    obj_prefix = "scene.objects." + _get_area_obj_name(luxcore_name) + "."
+    # The material index after the superluxcore_name is expected by ExportedObject
+    obj_prefix = "scene.objects." + _get_area_obj_name(superluxcore_name) + "."
     obj_definitions = {
         "material": mat_name,
         "shape": shape_name,
@@ -767,98 +767,98 @@ def _create_luxcore_meshlight(obj, transform, use_instancing, luxcore_name, luxc
 
     obj_props = utils.luxutils.create_props(obj_prefix, obj_definitions)
 
-    mesh_definition = [luxcore_name, fake_material_index]
-    exported_obj = ExportedObject(luxcore_name, [mesh_definition], ["fake_mat_name"],
+    mesh_definition = [superluxcore_name, fake_material_index]
+    exported_obj = ExportedObject(superluxcore_name, [mesh_definition], ["fake_mat_name"],
                                   transform.copy(), visible_to_camera)
     return obj_props, exported_obj
 
 
-def _convert_area_light(obj, scene, is_viewport_render, exporter, depsgraph, luxcore_scene,
-                        gain, importance, luxcore_name, transform):
+def _convert_area_light(obj, scene, is_viewport_render, exporter, depsgraph, superluxcore_scene,
+                        gain, importance, superluxcore_name, transform):
     """
-    An area light is a plane object with emissive material in LuxCore
+    An area light is a plane object with emissive material in SuperLuxCore
     """
     light = obj.data
-    props = pyluxcore.Properties()
+    props = pysuperluxcore.Properties()
 
     # Light emitting material
-    mat_name = luxcore_name + "_AREA_LIGHT_MAT"
+    mat_name = superluxcore_name + "_AREA_LIGHT_MAT"
     mat_prefix = "scene.materials." + mat_name + "."
     mat_definitions = {
         "type": "matte",
         # Black base material to avoid any bounce light from the mesh
         "kd": [0, 0, 0],
-        "emission": list(light.luxcore.rgb_gain),
-        "emission.gain": apply_exposure(gain, light.luxcore.exposure),
+        "emission": list(light.superluxcore.rgb_gain),
+        "emission.gain": apply_exposure(gain, light.superluxcore.exposure),
         "emission.gain.normalizebycolor": False,
         "emission.power": 0.0,
         "emission.efficency": 0.0,
         "emission.normalizebycolor": False,
-        "emission.theta": math.degrees(light.luxcore.spread_angle),
-        "emission.id": scene.luxcore.lightgroups.get_id_by_name(light.luxcore.lightgroup),
+        "emission.theta": math.degrees(light.superluxcore.spread_angle),
+        "emission.id": scene.superluxcore.lightgroups.get_id_by_name(light.superluxcore.lightgroup),
         "emission.importance": importance,
-        "transparency.shadow": [0, 0, 0] if light.luxcore.visible else [1, 1, 1],
+        "transparency.shadow": [0, 0, 0] if light.superluxcore.visible else [1, 1, 1],
         # Note: if any of these is disabled, we lose MIS, which can lead to more noise.
         # However, in some rare cases it's needed to disable some of them.
-        "visibility.indirect.diffuse.enable": light.luxcore.visibility_indirect_diffuse,
-        "visibility.indirect.glossy.enable": light.luxcore.visibility_indirect_glossy,
-        "visibility.indirect.specular.enable": light.luxcore.visibility_indirect_specular,
+        "visibility.indirect.diffuse.enable": light.superluxcore.visibility_indirect_diffuse,
+        "visibility.indirect.glossy.enable": light.superluxcore.visibility_indirect_glossy,
+        "visibility.indirect.specular.enable": light.superluxcore.visibility_indirect_specular,
     }
 
-    if light.luxcore.color_mode == "rgb":
-        mat_definitions["emission"] = list(light.luxcore.rgb_gain)
-    elif light.luxcore.color_mode == "temperature":
+    if light.superluxcore.color_mode == "rgb":
+        mat_definitions["emission"] = list(light.superluxcore.rgb_gain)
+    elif light.superluxcore.color_mode == "temperature":
         mat_definitions["emission"] = [1, 1, 1]
-        mat_definitions["emission.temperature"] = light.luxcore.temperature
+        mat_definitions["emission.temperature"] = light.superluxcore.temperature
         mat_definitions["emission.temperature.normalize"] = True
     else:
         raise Exception("Unkown color mode")
 
-    if light.luxcore.light_unit == "power":
-        mat_definitions["emission.power"] = light.luxcore.power / ( 2 * math.pi * (1 - math.cos(light.luxcore.spread_angle/2) ))
-        mat_definitions["emission.efficency"] = light.luxcore.efficacy
-        mat_definitions["emission.normalizebycolor"] = light.luxcore.normalizebycolor
+    if light.superluxcore.light_unit == "power":
+        mat_definitions["emission.power"] = light.superluxcore.power / ( 2 * math.pi * (1 - math.cos(light.superluxcore.spread_angle/2) ))
+        mat_definitions["emission.efficency"] = light.superluxcore.efficacy
+        mat_definitions["emission.normalizebycolor"] = light.superluxcore.normalizebycolor
 
-        if light.luxcore.efficacy == 0 or light.luxcore.power == 0:
+        if light.superluxcore.efficacy == 0 or light.superluxcore.power == 0:
             mat_definitions["emission.gain"] = [0, 0, 0]
         else:
-            mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.luxcore.exposure)
+            mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.superluxcore.exposure)
 
-    if light.luxcore.light_unit == "lumen":
-        mat_definitions["emission.power"] = light.luxcore.lumen / ( 2 * math.pi * (1 - math.cos(light.luxcore.spread_angle/2) ))
+    if light.superluxcore.light_unit == "lumen":
+        mat_definitions["emission.power"] = light.superluxcore.lumen / ( 2 * math.pi * (1 - math.cos(light.superluxcore.spread_angle/2) ))
         mat_definitions["emission.efficency"] = 1.0
-        mat_definitions["emission.normalizebycolor"] = light.luxcore.normalizebycolor
-        if light.luxcore.lumen == 0:
+        mat_definitions["emission.normalizebycolor"] = light.superluxcore.normalizebycolor
+        if light.superluxcore.lumen == 0:
             mat_definitions["emission.gain"] = [0, 0, 0]
         else:
-            mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.luxcore.exposure)
+            mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.superluxcore.exposure)
     
-    if light.luxcore.light_unit == "candela":
-        if light.luxcore.per_square_meter:
+    if light.superluxcore.light_unit == "candela":
+        if light.superluxcore.per_square_meter:
             mat_definitions["emission.power"] = 0.0
             mat_definitions["emission.efficency"] = 0.0
-            mat_definitions["emission.gain"] = [light.luxcore.candela] * 3
-            mat_definitions["emission.gain.normalizebycolor"] = light.luxcore.normalizebycolor
+            mat_definitions["emission.gain"] = [light.superluxcore.candela] * 3
+            mat_definitions["emission.gain.normalizebycolor"] = light.superluxcore.normalizebycolor
         else:
             # Multiply with pi to match brightness with other light types
-            mat_definitions["emission.power"] = light.luxcore.candela * math.pi
+            mat_definitions["emission.power"] = light.superluxcore.candela * math.pi
             mat_definitions["emission.efficency"] = 1.0
-            mat_definitions["emission.normalizebycolor"] = light.luxcore.normalizebycolor
-            if light.luxcore.candela == 0:
+            mat_definitions["emission.normalizebycolor"] = light.superluxcore.normalizebycolor
+            if light.superluxcore.candela == 0:
                 mat_definitions["emission.gain"] = [0, 0, 0]
             else:
-                mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.luxcore.exposure)
+                mat_definitions["emission.gain"] = apply_exposure([1, 1, 1], light.superluxcore.exposure)
 
-    node_tree = light.luxcore.node_tree
+    node_tree = light.superluxcore.node_tree
     if node_tree:
-        tex_props = pyluxcore.Properties()
-        tex_name = luxcore_name + "_AREA_LIGHT_TEX"
+        tex_props = pysuperluxcore.Properties()
+        tex_name = superluxcore_name + "_AREA_LIGHT_TEX"
 
         active_output = get_active_output(node_tree)
 
         if active_output is None:
             msg = 'Node tree "%s": Missing active output node' % node_tree.name
-            LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+            SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
         else:
             # Now export the texture node tree, starting at the output node
             active_output.export(exporter, depsgraph, tex_props, tex_name)
@@ -866,46 +866,46 @@ def _convert_area_light(obj, scene, is_viewport_render, exporter, depsgraph, lux
             props.Set(tex_props)
 
     # IES data
-    if light.luxcore.ies.use:
+    if light.superluxcore.ies.use:
         try:
-            export_ies(mat_definitions, light.luxcore.ies, light.library, is_meshlight=True)
+            export_ies(mat_definitions, light.superluxcore.ies, light.library, is_meshlight=True)
         except OSError as error:
             msg = 'light "%s": %s' % (obj.name, error)
-            LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+            SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
 
     mat_props = utils.luxutils.create_props(mat_prefix, mat_definitions)
     props.Set(mat_props)
 
-    # LuxCore object
+    # SuperLuxCore object
     use_instancing = utils.use_instancing(obj, scene, is_viewport_render)
-    visible_to_camera = obj.luxcore.visible_to_camera and light.luxcore.visible
-    obj_props, exported_obj = _create_luxcore_meshlight(obj, transform, use_instancing, luxcore_name,
-                                                        luxcore_scene, mat_name, visible_to_camera)
+    visible_to_camera = obj.superluxcore.visible_to_camera and light.superluxcore.visible
+    obj_props, exported_obj = _create_superluxcore_meshlight(obj, transform, use_instancing, superluxcore_name,
+                                                        superluxcore_scene, mat_name, visible_to_camera)
     props.Set(obj_props)
     return props, exported_obj
 
 
 def _indirect_light_visibility(definitions, light_or_world):
     definitions.update({
-        "visibility.indirect.diffuse.enable": light_or_world.luxcore.visibility_indirect_diffuse,
-        "visibility.indirect.glossy.enable": light_or_world.luxcore.visibility_indirect_glossy,
-        "visibility.indirect.specular.enable": light_or_world.luxcore.visibility_indirect_specular,
+        "visibility.indirect.diffuse.enable": light_or_world.superluxcore.visibility_indirect_diffuse,
+        "visibility.indirect.glossy.enable": light_or_world.superluxcore.visibility_indirect_glossy,
+        "visibility.indirect.specular.enable": light_or_world.superluxcore.visibility_indirect_specular,
     })
 
 
 def _envlightcache(definitions, light_or_world, scene, is_viewport_render):
-    envlight_cache = scene.luxcore.config.envlight_cache
-    enabled = envlight_cache.enabled and light_or_world.luxcore.use_envlight_cache
+    envlight_cache = scene.superluxcore.config.envlight_cache
+    enabled = envlight_cache.enabled and light_or_world.superluxcore.use_envlight_cache
     definitions["visibilitymapcache.enable"] = enabled
     if enabled:
         # All env. light caches share the same properties (it is very rare to have more than one anyway)
         definitions["visibilitymapcache.map.quality"] = envlight_cache.quality
-        # Automatically chosen by LuxCore according to the quality and HDRI map size
+        # Automatically chosen by SuperLuxCore according to the quality and HDRI map size
         definitions["visibilitymapcache.map.tilewidth"] = 0
         definitions["visibilitymapcache.map.tileheight"] = 0
         definitions["visibilitymapcache.map.tilesamplecount"] = 0
 
-        definitions["visibilitymapcache.map.sampleupperhemisphereonly"] = light_or_world.luxcore.sampleupperhemisphereonly
+        definitions["visibilitymapcache.map.sampleupperhemisphereonly"] = light_or_world.superluxcore.sampleupperhemisphereonly
 
         file_path = utils.get_persistent_cache_file_path(envlight_cache.file_path, envlight_cache.save_or_overwrite,
                                                          is_viewport_render, scene)
@@ -918,45 +918,45 @@ def apply_exposure(gain, exposure):
 
 def _define_brightness_and_color(light, definitions):
     # Brightness
-    normalize_by_color = light.luxcore.normalizebycolor
+    normalize_by_color = light.superluxcore.normalizebycolor
     gain = None
 
-    if light.luxcore.light_unit == "power":
-        efficency = light.luxcore.efficacy
-        power = light.luxcore.power
+    if light.superluxcore.light_unit == "power":
+        efficency = light.superluxcore.efficacy
+        power = light.superluxcore.power
 
-        if light.luxcore.efficacy == 0 or light.luxcore.power == 0:
+        if light.superluxcore.efficacy == 0 or light.superluxcore.power == 0:
             gain = [0, 0, 0]
         else:
             gain = [1, 1, 1]
 
-    elif light.luxcore.light_unit == "lumen":
+    elif light.superluxcore.light_unit == "lumen":
         efficency = 1.0
 
         if light.type == "SPOT":
-            power = light.luxcore.lumen
+            power = light.superluxcore.lumen
         else:
-            power = light.luxcore.lumen
+            power = light.superluxcore.lumen
 
-        if light.luxcore.lumen == 0:
+        if light.superluxcore.lumen == 0:
             gain = [0, 0, 0]
         else:
             gain = [1, 1, 1]
     
-    elif light.luxcore.light_unit == "candela":
+    elif light.superluxcore.light_unit == "candela":
         efficency = 1.0
 
         if light.type == "SPOT":
-            power = light.luxcore.candela * 2 * math.pi * (1 - math.cos(light.spot_size/2))
+            power = light.superluxcore.candela * 2 * math.pi * (1 - math.cos(light.spot_size/2))
         else:
-            power = light.luxcore.candela * 4 * math.pi
+            power = light.superluxcore.candela * 4 * math.pi
 
-        if light.luxcore.candela == 0:
+        if light.superluxcore.candela == 0:
             gain = [0, 0, 0]
         else:
             gain = [1, 1, 1]
         
-    elif light.luxcore.light_unit == "artistic":
+    elif light.superluxcore.light_unit == "artistic":
         efficency = 0.0
         power = 0.0
         normalize_by_color = False
@@ -970,11 +970,11 @@ def _define_brightness_and_color(light, definitions):
         definitions["gain"] = gain
 
     # Color
-    if light.luxcore.color_mode == "rgb":
-        definitions["color"] = list(light.luxcore.rgb_gain)
-    elif light.luxcore.color_mode == "temperature":
+    if light.superluxcore.color_mode == "rgb":
+        definitions["color"] = list(light.superluxcore.rgb_gain)
+    elif light.superluxcore.color_mode == "temperature":
         definitions["color"] = [1, 1, 1]
-        definitions["temperature"] = light.luxcore.temperature
+        definitions["temperature"] = light.superluxcore.temperature
         definitions["temperature.normalize"] = True
     else:
         raise Exception("Unkown color mode")
@@ -982,7 +982,7 @@ def _define_brightness_and_color(light, definitions):
 
 def export_ies(definitions, ies, library, is_meshlight=False):
     """
-    ies is a LuxCoreIESProps PropertyGroup
+    ies is a SuperLuxCoreIESProps PropertyGroup
     """
     prefix = "emission." if is_meshlight else ""
     has_ies = (ies.file_type == "TEXT" and ies.file_text) or (ies.file_type == "PATH" and ies.file_path)

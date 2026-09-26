@@ -8,10 +8,10 @@ from .. import export, utils, draw, properties
 from ..draw.final import FrameBufferFinal
 from ..utils import render as utils_render
 from ..utils import external_render
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from ..utils import view_layer as utils_view_layer
-from ..properties.denoiser import LuxCoreDenoiser
-from ..properties.display import LuxCoreDisplaySettings
+from ..properties.denoiser import SuperLuxCoreDenoiser
+from ..properties.display import SuperLuxCoreDisplaySettings
 
 if _needs_reload:
     import importlib
@@ -25,15 +25,15 @@ if _needs_reload:
 def render(engine, depsgraph):
     print("=" * 50)
     scene = depsgraph.scene_eval
-    LuxCoreErrorLog.clear()
-    statistics = scene.luxcore.statistics.get_active()
+    SuperLuxCoreErrorLog.clear()
+    statistics = scene.superluxcore.statistics.get_active()
 
     if utils.is_valid_camera(scene.camera):
-        tonemapper = scene.camera.data.luxcore.imagepipeline.tonemapper
+        tonemapper = scene.camera.data.superluxcore.imagepipeline.tonemapper
         if len(scene.view_layers) > 1 and tonemapper.is_automatic():
             msg = ("Using an automatic tonemapper with multiple "
                    "renderlayers will result in brightness differences")
-            LuxCoreErrorLog.add_warning(msg)
+            SuperLuxCoreErrorLog.add_warning(msg)
 
     _check_halt_conditions(engine, scene)
 
@@ -70,7 +70,7 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
     engine.exporter = export.Exporter(statistics)
     scene = depsgraph.scene_eval
 
-    if scene.luxcore.config.external_process and not engine.is_preview:
+    if scene.superluxcore.config.external_process and not engine.is_preview:
         # Serialize the scene and hand it to a detached render process;
         # returning from render() releases the depsgraph and all
         # evaluated Blender-side scene memory.
@@ -79,13 +79,13 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
         )
         if result is None:
             return
-        luxcore_scene, config_props = result
-        if not scene.luxcore.halt.enable:
+        superluxcore_scene, config_props = result
+        if not scene.superluxcore.halt.enable:
             print(
                 "[BLC] WARNING: no halt condition set — the external "
                 "render runs until the process is killed"
             )
-        external_render.run(config_props, luxcore_scene, scene)
+        external_render.run(config_props, superluxcore_scene, scene)
         # Drop the exporter (its caches still hold the exported numpy
         # arrays); returning releases the depsgraph too.
         engine.exporter = None
@@ -109,10 +109,10 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
 
     session_config = engine.session.GetRenderConfig()
 
-    if scene.luxcore.config.use_filesaver:
+    if scene.superluxcore.config.use_filesaver:
         engine.session.Stop()
 
-        if scene.luxcore.config.filesaver_format == "BIN":
+        if scene.superluxcore.config.filesaver_format == "BIN":
             output_path = session_config.GetProperty("filesaver.filename").GetString()
         else:
             output_path = session_config.GetProperty("filesaver.directory").GetString()
@@ -124,7 +124,7 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
         return
 
     start = time()
-    path_settings = scene.luxcore.config.path
+    path_settings = scene.superluxcore.config.path
     last_film_refresh = 0
     last_stat_refresh = 0
     # When auto clamping already applied the suggested value at export,
@@ -137,7 +137,7 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
     engine_type = session_config.GetProperty("renderengine.type").GetString()
     if engine_type.startswith("TILE"):
         epsilon = 0.1
-        aa = scene.luxcore.config.tile.path_sampling_aa_size
+        aa = scene.superluxcore.config.tile.path_sampling_aa_size
         clamp_warmup_samples = aa**2 - epsilon
     else:
         clamp_warmup_samples = 2.0
@@ -146,12 +146,12 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
 
     while True:
         now = time()
-        manual_refresh_requested = LuxCoreDisplaySettings.refresh or LuxCoreDenoiser.refresh
+        manual_refresh_requested = SuperLuxCoreDisplaySettings.refresh or SuperLuxCoreDenoiser.refresh
         update_stats = (now - last_stat_refresh) > _stat_refresh_interval(start, scene)
-        time_until_film_refresh = depsgraph.scene.luxcore.display.interval - (now - last_film_refresh)
+        time_until_film_refresh = depsgraph.scene.superluxcore.display.interval - (now - last_film_refresh)
         fast_refresh = now - start < FAST_REFRESH_DURATION
 
-        if LuxCoreDisplaySettings.paused:
+        if SuperLuxCoreDisplaySettings.paused:
             if not engine.session.IsInPause():
                 engine.session.Pause()
                 utils_render.update_status_msg(stats, engine, depsgraph.scene, session_config, time_until_film_refresh=0)
@@ -230,7 +230,7 @@ def _render_layer(engine, depsgraph, statistics, view_layer):
 
 
 def _stop_requested(engine):
-    return engine.test_break() or LuxCoreDisplaySettings.stop_requested
+    return engine.test_break() or SuperLuxCoreDisplaySettings.stop_requested
 
 
 def _stat_refresh_interval(start, scene):
@@ -255,20 +255,20 @@ def _check_halt_conditions(engine, scene):
     if len(enabled_layers) > 1:
         # When we have multiple render layers, we need a halt condition for each one
         for layer in enabled_layers:
-            layer_halt = layer.luxcore.halt
+            layer_halt = layer.superluxcore.halt
             if layer_halt.enable:
                 # The layer overrides the global halt conditions
                 has_halt_condition = layer_halt.is_enabled()
                 is_halt_enabled &= has_halt_condition
 
                 if not has_halt_condition:
-                    LuxCoreErrorLog.add_error('Halt condition missing for render layer "%s"' % layer.name)
+                    SuperLuxCoreErrorLog.add_error('Halt condition missing for render layer "%s"' % layer.name)
             else:
                 is_halt_enabled = False
 
     # Global halt conditions
     if not is_halt_enabled:
-        is_halt_enabled = scene.luxcore.halt.is_enabled()
+        is_halt_enabled = scene.superluxcore.halt.is_enabled()
 
     if needs_halt_condition and not is_halt_enabled:
         raise Exception("Missing halt condition (check error log)")
@@ -280,11 +280,11 @@ def _add_passes(engine, layer, scene):
     Called by engine.final.render() before the render starts.
     layer is the current render layer.
     """
-    aovs = layer.luxcore.aovs
+    aovs = layer.superluxcore.aovs
 
     # Denoiser
-    if scene.luxcore.denoiser.enabled:
-        transparent = scene.camera.data.luxcore.imagepipeline.transparent_film
+    if scene.superluxcore.denoiser.enabled:
+        transparent = scene.camera.data.superluxcore.imagepipeline.transparent_film
         if transparent:
             engine.add_pass("DENOISED", 4, "RGBA", layer=layer.name)
         else:
@@ -369,7 +369,7 @@ def _add_passes(engine, layer, scene):
         engine.add_pass("IRRADIANCE", 3, "RGB", layer=layer.name)
 
     # Light groups
-    lightgroups = scene.luxcore.lightgroups
+    lightgroups = scene.superluxcore.lightgroups
     lightgroup_pass_names = lightgroups.get_pass_names()
     default_group_name = lightgroups.get_lightgroup_pass_name(is_default_group=True)
     # If only the default group is in the list, it doesn't make sense to show lightgroups

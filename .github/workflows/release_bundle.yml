@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: BlendLuxCore Create Release
+name: SuperLuxCore Create Release
 
 on:
   workflow_dispatch:
@@ -68,7 +68,7 @@ jobs:
           print(f"::notice::Version number OK ('{version}')")
 
   call-build-bundle:
-    name: 'Build BlendLuxCore Bundle'
+    name: 'Build SuperLuxCore Bundle'
     needs: [check-version]
     uses: ./.github/workflows/build_bundle.yml
     with:
@@ -112,7 +112,7 @@ jobs:
         # Use full length commit SHA, otherwise CodeQL complains...
         uses: ncipollo/release-action@cdcc88a9acf3ca41c16c37bb7d21b9ad48560d87
         with:
-          name: "BlendLuxCore ${{ env.RELEASE_TAG }}"
+          name: "SuperLuxCore ${{ env.RELEASE_TAG }}"
           tag: ${{ env.RELEASE_TAG }}
           artifacts: ${{ github.workspace }}/dist/*
           removeArtifacts: true
@@ -121,9 +121,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           updateOnlyUnreleased: true
           body: |
-            ## BlendLuxCore
+            ## SuperLuxCore
 
-            This release was built from the following point in LuxCoreRender/BlendLuxCore:
+            This release was built from the following point in claudianus/SuperBlendLuxCore:
             - Branch: ${{ needs.call-build-bundle.outputs.branch }}
             - Commit: ${{ needs.call-build-bundle.outputs.commit }}
 

@@ -2,18 +2,18 @@ import bpy
 from bpy.props import PointerProperty
 from . import aovs, halt
 
-class LuxCoreViewLayer(bpy.types.PropertyGroup):
-    aovs: PointerProperty(type=aovs.LuxCoreAOVSettings)
-    halt: PointerProperty(type=halt.LuxCoreHaltConditions)
+class SuperLuxCoreViewLayer(bpy.types.PropertyGroup):
+    aovs: PointerProperty(type=aovs.SuperLuxCoreAOVSettings)
+    halt: PointerProperty(type=halt.SuperLuxCoreHaltConditions)
 
     @classmethod
     def register(cls):
-        bpy.types.ViewLayer.luxcore = PointerProperty(
-            name="LuxCore ViewLayer Settings",
-            description="LuxCore ViewLayer settings",
+        bpy.types.ViewLayer.superluxcore = PointerProperty(
+            name="SuperLuxCore ViewLayer Settings",
+            description="SuperLuxCore ViewLayer settings",
             type=cls,
         )
 
     @classmethod
     def unregister(cls):
-        del bpy.types.ViewLayer.luxcore
+        del bpy.types.ViewLayer.superluxcore

@@ -26,7 +26,7 @@ MAX_MEMORY_DESC = (
 )
 
 
-class LuxCoreDenoiser(PropertyGroup):
+class SuperLuxCoreDenoiser(PropertyGroup):
     refresh = False
 
     enabled: BoolProperty(name="", default=True, description="Enable/disable denoiser")
@@ -102,7 +102,7 @@ class LuxCoreDenoiser(PropertyGroup):
     temporal_normal_threshold: FloatProperty(name="Normal Threshold", default=0.6, min=-1, max=1,
                                              description="Minimum dot product between previous and current "
                                              "shading normals for a history sample to be reused")
-    temporal_statedir: StringProperty(name="State Directory", default="//luxcore_temporal/",
+    temporal_statedir: StringProperty(name="State Directory", default="//superluxcore_temporal/",
                                       subtype='DIR_PATH',
                                       description="Where the temporal history EXRs are stored. Cleared "
                                       "automatically when rendering from the first frame")

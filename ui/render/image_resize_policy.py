@@ -2,28 +2,28 @@ from ...icons import icon_manager
 from bl_ui.properties_render import RenderButtonsPanel
 from bpy.types import Panel
 
-class LUXCORE_RENDER_PT_image_resize_policy(Panel, RenderButtonsPanel):
+class SUPERLUXCORE_RENDER_PT_image_resize_policy(Panel, RenderButtonsPanel):
     bl_label = "Image Scaling"
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 75
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         layout = self.layout
         layout.label(text="", icon_value=icon_manager.get_icon_id("logotype"))
         col = layout.column(align=True)
-        col.prop(context.scene.luxcore.config.image_resize_policy, "enabled", text="")
+        col.prop(context.scene.superluxcore.config.image_resize_policy, "enabled", text="")
 
     def draw(self, context):
-        resize_policy = context.scene.luxcore.config.image_resize_policy
+        resize_policy = context.scene.superluxcore.config.image_resize_policy
 
         layout = self.layout
         layout.use_property_split = True
@@ -38,5 +38,5 @@ class LUXCORE_RENDER_PT_image_resize_policy(Panel, RenderButtonsPanel):
         mem_col = layout.column()
         mem_col.active = True
         mem_col.prop(
-            context.scene.luxcore.config, "free_blender_image_buffers"
+            context.scene.superluxcore.config, "free_blender_image_buffers"
         )

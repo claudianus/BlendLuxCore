@@ -22,9 +22,9 @@ from types import SimpleNamespace
 
 import bpy
 
-import bl_ext.user_default.blendluxcore as blendluxcore  # noqa: F401
-from bl_ext.user_default.blendluxcore import utils as blc_utils
-from bl_ext.user_default.blendluxcore.export import camera as blc_camera
+import bl_ext.user_default.superluxcore as superluxcore  # noqa: F401
+from bl_ext.user_default.superluxcore import utils as blc_utils
+from bl_ext.user_default.superluxcore.export import camera as blc_camera
 
 results = []
 
@@ -131,9 +131,9 @@ def ref_frame_rect(scene, rw, rh, camzoom, camdx, camdy):
 
 
 def ref_screenwindow(scene, rw, rh, camzoom, camdx, camdy):
-    """The expected LuxCore screenwindow for camera view (no border).
+    """The expected SuperLuxCore screenwindow for camera view (no border).
 
-    LuxCore's perspective camera maps raster -> sw -> ray with direction
+    SuperLuxCore's perspective camera maps raster -> sw -> ray with direction
     ~ sw * tan(fov/2); matching the viewplane means normalizing by
     sensor_size * clip / (2*lens). For ORTHO the sw is world units.
     """

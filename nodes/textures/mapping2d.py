@@ -1,13 +1,13 @@
 import bpy
 import math
 from bpy.props import FloatProperty, FloatVectorProperty, BoolProperty, StringProperty, IntProperty, EnumProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 from ... import icons
 from ...export.caches.object_cache import TriAOVDataIndices
 
 
-class LuxCoreNodeTexMapping2D(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexMapping2D(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "2D Mapping"
     bl_width_default = 160
 
@@ -60,7 +60,7 @@ class LuxCoreNodeTexMapping2D(LuxCoreNodeTexture, bpy.types.Node):
         ("mesh_islands", "Mesh Islands", "Mapping will be different between disconnected mesh islands", 1),
     ]
     # Changes to this property require a mesh re-export in viewport,
-    # because it depends on a LuxCore shape to pre-process the data
+    # because it depends on a SuperLuxCore shape to pre-process the data
     seed_type: EnumProperty(update=utils_node.force_viewport_mesh_update, name="Seed", items=seed_types,
                             default="object_id", description="Source of the randomness")
 
@@ -89,9 +89,9 @@ class LuxCoreNodeTexMapping2D(LuxCoreNodeTexture, bpy.types.Node):
     def init(self, context):
         # Instead of creating a new mapping, the user can also
         # manipulate an existing mapping
-        self.add_input("LuxCoreSocketMapping2D", "2D Mapping (optional)")
+        self.add_input("SuperLuxCoreSocketMapping2D", "2D Mapping (optional)")
 
-        self.outputs.new("LuxCoreSocketMapping2D", "2D Mapping")
+        self.outputs.new("SuperLuxCoreSocketMapping2D", "2D Mapping")
 
     def draw_buttons(self, context, layout):
         # Info about UV mapping so the user can react if no UV map etc.
@@ -100,7 +100,7 @@ class LuxCoreNodeTexMapping2D(LuxCoreNodeTexture, bpy.types.Node):
         if "2D Mapping (optional)" in self.inputs:
             input_mapping_node = utils_node.get_linked_node(self.inputs["2D Mapping (optional)"])
 
-            if isinstance(input_mapping_node, LuxCoreNodeTexMapping2D) and input_mapping_node.mapping_type == "uvrandommapping2d":
+            if isinstance(input_mapping_node, SuperLuxCoreNodeTexMapping2D) and input_mapping_node.mapping_type == "uvrandommapping2d":
                 layout.label(text="Random not valid as input!", icon=icons.ERROR)
         else:
             input_mapping_node = None
@@ -235,7 +235,7 @@ class LuxCoreNodeTexMapping2D(LuxCoreNodeTexture, bpy.types.Node):
 
         return definitions
 
-    def export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.mapping_type == "uvmapping2d":
             return self.export_uvmapping2d(exporter, depsgraph, props)
         elif self.mapping_type == "uvrandommapping2d":

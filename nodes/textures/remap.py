@@ -1,21 +1,21 @@
 import bpy
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 
 
-class LuxCoreNodeTexRemap(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexRemap(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Remap"
     bl_width_default = 160
 
     def init(self, context):
-        self.add_input("LuxCoreSocketFloatUnbounded", "Value", 0.5)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Source Min", 0)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Source Max", 1)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Target Min", 0)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Target Max", 1)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Value", 0.5)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Source Min", 0)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Source Max", 1)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Target Min", 0)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Target Max", 1)
 
-        self.outputs.new("LuxCoreSocketFloatUnbounded", "Value")
+        self.outputs.new("SuperLuxCoreSocketFloatUnbounded", "Value")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "remap",
             "value": self.inputs["Value"].export(exporter, depsgraph, props),
@@ -24,4 +24,4 @@ class LuxCoreNodeTexRemap(LuxCoreNodeTexture, bpy.types.Node):
             "targetmin": self.inputs["Target Min"].export(exporter, depsgraph, props),
             "targetmax": self.inputs["Target Max"].export(exporter, depsgraph, props),
         }
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

@@ -7,7 +7,7 @@ Unsupported nodes never silently black out: the reader logs a warning
 (node name + reason) and emits a neutral fallback — grey `matte` for
 shader outputs, mid-grey/identity for value/vector sockets, or passes
 through the first input where that is semantically closest. Node types
-with no LuxCore equivalent additionally carry a specific reason via
+with no SuperLuxCore equivalent additionally carry a specific reason via
 `_UNSUPPORTED_NODE_NOTES`.
 
 ## Legend
@@ -15,7 +15,7 @@ with no LuxCore equivalent additionally carry a specific reason via
 - **mapped** — the primary path converts; uncommon sockets/modes may warn + fall back
 - **approx** — mapped with a documented approximation (warning emitted)
 - **const-only** — works when key inputs are constant; textured inputs warn + passthrough
-- **warn** — no LuxCore equivalent; warning + neutral fallback
+- **warn** — no SuperLuxCore equivalent; warning + neutral fallback
 - **n/a** — not reachable through material trees (handled elsewhere or engine-internal)
 
 ## BSDF / shader nodes
@@ -77,7 +77,7 @@ with no LuxCore equivalent additionally carry a specific reason via
 | ShaderNodeParticleInfo | approx | per-field subset warns |
 | ShaderNodeHairInfo | approx | per-output subset warns |
 | ShaderNodePointInfo | approx | Random→objectidnormalized (per-point instance id); Position→hit position approx; Radius→warn 1.0 |
-| ShaderNodeCameraData | warn | view vector/depth unavailable to LuxCore textures |
+| ShaderNodeCameraData | warn | view vector/depth unavailable to SuperLuxCore textures |
 | ShaderNodeLightPath | mapped | all outputs via `rayinfo` texture (HitPoint ray context): Is Camera/Shadow/Diffuse/Glossy/Singular/Reflection/Transmission/Volume Scatter Ray, Ray Length/Depth, Diffuse/Glossy/Transparent/Transmission Depth |
 | ShaderNodeLayerWeight | approx | Facing→0.5; Fresnel→Schlick F0 |
 | ShaderNodeFresnel | approx | Schlick F0 (no angular Fresnel texture) |
@@ -90,7 +90,7 @@ with no LuxCore equivalent additionally carry a specific reason via
 
 | Node | Status | Notes |
 |---|---|---|
-| ShaderNodeMath | mapped | SINE/COSINE/TANGENT/ARC*/ARCTAN2/SINH/COSH/TANH/INVERSE_SQRT/FLOORED_MODULO/EXPONENT/LOGARITHM via LuxCore `mathfunc` texture (log_b(x)=ln(x)/ln(b)); SMOOTH_MIN/SMOOTH_MAX via polynomial composition; SQRT/MIN/MAX/FLOOR/CEIL/TRUNC/FRACT/PINGPONG/SIGN/COMPARE/WRAP/SNAP/MULTIPLY_ADD/RADIANS/DEGREES composed from existing textures; remaining ops warn + passthrough |
+| ShaderNodeMath | mapped | SINE/COSINE/TANGENT/ARC*/ARCTAN2/SINH/COSH/TANH/INVERSE_SQRT/FLOORED_MODULO/EXPONENT/LOGARITHM via SuperLuxCore `mathfunc` texture (log_b(x)=ln(x)/ln(b)); SMOOTH_MIN/SMOOTH_MAX via polynomial composition; SQRT/MIN/MAX/FLOOR/CEIL/TRUNC/FRACT/PINGPONG/SIGN/COMPARE/WRAP/SNAP/MULTIPLY_ADD/RADIANS/DEGREES composed from existing textures; remaining ops warn + passthrough |
 | ShaderNodeVectorMath | approx | ADD/SUBTRACT/MULTIPLY/DIVIDE/DOT/CROSS/REFLECT/PROJECT/FACEFORWARD/MULTIPLY_ADD/LENGTH/DISTANCE/NORMALIZE/SCALE/ABSOLUTE/MODULO/MIN/MAX mapped; SNAP→nearest-multiple approx; SINE/COSINE/TANGENT→elementwise `mathfunc`; WRAP/FLOORMOD/REFRACT→warn passthrough |
 | ShaderNodeVectorRotate | const-only | rotation composed as constant 3x3 matrix over texture channels; textured axis/angle/euler → warn passthrough |
 | ShaderNodeVectorTransform | approx | world/object/camera matrices composed per object; per-instance object space not expressible (base object matrix used); unresolvable → warn passthrough |
@@ -118,21 +118,21 @@ with no LuxCore equivalent additionally carry a specific reason via
 | ShaderNodeNormal | approx | direction output subset warns |
 | ShaderNodeNormalMap | mapped | tangent-space normal maps |
 | ShaderNodeBump | mapped | bump mapping |
-| ShaderNodeBevel | mapped | LuxCore bevel texture (bump-only round edges; Radius constant only, Normal input unsupported) |
+| ShaderNodeBevel | mapped | SuperLuxCore bevel texture (bump-only round edges; Radius constant only, Normal input unsupported) |
 | ShaderNodeAmbientOcclusion | approx | AO texture |
 | ShaderNodeWireframe | mapped | wireframe |
 | ShaderNodeDisplacement / VectorDisplacement | approx | object space only; exported as displacement shape |
 | ShaderNodeGroup / CustomGroup | mapped | recursive expansion |
 | ShaderNodeOutputMaterial | n/a | entry point, not evaluated as a node |
 | ShaderNodeOutputWorld / OutputLight | n/a | world/light trees (see below) |
-| ShaderNodeOutputAOV | warn | LuxCore AOVs via film outputs, not material nodes |
+| ShaderNodeOutputAOV | warn | SuperLuxCore AOVs via film outputs, not material nodes |
 | ShaderNodeScript | warn | no OSL |
 
 ## World & light trees
 
 Handled outside `_node` (`export/light.py::_convert_cycles_world` /
 `_convert_cycles_light`): Background, TexSky, TexEnvironment, Emission,
-portal lights. `ShaderNodeLightFalloff` warns (falloff lives on LuxCore
+portal lights. `ShaderNodeLightFalloff` warns (falloff lives on SuperLuxCore
 light definitions).
 
 ## Regression test
@@ -154,7 +154,7 @@ thin-film on glass, and per-feature warning assertions.
 ```
 
 Builds 14 small scenes (128×128, ~32 samples) that use only native
-Cycles node trees, renders each with LuxCore (PATH, CPU) and asserts the
+Cycles node trees, renders each with SuperLuxCore (PATH, CPU) and asserts the
 output is finite, non-black and plausibly bright. Where the result is
 physically comparable the same scene is also rendered with Cycles (CPU)
 and the mean luminance factor plus mean-normalised luminance RMSE are
@@ -178,12 +178,12 @@ Scene coverage:
 | s10_world_sky | world TexSky(Hosek-Wilkie) -> sky2 | asserted, loose |
 | s11_volume_principled | VolumePrincipled interior volume | asserted, loose |
 | s12_lightpath | LightPath Is Camera Ray -> MixShader | asserted |
-| s13_shadertorgb_fallback | ShaderToRGB warn-tier fallback | LuxCore-only + warning check |
+| s13_shadertorgb_fallback | ShaderToRGB warn-tier fallback | SuperLuxCore-only + warning check |
 | s14_lightpath_mirror | LightPath Is Camera Ray across a mirror bounce | asserted + quadrant hues |
 
 Notes:
 
-- Lights and worlds must opt in via `luxcore.use_cycles_settings`;
+- Lights and worlds must opt in via `superluxcore.use_cycles_settings`;
   materials with a Blender node tree are converted automatically.
 - The test disables `path.auto_clamping` / `use_clamping` and resets
   `suggested_clamping_value` for deterministic parity measurements.

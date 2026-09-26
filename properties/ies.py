@@ -28,7 +28,7 @@ IES_MAP_DESCRIPTION = (
 FLIPZ_DESCRIPTION = "Flip the Z axis of the IES profile"
 
 
-class LuxCoreIESProps(bpy.types.PropertyGroup):
+class SuperLuxCoreIESProps(bpy.types.PropertyGroup):
     use: BoolProperty(
         name="Use IES File", default=False, description=USE_IES_DESCRIPTION
     )

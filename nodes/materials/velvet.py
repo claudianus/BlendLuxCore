@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty
-from ..base import LuxCoreNodeMaterial
+from ..base import SuperLuxCoreNodeMaterial
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeMatVelvet(LuxCoreNodeMaterial, bpy.types.Node):
+class SuperLuxCoreNodeMatVelvet(SuperLuxCoreNodeMaterial, bpy.types.Node):
     bl_label = "Velvet Material"
     bl_width_default = 160
 
@@ -20,23 +20,23 @@ class LuxCoreNodeMatVelvet(LuxCoreNodeMaterial, bpy.types.Node):
     advanced: BoolProperty(name="Advanced Options", description="Advanced Velvet Parameters", default=False, update=update_advanced)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Diffuse Color", (1, 1, 1))
-        self.add_input("LuxCoreSocketFloat0to1", "Thickness", 0.1)
-        self.add_input("LuxCoreSocketFloatUnbounded", "p1", 2)
-        self.add_input("LuxCoreSocketFloatUnbounded", "p2", 10)
-        self.add_input("LuxCoreSocketFloatUnbounded", "p3", 2)
+        self.add_input("SuperLuxCoreSocketColor", "Diffuse Color", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Thickness", 0.1)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "p1", 2)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "p2", 10)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "p3", 2)
         self.inputs["p1"].enabled = False
         self.inputs["p2"].enabled = False
         self.inputs["p3"].enabled = False
                 
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "advanced", toggle=True)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "velvet",
             "kd": self.inputs["Diffuse Color"].export(exporter, depsgraph, props),
@@ -51,4 +51,4 @@ class LuxCoreNodeMatVelvet(LuxCoreNodeMaterial, bpy.types.Node):
             })
 
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

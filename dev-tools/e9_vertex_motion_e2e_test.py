@@ -1,5 +1,5 @@
-# E9 Phase-5 end-to-end regression: BlendLuxCore mesh deformation motion
-# blur export (see LuxCore dev-tools/deformation-motion-blur-design.md).
+# E9 Phase-5 end-to-end regression: SuperLuxCore mesh deformation motion
+# blur export (see SuperLuxCore dev-tools/deformation-motion-blur-design.md).
 #
 # Scene: a camera-facing emissive quad driven by a shape key whose value
 # animates across the shutter interval. The object opts into motion blur;
@@ -17,7 +17,7 @@
 #   blender --background --factory-startup \
 #       --python dev-tools/e9_vertex_motion_e2e_test.py
 #
-# Requires the BlendLuxCore addon with a pyluxcore build that exposes
+# Requires the SuperLuxCore addon with a pysuperluxcore build that exposes
 # Scene.SetMeshVertexMotion. Exits 0 on PASS, 1 on FAIL. Rendered images
 # land in $E9_TEST_OUT (default /tmp).
 
@@ -43,7 +43,7 @@ def find_addon_key():
     return next(
         a.module
         for a in bpy.context.preferences.addons
-        if "luxcore" in a.module.lower()
+        if "superluxcore" in a.module.lower()
     )
 
 
@@ -79,13 +79,13 @@ for me in list(bpy.data.meshes):
     bpy.data.meshes.remove(me)
 
 scene = bpy.context.scene
-scene.luxcore.config.engine = "PATH"
-scene.luxcore.config.device = "OCL"
-scene.luxcore.devices.use_native_cpu = False
-scene.luxcore.halt.enable = True
-scene.luxcore.halt.use_samples = True
-scene.luxcore.halt.samples = 64
-scene.render.engine = "LUXCORE"
+scene.superluxcore.config.engine = "PATH"
+scene.superluxcore.config.device = "OCL"
+scene.superluxcore.devices.use_native_cpu = False
+scene.superluxcore.halt.enable = True
+scene.superluxcore.halt.use_samples = True
+scene.superluxcore.halt.samples = 64
+scene.render.engine = "SUPERLUXCORE"
 scene.render.resolution_x = 320
 scene.render.resolution_y = 240
 scene.render.resolution_percentage = 100
@@ -135,7 +135,7 @@ scene.collection.objects.link(cam)
 cam.location = (0, 0, 4)
 scene.camera = cam
 
-mb = cam_data.luxcore.motion_blur
+mb = cam_data.superluxcore.motion_blur
 mb.enable = True
 mb.object_blur = True
 mb.camera_blur = False
@@ -143,7 +143,7 @@ mb.shutter = 8.0
 mb.steps = 3
 
 # ---------- A: motion blur on, object opted in ----------
-quad.luxcore.enable_motion_blur = True
+quad.superluxcore.enable_motion_blur = True
 render("blur")
 count_b, lo_b, hi_b = red_span(scene.render.filepath)
 check("blur render produced emissive pixels", count_b > 50, f"count={count_b}")
@@ -171,7 +171,7 @@ check(
 
 # ---------- C: blur on but object NOT opted in -> stays sharp ----------
 mb.enable = True
-quad.luxcore.enable_motion_blur = False
+quad.superluxcore.enable_motion_blur = False
 render("noopt")
 count_n, lo_n, hi_n = red_span(scene.render.filepath)
 span_n = hi_n - lo_n

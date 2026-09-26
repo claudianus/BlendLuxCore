@@ -40,7 +40,7 @@ NOISE_THRESH_STEP_DESC = (
 
 
 # Attached to view layer and scene
-class LuxCoreHaltConditions(bpy.types.PropertyGroup):
+class SuperLuxCoreHaltConditions(bpy.types.PropertyGroup):
     # Enabled by default with a convergence-based stop plus a sample cap:
     # renders terminate once the image is clean, and pathological scenes
     # still terminate instead of running forever.

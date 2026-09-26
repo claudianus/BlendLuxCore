@@ -3,7 +3,7 @@ LuxBlend rewrite
 Code Design:
 - no duplicate code for still/animation/viewport
 - caching for still/animation/viewport (see https://github.com/LuxCoreRender/BlendLuxCore/issues/59)
-- one luxcore session during animation render, with updates (to avoid kernel compilation times), see issue 59 linked above
+- one superluxcore session during animation render, with updates (to avoid kernel compilation times), see issue 59 linked above
 - make viewport render robust (no running in background unwanted)
 - Only use new PointerProperty, no more saving the name as StringProperty. 
   It should be possible for the user to link or append datablocks and have all 
@@ -19,7 +19,7 @@ Low priority
 - Mesh export: use free_mpoly option in calc_tessface operation? https://www.blender.org/api/blender_python_api_2_78_release/bpy.types.Mesh.html?highlight=calc_normals_split#bpy.types.Mesh.calc_tessface
 
 Done/Obsolete
-- fast film updates (Cython? extend LuxCoreForBlender?)
+- fast film updates (Cython? extend SuperLuxCoreForBlender?)
 - reduced filmsize during movement and/or support for RT modes
 --> Dade implemented support to directly write in glBuffer
 - Texture tab behaviour similar to Cycles (Brush textures, particle textures, modifier textures)

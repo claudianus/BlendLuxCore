@@ -30,7 +30,7 @@ for i in "$@"; do
     -b|--blcpath)
       export BLC_DEV_PATH="$REPO_PATH"
       ;;
-    -p=*|--pyluxcore=*)
+    -p=*|--pysuperluxcore=*)
       export BLC_WHEEL_PATH="${i#*=}"
       USE_WHEEL_PATH=true
       ;;
@@ -74,12 +74,12 @@ if $DISPLAY_HELP; then
   echo "  E.g.: version 4.2 is specified, 4.2.5 and 4.2.8 are installed --> 4.2.8 is loaded."
   echo ""
   echo "Options:"
-  echo "  -b or --blcpath                      Use local repository of BlendLuxCore. Sets the BLC_DEV_PATH environment variable"
+  echo "  -b or --blcpath                      Use local repository of SuperLuxCore. Sets the BLC_DEV_PATH environment variable"
   echo "  -r or --copyrelease                  Copy the latest compiled release binary to the extensions folder"
   echo "  -d or --copydebug                    Copy the latest compiled debug binary to the extensions folder"
   echo "  -w or --copywheel                    Copy the latest compiled wheel from the command 'make wheel-test' to the extensions folder"
-  echo "  -o or --original                     Restore the original binary (created when option -r or -d was used) and delete content of pyluxcore_custom/ (created e.g. when option -w was used)"
-  echo "  -p or --pyluxcore=/path/to/wheel     Path to a local pyluxcore wheel. Sets the BLC_WHEEL_PATH environment variable."
+  echo "  -o or --original                     Restore the original binary (created when option -r or -d was used) and delete content of pysuperluxcore_custom/ (created e.g. when option -w was used)"
+  echo "  -p or --pysuperluxcore=/path/to/wheel     Path to a local pysuperluxcore wheel. Sets the BLC_WHEEL_PATH environment variable."
   echo "  -h or --help                         Display this help text"
   echo ""
   echo "Note: Options -c, -d, -r, and -p=* are mutually exclusive!"
@@ -94,14 +94,14 @@ if $DISPLAY_HELP; then
 fi
 
 #derived folders - may need to change depending on distro or installation specifics
-COMPILE_FOLDER=$REPO_PATH/LuxCore/out/install
-COMPILE_PATH_R=$COMPILE_FOLDER/Release/pyluxcore/pyluxcore.cpython-$PYMAJOR$PYMINOR-x86_64-linux-gnu.so
-COMPILE_PATH_D=$COMPILE_FOLDER/Debug/pyluxcore/pyluxcore.cpython-$PYMAJOR$PYMINOR-x86_64-linux-gnu.so
+COMPILE_FOLDER=$REPO_PATH/SuperLuxCore/out/install
+COMPILE_PATH_R=$COMPILE_FOLDER/Release/pysuperluxcore/pysuperluxcore.cpython-$PYMAJOR$PYMINOR-x86_64-linux-gnu.so
+COMPILE_PATH_D=$COMPILE_FOLDER/Debug/pysuperluxcore/pysuperluxcore.cpython-$PYMAJOR$PYMINOR-x86_64-linux-gnu.so
 COMPILE_PATH_W=$COMPILE_FOLDER/Release/wheel
-BLENDER_BINARY_FOLDER=$HOME_PATH/.config/blender/$BVER/extensions/.local/lib/python$PYMAJOR.$PYMINOR/site-packages/pyluxcore
-BLENDER_WHEEL_FOLDER=$HOME_PATH/.config/blender/$BVER/extensions/user_default/BlendLuxCore/pyluxcore_custom
+BLENDER_BINARY_FOLDER=$HOME_PATH/.config/blender/$BVER/extensions/.local/lib/python$PYMAJOR.$PYMINOR/site-packages/pysuperluxcore
+BLENDER_WHEEL_FOLDER=$HOME_PATH/.config/blender/$BVER/extensions/user_default/superluxcore/pysuperluxcore_custom
 
-# check if more than one pyluxcore-related options is specified
+# check if more than one pysuperluxcore-related options is specified
 plc_count=0
 $USE_WHEEL_PATH && ((plc_count++))
 $COPY_RELEASE && ((plc_count++))
@@ -137,15 +137,15 @@ for folder in $folder_candidates; do
 done
 
 if [[ $RESTORE_ORIGINAL == true ]]; then
-  # restore pyluxcore.so if applicable
-  n_backup=$(ls $BLENDER_BINARY_FOLDER/pyluxcore*.so.original 2>/dev/null | wc -l)
+  # restore pysuperluxcore.so if applicable
+  n_backup=$(ls $BLENDER_BINARY_FOLDER/pysuperluxcore*.so.original 2>/dev/null | wc -l)
   if [ "$n_backup" -ne 0 ]; then
-    binary_original=$(find "$BLENDER_BINARY_FOLDER" -name pyluxcore*.so.original)
-    binary_new=$(find "$BLENDER_BINARY_FOLDER" -name pyluxcore*.so)
+    binary_original=$(find "$BLENDER_BINARY_FOLDER" -name pysuperluxcore*.so.original)
+    binary_new=$(find "$BLENDER_BINARY_FOLDER" -name pysuperluxcore*.so)
     rm $binary_new
     mv $binary_original $binary_new
   fi
-  # remove wheels in pyluxcore_custom/
+  # remove wheels in pysuperluxcore_custom/
   n_wheels_inblender=$(ls $BLENDER_WHEEL_FOLDER/*.whl 2>/dev/null | wc -l)
   if [ "$n_wheels_inblender" -ne 0 ]; then
     rm $BLENDER_WHEEL_FOLDER/*.whl
@@ -153,22 +153,22 @@ if [[ $RESTORE_ORIGINAL == true ]]; then
 fi
 
 if [[ $COPY_RELEASE == true ]]; then
-  n_backup=$(ls $BLENDER_BINARY_FOLDER/pyluxcore*.so.original 2>/dev/null | wc -l)
+  n_backup=$(ls $BLENDER_BINARY_FOLDER/pysuperluxcore*.so.original 2>/dev/null | wc -l)
   if [ "$n_backup" -eq 0 ]; then
-    binary_original=$(find "$BLENDER_BINARY_FOLDER" -name pyluxcore*.so)
+    binary_original=$(find "$BLENDER_BINARY_FOLDER" -name pysuperluxcore*.so)
     cp $binary_original $binary_original.original
   fi
-  binary_new=$(find $COMPILE_PATH_R -name pyluxcore*.so)
+  binary_new=$(find $COMPILE_PATH_R -name pysuperluxcore*.so)
   cp $binary_new $BLENDER_BINARY_FOLDER
 fi
 
 if [[ $COPY_DEBUG == true ]]; then
-  n_backup=$(ls $BLENDER_BINARY_FOLDER/pyluxcore*.so.original 2>/dev/null | wc -l)
+  n_backup=$(ls $BLENDER_BINARY_FOLDER/pysuperluxcore*.so.original 2>/dev/null | wc -l)
   if [ "$n_backup" -eq 0 ]; then
-    binary_original=$(find "$BLENDER_BINARY_FOLDER" -name pyluxcore*.so)
+    binary_original=$(find "$BLENDER_BINARY_FOLDER" -name pysuperluxcore*.so)
     cp $binary_original $binary_original.original
   fi
-  binary_new=$(find $COMPILE_PATH_D -name pyluxcore*.so)
+  binary_new=$(find $COMPILE_PATH_D -name pysuperluxcore*.so)
   cp $binary_new $BLENDER_BINARY_FOLDER
 fi
 

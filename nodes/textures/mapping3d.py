@@ -2,14 +2,14 @@ import bpy
 from bpy.props import FloatProperty, BoolProperty, FloatVectorProperty, EnumProperty, StringProperty, IntProperty
 from mathutils import Matrix
 import math
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ... import utils
 from ...utils import node as utils_node
 from ... import icons
 from ...export.caches.object_cache import TriAOVDataIndices
 
 
-class LuxCoreNodeTexMapping3D(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexMapping3D(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "3D Mapping"
     bl_width_default = 260
 
@@ -54,7 +54,7 @@ class LuxCoreNodeTexMapping3D(LuxCoreNodeTexture, bpy.types.Node):
         ("mesh_islands", "Mesh Islands", "Mapping will be different between disconnected mesh islands", 1),
     ]
     # Changes to this property require a mesh re-export in viewport,
-    # because it depends on a LuxCore shape to pre-process the data
+    # because it depends on a SuperLuxCore shape to pre-process the data
     seed_type: EnumProperty(update=utils_node.force_viewport_mesh_update, name="Seed", items=seed_types,
                             default="object_id", description="Source of the randomness")
 
@@ -82,15 +82,15 @@ class LuxCoreNodeTexMapping3D(LuxCoreNodeTexture, bpy.types.Node):
     def init(self, context):
         # Instead of creating a new mapping, the user can also
         # manipulate an existing mapping
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping (optional)")
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping (optional)")
 
-        self.outputs.new("LuxCoreSocketMapping3D", "3D Mapping")
+        self.outputs.new("SuperLuxCoreSocketMapping3D", "3D Mapping")
 
     def draw_buttons(self, context, layout):
         if "3D Mapping (optional)" in self.inputs:
             input_mapping_node = utils_node.get_linked_node(self.inputs["3D Mapping (optional)"])
 
-            if isinstance(input_mapping_node, LuxCoreNodeTexMapping3D) and input_mapping_node.mapping_type == "localrandommapping3d":
+            if isinstance(input_mapping_node, SuperLuxCoreNodeTexMapping3D) and input_mapping_node.mapping_type == "localrandommapping3d":
                 layout.label(text="Random not valid as input!", icon=icons.ERROR)
         else:
             input_mapping_node = None
@@ -250,7 +250,7 @@ class LuxCoreNodeTexMapping3D(LuxCoreNodeTexture, bpy.types.Node):
 
         return definitions
 
-    def export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.mapping_type in {"globalmapping3d", "localmapping3d", "uvmapping3d"}:
             return self.export_generic(exporter, depsgraph, props)
         elif self.mapping_type == "localrandommapping3d":

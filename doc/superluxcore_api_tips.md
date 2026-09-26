@@ -2,17 +2,17 @@ When one property of a key is set, all other (previously defined) properties of 
 Example:
 Let's say we have set the following properties:
 ```
-props.Set(pyluxcore.Property("scene.materials.test.type", "matte"))
-props.Set(pyluxcore.Property("scene.materials.test.kd", [0.7, 0.7, 0.7]))
+props.Set(pysuperluxcore.Property("scene.materials.test.type", "matte"))
+props.Set(pysuperluxcore.Property("scene.materials.test.kd", [0.7, 0.7, 0.7]))
 ```
-Now we want to set the material color to red. If we try the following, LuxCore will complain:
+Now we want to set the material color to red. If we try the following, SuperLuxCore will complain:
 ```
-props.Set(pyluxcore.Property("scene.materials.test.kd", [0.8, 0, 0]))
+props.Set(pysuperluxcore.Property("scene.materials.test.kd", [0.8, 0, 0]))
 ```
 This is because the line `"scene.materials.test.type", "matte"` will be deleted and the material definition is missing the material type information.
 You have to explicitly set lines you want to keep, even if they have not changed.
 
-## Threading / GIL (pyluxcore)
+## Threading / GIL (pysuperluxcore)
 
 - Long native calls release the GIL (`call_guard<gil_scoped_release>` on
   pure-C++ signatures, or an inner `py::gil_scoped_release` after Python
@@ -21,7 +21,7 @@ You have to explicitly set lines you want to keep, even if they have not changed
   releases the GIL *before* the body runs, so the conversion touches
   Python objects without the GIL and crashes. Convert first, then release
   inside the body around the native call only.
-- `pyluxcore.KernelCacheFill(props, cb)` accepts a progress callback
+- `pysuperluxcore.KernelCacheFill(props, cb)` accepts a progress callback
   `cb(index, count)`. It fires from a native worker thread — do not touch
   bpy in it; capture needed values up-front (see
   `Exporter.create_session`). Only one callback can be active at a time.
@@ -39,5 +39,5 @@ You have to explicitly set lines you want to keep, even if they have not changed
   already exists (required: OIDN component-mode image pipelines re-Parse
   into a live film), but still throws for genuinely new channels.
 - At interpreter shutdown a stopped `RenderSession` can segfault in
-  static teardown (pre-existing pyluxcore issue) — unrelated to addon
+  static teardown (pre-existing pysuperluxcore issue) — unrelated to addon
   code.

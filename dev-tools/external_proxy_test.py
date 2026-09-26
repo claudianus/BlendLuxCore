@@ -4,7 +4,7 @@ External-process render with a .lxm proxy mesh (Blender E2E).
     Blender -b --python dev-tools/external_proxy_test.py
 
 Reuses the lxmproxy_e2e scene: bakes the heavy floor to .lxm, enables
-scene.luxcore.config.external_process and renders 1280x720. The export
+scene.superluxcore.config.external_process and renders 1280x720. The export
 serializes the RenderConfig to .bcf — the proxy mesh must be written
 as a file reference and re-mapped inside the detached runner, which
 never sees Blender's mesh data.
@@ -27,7 +27,7 @@ import bpy
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lxmproxy_e2e_test import build_scene, LXM
 
-OUT = "/tmp/luxcore_extproxy_720p.png"
+OUT = "/tmp/superluxcore_extproxy_720p.png"
 WORKGLOB = os.path.join(tempfile.gettempdir(), "blc_extrender_*")
 
 
@@ -36,15 +36,15 @@ def main():
 
     bpy.context.view_layer.objects.active = floor
     floor.select_set(True)
-    bpy.ops.luxcore.bake_lxm_proxy(filepath=LXM)
-    assert floor.luxcore.proxy_filepath == LXM
+    bpy.ops.superluxcore.bake_lxm_proxy(filepath=LXM)
+    assert floor.superluxcore.proxy_filepath == LXM
     print(f"[ExtProxy] baked {LXM}: {os.path.getsize(LXM) / 1e6:.1f} MB")
 
-    scene.luxcore.config.external_process = True
+    scene.superluxcore.config.external_process = True
     for vl in scene.view_layers:
-        vl.luxcore.halt.enable = False
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 15
+        vl.superluxcore.halt.enable = False
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 15
 
     before = set(glob.glob(WORKGLOB))
     bpy.ops.render.render(write_still=True)

@@ -3,12 +3,12 @@ from nodeitems_utils import NodeCategory, NodeItem, NodeItemCustom
 from ... import icons
 from ...utils import node as utils_node
 from ..nodeitems import Separator, NodeItemMultiImageImport
-from ..base import LuxCoreNodeTree
+from ..base import SuperLuxCoreNodeTree
 
 
-class LuxCoreMaterialNodeTree(bpy.types.NodeTree, LuxCoreNodeTree):
-    bl_idname = "luxcore_material_nodes"
-    bl_label = "LuxCore Material Nodes"
+class SuperLuxCoreMaterialNodeTree(bpy.types.NodeTree, SuperLuxCoreNodeTree):
+    bl_idname = "superluxcore_material_nodes"
+    bl_label = "SuperLuxCore Material Nodes"
     bl_icon = icons.NTREE_MATERIAL
 
     @classmethod
@@ -22,7 +22,7 @@ class LuxCoreMaterialNodeTree(bpy.types.NodeTree, LuxCoreNodeTree):
             mat = obj.active_material
 
             if mat:
-                node_tree = mat.luxcore.node_tree
+                node_tree = mat.superluxcore.node_tree
 
                 if node_tree:
                     return node_tree, mat, mat
@@ -44,9 +44,9 @@ class LuxCoreMaterialNodeTree(bpy.types.NodeTree, LuxCoreNodeTree):
         for mat in materials:
             if (
                 hasattr(
-                    mat, "luxcore"
+                    mat, "superluxcore"
                 )  # workaround for https://projects.blender.org/blender/blender/issues/140488
-                and mat.luxcore.node_tree == self
+                and mat.superluxcore.node_tree == self
             ):
                 mat.diffuse_color = mat.diffuse_color
                 break
@@ -61,204 +61,205 @@ class LuxCoreMaterialNodeTree(bpy.types.NodeTree, LuxCoreNodeTree):
             pass
 
 
-class LuxCoreNodeCategoryMaterial(NodeCategory):
+class SuperLuxCoreNodeCategoryMaterial(NodeCategory):
     @classmethod
     def poll(cls, context):
-        return context.space_data.tree_type == "luxcore_material_nodes"
+        return context.space_data.tree_type == "superluxcore_material_nodes"
 
 
 # Here we define the menu structure the user sees when he
 # presses Shift+A in the node editor to add a new node.
 # In general it is a good idea to put often used nodes near the top.
-luxcore_node_categories_material = [
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_MATERIAL",
+superluxcore_node_categories_material = [
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_MATERIAL",
         "Material",
         items=[
-            NodeItem("LuxCoreNodeMatDisney", label="Disney"),
-            NodeItem("LuxCoreNodeMatOpenPBR", label="OpenPBR"),
-            NodeItem("LuxCoreNodeMatMix", label="Mix"),
-            NodeItem("LuxCoreNodeMatMatte", label="Matte"),
+            NodeItem("SuperLuxCoreNodeMatDisney", label="Disney"),
+            NodeItem("SuperLuxCoreNodeMatOpenPBR", label="OpenPBR"),
+            NodeItem("SuperLuxCoreNodeMatMix", label="Mix"),
+            NodeItem("SuperLuxCoreNodeMatMatte", label="Matte"),
             NodeItem(
-                "LuxCoreNodeMatMatteTranslucent", label="Matte Translucent"
+                "SuperLuxCoreNodeMatMatteTranslucent", label="Matte Translucent"
             ),
-            NodeItem("LuxCoreNodeMatMetal", label="Metal"),
-            NodeItem("LuxCoreNodeMatMirror", label="Mirror"),
-            NodeItem("LuxCoreNodeMatGlossy2", label="Glossy"),
+            NodeItem("SuperLuxCoreNodeMatMetal", label="Metal"),
+            NodeItem("SuperLuxCoreNodeMatMirror", label="Mirror"),
+            NodeItem("SuperLuxCoreNodeMatGlossy2", label="Glossy"),
             NodeItem(
-                "LuxCoreNodeMatGlossyTranslucent", label="Glossy Translucent"
+                "SuperLuxCoreNodeMatGlossyTranslucent", label="Glossy Translucent"
             ),
-            NodeItem("LuxCoreNodeMatGlossyCoating", label="Glossy Coating"),
-            NodeItem("LuxCoreNodeMatGlass", label="Glass"),
-            NodeItem("LuxCoreNodeMatNull", label="Null (Transparent)"),
-            NodeItem("LuxCoreNodeMatCarpaint", label="Carpaint"),
-            NodeItem("LuxCoreNodeMatCloth", label="Cloth"),
-            NodeItem("LuxCoreNodeMatVelvet", label="Velvet"),
-            NodeItem("LuxCoreNodeMatTwoSided", label="Two Sided"),
+            NodeItem("SuperLuxCoreNodeMatGlossyCoating", label="Glossy Coating"),
+            NodeItem("SuperLuxCoreNodeMatGlass", label="Glass"),
+            NodeItem("SuperLuxCoreNodeMatNull", label="Null (Transparent)"),
+            NodeItem("SuperLuxCoreNodeMatHair", label="Hair"),
+            NodeItem("SuperLuxCoreNodeMatCarpaint", label="Carpaint"),
+            NodeItem("SuperLuxCoreNodeMatCloth", label="Cloth"),
+            NodeItem("SuperLuxCoreNodeMatVelvet", label="Velvet"),
+            NodeItem("SuperLuxCoreNodeMatTwoSided", label="Two Sided"),
             NodeItem(
-                "LuxCoreNodeMatFrontBackOpacity", label="Front/Back Opacity"
+                "SuperLuxCoreNodeMatFrontBackOpacity", label="Front/Back Opacity"
             ),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_VOLUME",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_VOLUME",
         "Volume",
         items=[
-            NodeItem("LuxCoreNodeVolClear", label="Clear"),
-            NodeItem("LuxCoreNodeVolHomogeneous", label="Homogeneous"),
-            NodeItem("LuxCoreNodeVolHeterogeneous", label="Heterogeneous"),
+            NodeItem("SuperLuxCoreNodeVolClear", label="Clear"),
+            NodeItem("SuperLuxCoreNodeVolHomogeneous", label="Homogeneous"),
+            NodeItem("SuperLuxCoreNodeVolHeterogeneous", label="Heterogeneous"),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_TEXTURE",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_TEXTURE",
         "Texture",
         items=[
             NodeItemMultiImageImport(),
-            NodeItem("LuxCoreNodeTexImagemap", label="Image"),
+            NodeItem("SuperLuxCoreNodeTexImagemap", label="Image"),
             Separator(),
             # Procedurals
-            NodeItem("LuxCoreNodeTexBrick", label="Brick"),
-            NodeItem("LuxCoreNodeTexWireframe", label="Wireframe"),
-            NodeItem("LuxCoreNodeTexDots", label="Dots"),
-            NodeItem("LuxCoreNodeTexfBM", label="fBM"),
-            NodeItem("LuxCoreNodeTexCheckerboard2D", label="2D Checkerboard"),
-            NodeItem("LuxCoreNodeTexCheckerboard3D", label="3D Checkerboard"),
-            NodeItem("LuxCoreNodeTexMarble", label="Marble"),
-            # NodeItem("LuxCoreNodeTexWindy", label="Windy"),  # Same as FBM -> unnecessary
-            NodeItem("LuxCoreNodeTexWrinkled", label="Wrinkled"),
+            NodeItem("SuperLuxCoreNodeTexBrick", label="Brick"),
+            NodeItem("SuperLuxCoreNodeTexWireframe", label="Wireframe"),
+            NodeItem("SuperLuxCoreNodeTexDots", label="Dots"),
+            NodeItem("SuperLuxCoreNodeTexfBM", label="fBM"),
+            NodeItem("SuperLuxCoreNodeTexCheckerboard2D", label="2D Checkerboard"),
+            NodeItem("SuperLuxCoreNodeTexCheckerboard3D", label="3D Checkerboard"),
+            NodeItem("SuperLuxCoreNodeTexMarble", label="Marble"),
+            # NodeItem("SuperLuxCoreNodeTexWindy", label="Windy"),  # Same as FBM -> unnecessary
+            NodeItem("SuperLuxCoreNodeTexWrinkled", label="Wrinkled"),
             Separator(),
-            NodeItem("LuxCoreNodeTexHitpoint", label="Vertex Color"),
-            NodeItem("LuxCoreNodeTexSmoke", label="Smoke Data"),
-            NodeItem("LuxCoreNodeTexOpenVDB", label="OpenVDB File"),
-            NodeItem("LuxCoreNodeTexFresnel", label="Fresnel"),
+            NodeItem("SuperLuxCoreNodeTexHitpoint", label="Vertex Color"),
+            NodeItem("SuperLuxCoreNodeTexSmoke", label="Smoke Data"),
+            NodeItem("SuperLuxCoreNodeTexOpenVDB", label="OpenVDB File"),
+            NodeItem("SuperLuxCoreNodeTexFresnel", label="Fresnel"),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_BLENDERTEXTURE",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_BLENDERTEXTURE",
         "Texture (Blender)",
         items=[
-            NodeItem("LuxCoreNodeTexBlenderBlend", label="Blend"),
-            NodeItem("LuxCoreNodeTexBlenderClouds", label="Clouds"),
+            NodeItem("SuperLuxCoreNodeTexBlenderBlend", label="Blend"),
+            NodeItem("SuperLuxCoreNodeTexBlenderClouds", label="Clouds"),
             NodeItem(
-                "LuxCoreNodeTexBlenderDistortedNoise", label="Distorted Noise"
+                "SuperLuxCoreNodeTexBlenderDistortedNoise", label="Distorted Noise"
             ),
-            NodeItem("LuxCoreNodeTexBlenderMagic", label="Magic"),
-            NodeItem("LuxCoreNodeTexBlenderMarble", label="Marble"),
-            NodeItem("LuxCoreNodeTexBlenderMusgrave", label="Musgrave"),
-            NodeItem("LuxCoreNodeTexBlenderNoise", label="Fully Random Noise"),
-            NodeItem("LuxCoreNodeTexBlenderStucci", label="Stucci"),
-            NodeItem("LuxCoreNodeTexBlenderWood", label="Wood"),
-            NodeItem("LuxCoreNodeTexBlenderVoronoi", label="Voronoi"),
+            NodeItem("SuperLuxCoreNodeTexBlenderMagic", label="Magic"),
+            NodeItem("SuperLuxCoreNodeTexBlenderMarble", label="Marble"),
+            NodeItem("SuperLuxCoreNodeTexBlenderMusgrave", label="Musgrave"),
+            NodeItem("SuperLuxCoreNodeTexBlenderNoise", label="Fully Random Noise"),
+            NodeItem("SuperLuxCoreNodeTexBlenderStucci", label="Stucci"),
+            NodeItem("SuperLuxCoreNodeTexBlenderWood", label="Wood"),
+            NodeItem("SuperLuxCoreNodeTexBlenderVoronoi", label="Voronoi"),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_MATH",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_MATH",
         "Math",
         items=[
-            NodeItem("LuxCoreNodeTexMath", label="Math"),
-            NodeItem("LuxCoreNodeTexColorMix", label="Color Math"),
-            NodeItem("LuxCoreNodeTexVectorMath", label="Vector Math"),
-            NodeItem("LuxCoreNodeTexDotProduct", label="Dot Product"),
-            NodeItem("LuxCoreNodeTexSplitFloat3", label="Split RGB"),
-            NodeItem("LuxCoreNodeTexMakeFloat3", label="Combine RGB"),
-            NodeItem("LuxCoreNodeTexRemap", label="Remap"),
+            NodeItem("SuperLuxCoreNodeTexMath", label="Math"),
+            NodeItem("SuperLuxCoreNodeTexColorMix", label="Color Math"),
+            NodeItem("SuperLuxCoreNodeTexVectorMath", label="Vector Math"),
+            NodeItem("SuperLuxCoreNodeTexDotProduct", label="Dot Product"),
+            NodeItem("SuperLuxCoreNodeTexSplitFloat3", label="Split RGB"),
+            NodeItem("SuperLuxCoreNodeTexMakeFloat3", label="Combine RGB"),
+            NodeItem("SuperLuxCoreNodeTexRemap", label="Remap"),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_UTILS",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_UTILS",
         "Utils",
         items=[
-            NodeItem("LuxCoreNodeTexBump", label="Bump"),
+            NodeItem("SuperLuxCoreNodeTexBump", label="Bump"),
             # Possibly confusing, better deactivate (only needed in very rare cases anyway)
-            # NodeItem("LuxCoreNodeTexNormalmap", label="Normalmap"),
-            NodeItem("LuxCoreNodeTexBand", label="ColorRamp"),
-            NodeItem("LuxCoreNodeTexDistort", label="Distort"),
-            NodeItem("LuxCoreNodeTexHSV", label="HSV"),
+            # NodeItem("SuperLuxCoreNodeTexNormalmap", label="Normalmap"),
+            NodeItem("SuperLuxCoreNodeTexBand", label="ColorRamp"),
+            NodeItem("SuperLuxCoreNodeTexDistort", label="Distort"),
+            NodeItem("SuperLuxCoreNodeTexHSV", label="HSV"),
             NodeItem(
-                "LuxCoreNodeTexBrightContrast", label="Brightness/Contrast"
+                "SuperLuxCoreNodeTexBrightContrast", label="Brightness/Contrast"
             ),
-            NodeItem("LuxCoreNodeTexInvert", label="Invert"),
+            NodeItem("SuperLuxCoreNodeTexInvert", label="Invert"),
             Separator(),
-            NodeItem("LuxCoreNodeTexConstfloat1", label="Constant Value"),
-            NodeItem("LuxCoreNodeTexConstfloat3", label="Constant Color"),
-            NodeItem("LuxCoreNodeTexIORPreset", label="IOR Preset"),
+            NodeItem("SuperLuxCoreNodeTexConstfloat1", label="Constant Value"),
+            NodeItem("SuperLuxCoreNodeTexConstfloat3", label="Constant Color"),
+            NodeItem("SuperLuxCoreNodeTexIORPreset", label="IOR Preset"),
             Separator(),
-            NodeItem("LuxCoreNodeTexHitpointInfo", label="Hitpoint Info"),
-            NodeItem("LuxCoreNodeTexPointiness", label="Pointiness"),
-            NodeItem("LuxCoreNodeTexObjectID", label="Object ID"),
+            NodeItem("SuperLuxCoreNodeTexHitpointInfo", label="Hitpoint Info"),
+            NodeItem("SuperLuxCoreNodeTexPointiness", label="Pointiness"),
+            NodeItem("SuperLuxCoreNodeTexObjectID", label="Object ID"),
             NodeItem(
-                "LuxCoreNodeTexRandomPerIsland", label="Random Per Island"
+                "SuperLuxCoreNodeTexRandomPerIsland", label="Random Per Island"
             ),
-            NodeItem("LuxCoreNodeTexTimeInfo", label="Time Info"),
-            NodeItem("LuxCoreNodeTexUV", label="UV Test"),
-            NodeItem("LuxCoreNodeTexRandom", label="Random"),
-            NodeItem("LuxCoreNodeTexBombing", label="Bombing"),
+            NodeItem("SuperLuxCoreNodeTexTimeInfo", label="Time Info"),
+            NodeItem("SuperLuxCoreNodeTexUV", label="UV Test"),
+            NodeItem("SuperLuxCoreNodeTexRandom", label="Random"),
+            NodeItem("SuperLuxCoreNodeTexBombing", label="Bombing"),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_MAPPING",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_MAPPING",
         "Mapping",
         items=[
-            NodeItem("LuxCoreNodeTexMapping2D", label="2D Mapping"),
-            NodeItem("LuxCoreNodeTexMapping3D", label="3D Mapping"),
-            NodeItem("LuxCoreNodeTexTriplanar", label="Triplanar Mapping"),
+            NodeItem("SuperLuxCoreNodeTexMapping2D", label="2D Mapping"),
+            NodeItem("SuperLuxCoreNodeTexMapping3D", label="3D Mapping"),
+            NodeItem("SuperLuxCoreNodeTexTriplanar", label="Triplanar Mapping"),
             NodeItem(
-                "LuxCoreNodeTexTriplanarBump", label="Triplanar Bump Mapping"
+                "SuperLuxCoreNodeTexTriplanarBump", label="Triplanar Bump Mapping"
             ),
             NodeItem(
-                "LuxCoreNodeTexTriplanarNormalmap",
+                "SuperLuxCoreNodeTexTriplanarNormalmap",
                 label="Triplanar Normal Mapping",
             ),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_LIGHT",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_LIGHT",
         "Light",
         items=[
-            NodeItem("LuxCoreNodeMatEmission", label="Light Emission"),
+            NodeItem("SuperLuxCoreNodeMatEmission", label="Light Emission"),
             Separator(),
-            NodeItem("LuxCoreNodeTexLampSpectrum", label="Lamp Spectrum"),
-            NodeItem("LuxCoreNodeTexBlackbody", label="Blackbody Temperature"),
-            NodeItem("LuxCoreNodeTexIrregularData", label="Irregular Data"),
+            NodeItem("SuperLuxCoreNodeTexLampSpectrum", label="Lamp Spectrum"),
+            NodeItem("SuperLuxCoreNodeTexBlackbody", label="Blackbody Temperature"),
+            NodeItem("SuperLuxCoreNodeTexIrregularData", label="Irregular Data"),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_SHAPE",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_SHAPE",
         "Shape Modifiers",
         items=[
-            NodeItem("LuxCoreNodeShapeSubdiv", label="Subdivision"),
+            NodeItem("SuperLuxCoreNodeShapeSubdiv", label="Subdivision"),
             NodeItem(
-                "LuxCoreNodeShapeHeightDisplacement",
+                "SuperLuxCoreNodeShapeHeightDisplacement",
                 label="Height Displacement",
             ),
             NodeItem(
-                "LuxCoreNodeShapeVectorDisplacement",
+                "SuperLuxCoreNodeShapeVectorDisplacement",
                 label="Vector Displacement",
             ),
-            NodeItem("LuxCoreNodeShapeSimplify", label="Simplify"),
-            NodeItem("LuxCoreNodeShapeHarlequin", label="Harlequin"),
+            NodeItem("SuperLuxCoreNodeShapeSimplify", label="Simplify"),
+            NodeItem("SuperLuxCoreNodeShapeHarlequin", label="Harlequin"),
             NodeItem(
-                "LuxCoreNodeShapeMergeOnDistance",
+                "SuperLuxCoreNodeShapeMergeOnDistance",
                 label="Merge on Distance",
             ),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_POINTER",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_POINTER",
         "Pointer",
         items=[
-            NodeItem("LuxCoreNodeTreePointer", label="Pointer"),
+            NodeItem("SuperLuxCoreNodeTreePointer", label="Pointer"),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_OUTPUT",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_OUTPUT",
         "Output",
         items=[
-            NodeItem("LuxCoreNodeMatOutput", label="Output"),
+            NodeItem("SuperLuxCoreNodeMatOutput", label="Output"),
         ],
     ),
-    LuxCoreNodeCategoryMaterial(
-        "LUXCORE_MATERIAL_LAYOUT",
+    SuperLuxCoreNodeCategoryMaterial(
+        "SUPERLUXCORE_MATERIAL_LAYOUT",
         "Layout",
         items=[
             NodeItem("NodeFrame", label="Frame"),

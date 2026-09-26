@@ -1,13 +1,13 @@
 import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ... import utils
 from ... import icons
 from .math import MIX_DESCRIPTION
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexColorMix(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexColorMix(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Color Math"
     bl_width_default = 200
 
@@ -49,11 +49,11 @@ class LuxCoreNodeTexColorMix(LuxCoreNodeTexture, bpy.types.Node):
                 return elem[1]
 
     def init(self, context):
-        self.add_input("LuxCoreSocketFloat0to1", "Fac", 1)
-        self.add_input("LuxCoreSocketColor", "Color 1", (0.7, 0.7, 0.7))
-        self.add_input("LuxCoreSocketColor", "Color 2", (0.04, 0.04, 0.04))
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Fac", 1)
+        self.add_input("SuperLuxCoreSocketColor", "Color 1", (0.7, 0.7, 0.7))
+        self.add_input("SuperLuxCoreSocketColor", "Color 2", (0.04, 0.04, 0.04))
 
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "mode")
@@ -68,7 +68,7 @@ class LuxCoreNodeTexColorMix(LuxCoreNodeTexture, bpy.types.Node):
             if self.mode_clamp_min > self.mode_clamp_max:
                 layout.label(text="Min should be smaller than max!", icon=icons.WARNING)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": self.mode,
         }
@@ -86,15 +86,15 @@ class LuxCoreNodeTexColorMix(LuxCoreNodeTexture, bpy.types.Node):
             if self.mode == "mix":
                 definitions["amount"] = self.inputs["Fac"].export(exporter, depsgraph, props)
 
-        luxcore_name = self.create_props(props, definitions, luxcore_name)
+        superluxcore_name = self.create_props(props, definitions, superluxcore_name)
 
         if self.clamp_output and self.mode != "clamp":
             # Implicitly create a clamp texture with unique name
-            tex_name = luxcore_name + "_clamp"
+            tex_name = superluxcore_name + "_clamp"
             helper_prefix = "scene.textures." + tex_name + "."
             helper_defs = {
                 "type": "clamp",
-                "texture": luxcore_name,
+                "texture": superluxcore_name,
                 "min": 0,
                 "max": 1,
             }
@@ -103,4 +103,4 @@ class LuxCoreNodeTexColorMix(LuxCoreNodeTexture, bpy.types.Node):
             # The helper texture gets linked in front of this node
             return tex_name
         else:
-            return luxcore_name
+            return superluxcore_name

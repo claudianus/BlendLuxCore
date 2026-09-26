@@ -1,6 +1,6 @@
 import bpy
 from bpy.props import EnumProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 CATEGORY_ITEMS = [
@@ -134,7 +134,7 @@ ABSORPTION_ITEMS = [
 ]
 
 
-class LuxCoreNodeTexLampSpectrum(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexLampSpectrum(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Lamp Spectrum"
     bl_width_default = 310
 
@@ -173,7 +173,7 @@ class LuxCoreNodeTexLampSpectrum(LuxCoreNodeTexture, bpy.types.Node):
                                         default="HPMFLCobaltGlass")
 
     def init(self, context):
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "lamp_category")
@@ -211,7 +211,7 @@ class LuxCoreNodeTexLampSpectrum(LuxCoreNodeTexture, bpy.types.Node):
         else:
             raise NotImplementedError("Unknown lamp category")
     
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.lamp_category == "Natural":
             spectrum_name = self.lamp_spectrum_natural
         elif self.lamp_category == "Incandescent":
@@ -250,4 +250,4 @@ class LuxCoreNodeTexLampSpectrum(LuxCoreNodeTexture, bpy.types.Node):
             "name": spectrum_name,
         }       
         
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

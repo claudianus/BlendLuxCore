@@ -2,11 +2,11 @@
 
 from time import time, sleep
 import numpy as np
-import pyluxcore as plc
+import pysuperluxcore as plc
 from .. import utils
 from ..export.aovs import get_denoiser_imgpipeline_props
-from ..properties.denoiser import LuxCoreDenoiser
-from ..properties.display import LuxCoreDisplaySettings
+from ..properties.denoiser import SuperLuxCoreDenoiser
+from ..properties.display import SuperLuxCoreDisplaySettings
 from ..utils import view_layer as utils_view_layer
 from .utils import ConvertFilmChannelOutput
 
@@ -51,7 +51,7 @@ class FrameBufferFinal:
         self._width = filmsize[0]
         self._height = filmsize[1]
         self._border = utils.calc_blender_border(scene)
-        pipeline = scene.camera.data.luxcore.imagepipeline
+        pipeline = scene.camera.data.superluxcore.imagepipeline
         self._transparent = pipeline.transparent_film
 
         if self._transparent:
@@ -104,7 +104,7 @@ class FrameBufferFinal:
         # but only in final render, not in material preview mode
         if not engine.is_preview:
             # AOVs
-            scene_layer_aovs = scene.view_layers[active_layer].luxcore.aovs
+            scene_layer_aovs = scene.view_layers[active_layer].superluxcore.aovs
             enabled_aov_outputs = (
                 item
                 for item in plc.FilmOutputType.names.items()
@@ -124,7 +124,7 @@ class FrameBufferFinal:
                     print(f"Error on import of AOV {output_name}: {error}")
 
             # Light groups
-            lightgroup_pass_names = scene.luxcore.lightgroups.get_pass_names()
+            lightgroup_pass_names = scene.superluxcore.lightgroups.get_pass_names()
             enabled_lightgroups = (
                 (i, name)
                 for i, name in enumerate(lightgroup_pass_names)
@@ -158,7 +158,7 @@ class FrameBufferFinal:
 
         engine.end_result(result)
         # Reset the refresh button
-        LuxCoreDisplaySettings.refresh = False
+        SuperLuxCoreDisplaySettings.refresh = False
 
     def _import_aov(
         self,
@@ -232,7 +232,7 @@ class FrameBufferFinal:
 
         # Refresh when ending the render (Esc/halt condition) or when the user
         # presses the refresh button
-        refresh_denoised = render_stopped or LuxCoreDenoiser.refresh
+        refresh_denoised = render_stopped or SuperLuxCoreDenoiser.refresh
 
         stats = engine.session.GetStats()
         samples = stats.Get("stats.renderengine.pass").GetInt()
@@ -297,7 +297,7 @@ class FrameBufferFinal:
             elapsed = self.denoiser_last_elapsed_time
 
             # Reset the refresh button
-            LuxCoreDenoiser.refresh = False
+            SuperLuxCoreDenoiser.refresh = False
             engine.update_stats("Denoiser Done", f"Elapsed: {elapsed} s")
         else:
             # If we do not write something into the result, the image will be

@@ -11,7 +11,7 @@ thread; the main thread only does what it must — depsgraph access.
 ## Threads and ownership
 
 ```
-main thread (bpy/depsgraph)          worker thread (pyluxcore only)
+main thread (bpy/depsgraph)          worker thread (pysuperluxcore only)
 --------------------------           -----------------------------
 Exporter.export_scene()        ->    RenderConfig + KernelCacheFill
   produces (scene, config_props)     + RenderSession.Start
@@ -20,7 +20,7 @@ Exporter.update()              ->    BeginSceneEdit + replay ops +
             ("parse", props)]        Stop, config rebuilds
 ```
 
-- `engine.session_worker` owns the live `pyluxcore.RenderSession`.
+- `engine.session_worker` owns the live `pysuperluxcore.RenderSession`.
   `_publish()` mirrors it into `engine.session` so readers (stats, film
   readback) always see the current object.
 - `session_lock` (created in `engine.reset()`, shared with the worker)
@@ -45,7 +45,7 @@ Exporter.update()              ->    BeginSceneEdit + replay ops +
 ## Errors
 
 - `_error` latches `(kind, error)`; `view_update`/`view_draw` drain it
-  via `pop_error()` -> `LuxCoreErrorLog` + stats line.
+  via `pop_error()` -> `SuperLuxCoreErrorLog` + stats line.
 - `start`/`config` failures set `engine.viewport_fatal_error` so the
   viewport stops retrying (persistent errors like a bad engine name).
 - `edit`/`parse` failures drop the session (`_publish(None)`) — the next
@@ -165,7 +165,7 @@ Verified against the Blender 5.2.2 source clone (`blender-5.2`,
 
 `rtpath.resolutionreduction` only selects which pixels a pass covers -
 every splat still carries weight 1.0, so it can be changed mid-accumulation
-with zero bias. LuxCore exposes this as
+with zero bias. SuperLuxCore exposes this as
 `session.SetRuntimeResolutionReduction(n)`: an atomic store the render
 threads pick up at the next frame boundary and re-upload into their
 per-device `taskConfigBuff` (values below the configured reduction are
@@ -202,11 +202,11 @@ progress instead of a frozen frame.
 ## Tests
 
 - `dev-tools/async_worker_unit_test.py` — worker + RecordedScene, plain
-  python3 (no Blender), fake pyluxcore.
+  python3 (no Blender), fake pysuperluxcore.
 - `dev-tools/async_session_e2e_test.py` — real Blender -b + real
-  pyluxcore: start/edit/config/burst/bad-config/stop.
+  pysuperluxcore: start/edit/config/burst/bad-config/stop.
 - `dev-tools/viewport_latency_bench.py` — edit->first-sample latency;
   `-- RTPATHOCL dyn` exercises the runtime resolution override.
-- LuxCore `pyunittests/.../testrtpathocldynres.py` — override keeps the
+- SuperLuxCore `pyunittests/.../testrtpathocldynres.py` — override keeps the
   film accumulating, clamps below configured, recovers after mid-burst
   edits.

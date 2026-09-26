@@ -9,7 +9,7 @@ def convert(scene):
     definitions = {}
 
     halt = utils.get_halt_conditions(scene)
-    config = scene.luxcore.config
+    config = scene.superluxcore.config
     using_hybridbackforward = utils.using_hybridbackforward(scene)
     using_only_lighttracing = config.using_only_lighttracing()
 
@@ -45,7 +45,7 @@ def convert(scene):
         halt_spp_light = 0
 
     if utils.use_two_tiled_passes(scene):
-        aa = scene.luxcore.config.tile.path_sampling_aa_size
+        aa = scene.superluxcore.config.tile.path_sampling_aa_size
         halt_spp_eye = max(halt_spp_eye, 2 * aa**2)
 
     # Swap halt condition if no eye samples are rendered at all

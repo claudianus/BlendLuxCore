@@ -1,9 +1,9 @@
 import bpy
 from bpy.props import EnumProperty, FloatProperty, IntProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
-class LuxCoreNodeTexWrinkled(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexWrinkled(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Wrinkled"
     bl_width_default = 200
 
@@ -12,19 +12,19 @@ class LuxCoreNodeTexWrinkled(LuxCoreNodeTexture, bpy.types.Node):
     roughness: FloatProperty(update=utils_node.force_viewport_update, name="Roughness", default=0.5, min=0, max=1)
     
     def init(self, context):
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
 
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "octaves")
         layout.prop(self, "roughness")
     
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "wrinkled",
             "octaves": self.octaves,
             "roughness": self.roughness,
         }
         definitions.update(self.inputs["3D Mapping"].export(exporter, depsgraph, props))
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

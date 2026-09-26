@@ -1,5 +1,5 @@
 """
-.bcf serialization round-trip for .lxm proxy meshes (standalone pyluxcore).
+.bcf serialization round-trip for .lxm proxy meshes (standalone pysuperluxcore).
 
     python3 dev-tools/bcf_proxy_test.py          # save phase
     python3 dev-tools/bcf_proxy_test.py load     # fresh-process load+render
@@ -20,7 +20,7 @@ Assertions:
 import os
 import sys
 
-import pyluxcore
+import pysuperluxcore
 
 BCF = "/tmp/proxy_rt.bcf"
 LXM = "/tmp/memstage_mesh.lxm"
@@ -29,7 +29,7 @@ OUT = "/tmp/bcf_roundtrip.png"
 
 
 def scene_props():
-    p = pyluxcore.Properties()
+    p = pysuperluxcore.Properties()
     p.SetFromString(f"""
 scene.objects.quad.ply = "{LXM}"
 scene.objects.quad.material = "mat"
@@ -49,7 +49,7 @@ scene.camera.up = 0 0 1
 
 
 def cfg_props():
-    c = pyluxcore.Properties()
+    c = pysuperluxcore.Properties()
     c.SetFromString(f"""
 renderengine.type = "PATHCPU"
 sampler.type = "SOBOL"
@@ -63,16 +63,16 @@ film.outputs.0.filename = {OUT}
 
 
 def save_phase():
-    scene = pyluxcore.Scene()
+    scene = pysuperluxcore.Scene()
     scene.Parse(scene_props())
-    rc = pyluxcore.RenderConfig(cfg_props(), scene)
+    rc = pysuperluxcore.RenderConfig(cfg_props(), scene)
     rc.Save(BCF)
     print(f"[BCF] saved: {os.path.getsize(BCF) / 1e6:.2f} MB")
 
 
 def load_phase():
-    rc = pyluxcore.RenderConfig(BCF)
-    session = pyluxcore.RenderSession(rc)
+    rc = pysuperluxcore.RenderConfig(BCF)
+    session = pysuperluxcore.RenderSession(rc)
     session.Start()
     import time
     for _ in range(120):
@@ -86,7 +86,7 @@ def load_phase():
 
 
 if __name__ == "__main__":
-    pyluxcore.Init()
+    pysuperluxcore.Init()
     if "load" in sys.argv:
         load_phase()
     else:

@@ -1,14 +1,14 @@
 import bpy
 from bpy.props import PointerProperty, EnumProperty, StringProperty, FloatVectorProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ..sockets import FLOAT_UI_PRECISION
 from ... import icons
 from ... import utils
-from ...utils.errorlog import LuxCoreErrorLog
+from ...utils.errorlog import SuperLuxCoreErrorLog
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexFresnel(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexFresnel(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Fresnel"
     bl_width_default = 250
     
@@ -57,8 +57,8 @@ class LuxCoreNodeTexFresnel(LuxCoreNodeTexture, bpy.types.Node):
                            precision=FLOAT_UI_PRECISION)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Reflection Color", (0.7, 0.7, 0.7), enabled=False)
-        self.outputs.new("LuxCoreSocketFresnel", "Fresnel")
+        self.add_input("SuperLuxCoreSocketColor", "Reflection Color", (0.7, 0.7, 0.7), enabled=False)
+        self.outputs.new("SuperLuxCoreSocketFresnel", "Fresnel")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "input_type")
@@ -73,7 +73,7 @@ class LuxCoreNodeTexFresnel(LuxCoreNodeTexture, bpy.types.Node):
             layout.prop(self, "n")
             layout.prop(self, "k")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.input_type == "color":
             definitions = {
                 "type": "fresnelcolor",
@@ -100,7 +100,7 @@ class LuxCoreNodeTexFresnel(LuxCoreNodeTexture, bpy.types.Node):
             except OSError as error:
                 error = 'Could not find .nk file at path "%s"' % self.filepath
                 msg = 'Node "%s" in tree "%s": %s' % (self.name, self.id_data.name, error)
-                LuxCoreErrorLog.add_warning(msg)
+                SuperLuxCoreErrorLog.add_warning(msg)
 
                 definitions = {
                     "type": "fresnelcolor",
@@ -115,4 +115,4 @@ class LuxCoreNodeTexFresnel(LuxCoreNodeTexture, bpy.types.Node):
         else:
             raise NotImplementedError("Unkown input type: " + self.input_type)
         
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

@@ -1,14 +1,14 @@
 import bpy
-from ..base import LuxCoreNodeShape
+from ..base import SuperLuxCoreNodeShape
 
 
-class LuxCoreNodeShapeHarlequin(LuxCoreNodeShape, bpy.types.Node):
+class SuperLuxCoreNodeShapeHarlequin(SuperLuxCoreNodeShape, bpy.types.Node):
     bl_label = "Harlequin"
     bl_width_default = 200
 
     def init(self, context):
-        self.add_input("LuxCoreSocketShape", "Shape")
-        self.outputs.new("LuxCoreSocketShape", "Shape")
+        self.add_input("SuperLuxCoreSocketShape", "Shape")
+        self.outputs.new("SuperLuxCoreSocketShape", "Shape")
 
     def draw_buttons(self, context, layout):
         col = layout.column(align=True)

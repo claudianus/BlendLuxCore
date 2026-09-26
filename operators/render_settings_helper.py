@@ -13,8 +13,8 @@ def question(layout, text, index=1):
     layout.label(text=f"({index}/{TOTAL_QUESTIONS}) {text}")
 
 
-class LUXCORE_OT_render_settings_helper(bpy.types.Operator):
-    bl_idname = "luxcore.render_settings_helper"
+class SUPERLUXCORE_OT_render_settings_helper(bpy.types.Operator):
+    bl_idname = "superluxcore.render_settings_helper"
     bl_label = "Render Settings Helper"
     bl_description = "Interactive render settings guide"
     bl_options = {"UNDO"}
@@ -56,7 +56,7 @@ class LUXCORE_OT_render_settings_helper(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self, width=450)
 
     def execute(self, context):
-        settings = context.scene.luxcore
+        settings = context.scene.superluxcore
         config = settings.config
 
         # Stuff that's independent from user choices
@@ -105,7 +105,7 @@ class LUXCORE_OT_render_settings_helper(bpy.types.Operator):
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         question.index = 1
 

@@ -13,7 +13,7 @@ from .statistics import (
     rays_per_sample_to_string,
     get_rays_per_sample,
 )
-from .errorlog import LuxCoreErrorLog
+from .errorlog import SuperLuxCoreErrorLog
 from . import view_layer
 
 ENGINE_TO_STR = {
@@ -83,10 +83,10 @@ def update_status_msg(stats, engine, scene, config, time_until_film_refresh):
     pretty_stats = get_pretty_stats(config, stats, scene)
     # Update the stats that are shown in the image tools area
     render_slot_stats = engine.exporter.stats
-    render_slot_stats.update_from_luxcore_stats(stats)
+    render_slot_stats.update_from_superluxcore_stats(stats)
 
     if time_until_film_refresh <= 0:
-        if engine.has_denoiser() and scene.luxcore.denoiser.refresh:
+        if engine.has_denoiser() and scene.superluxcore.denoiser.refresh:
             refresh_message = "Running denoiser and refreshing film..."
         else:
             refresh_message = "Refreshing film..."
@@ -122,7 +122,7 @@ def update_status_msg(stats, engine, scene, config, time_until_film_refresh):
             percent = max(percent, percent_samples)
         elif halt.use_samples:
             # Using only eye pass limit (or not using hybridbackforward)
-            if scene.luxcore.config.using_only_lighttracing():
+            if scene.superluxcore.config.using_only_lighttracing():
                 rendered_samples = samples_light
             else:
                 rendered_samples = samples_eye
@@ -166,7 +166,7 @@ def get_pretty_stats(config, stats, scene, context=None):
     if context:
         # In viewport, the usual halt conditions are irrelevant, only the time counts
         rendered_time = stats.Get("stats.renderengine.time").GetFloat()
-        viewport_halt_time = scene.luxcore.viewport.halt_time
+        viewport_halt_time = scene.superluxcore.viewport.halt_time
         if rendered_time > viewport_halt_time:
             # This is only a UI issue, the render always pauses
             rendered_time = viewport_halt_time
@@ -186,7 +186,7 @@ def get_pretty_stats(config, stats, scene, context=None):
         samples_eye = stats.Get("stats.renderengine.pass.eye").GetInt()
         samples_light = stats.Get("stats.renderengine.pass.light").GetInt()
         using_hybridbackforward = utils_using_hybridbackforward(scene)
-        only_lighttracing = scene.luxcore.config.using_only_lighttracing()
+        only_lighttracing = scene.superluxcore.config.using_only_lighttracing()
 
         if halt.enable and halt.use_samples and not only_lighttracing:
             samples_msg = f"Samples {samples_eye}/{halt.samples}"
@@ -228,13 +228,13 @@ def get_pretty_stats(config, stats, scene, context=None):
     # Errors and warnings
     error_str = ""
 
-    if LuxCoreErrorLog.errors:
-        error_str += pluralize("%d Error", len(LuxCoreErrorLog.errors))
+    if SuperLuxCoreErrorLog.errors:
+        error_str += pluralize("%d Error", len(SuperLuxCoreErrorLog.errors))
 
-    if LuxCoreErrorLog.warnings:
+    if SuperLuxCoreErrorLog.warnings:
         if error_str:
             error_str += ", "
-        error_str += pluralize("%d Warning", len(LuxCoreErrorLog.warnings))
+        error_str += pluralize("%d Warning", len(SuperLuxCoreErrorLog.warnings))
 
     if error_str:
         pretty.append(error_str)
@@ -347,10 +347,10 @@ def find_suggested_clamp_value(session, scene=None):
     if scene:
         try:
             # TODO: rework this so it can't fail anymore (some users have reported that it throws an AttributeError)
-            scene.luxcore.config.path.suggested_clamping_value = suggested_clamping_value
+            scene.superluxcore.config.path.suggested_clamping_value = suggested_clamping_value
             # Stamp the suggestion with the scene's lighting content so a
             # stale value is ignored once the scene's emitters change.
-            scene.luxcore.config.path.suggested_clamping_sig = (
+            scene.superluxcore.config.path.suggested_clamping_sig = (
                 compute_clamp_signature(scene)
             )
         except AttributeError:
@@ -375,6 +375,6 @@ def find_suggested_tonemap_scale(session):
     # abs(old - new) > threshold
     # so the user can set the new value with one click
 
-    # imagepipeline = scene.camera.data.luxcore.imagepipeline
+    # imagepipeline = scene.camera.data.superluxcore.imagepipeline
     # imagepipeline.tonemapper.linear_scale = suggested_linear_scale
     # imagepipeline.tonemapper.use_autolinear = False

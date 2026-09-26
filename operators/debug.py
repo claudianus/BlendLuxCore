@@ -2,13 +2,13 @@ import bpy
 from ..utils import ui as utils_ui
 
 
-class LUXCORE_OT_toggle_debug_options(bpy.types.Operator):
-    bl_idname = "luxcore.toggle_debug_options"
-    bl_label = "Toggle LuxCore Debug Options"
-    bl_description = "Toggle visibility and enabled state of LuxCore debug options"
+class SUPERLUXCORE_OT_toggle_debug_options(bpy.types.Operator):
+    bl_idname = "superluxcore.toggle_debug_options"
+    bl_label = "Toggle SuperLuxCore Debug Options"
+    bl_description = "Toggle visibility and enabled state of SuperLuxCore debug options"
 
     def execute(self, context):
-        debug = context.scene.luxcore.debug
+        debug = context.scene.superluxcore.debug
         # Toggle enabled along with visibility
         # (so if we hide the debug panel, debugging
         # is disabled automatically)
@@ -20,9 +20,9 @@ class LUXCORE_OT_toggle_debug_options(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_debug_restart(bpy.types.Operator):
-    bl_idname = "luxcore.debug_restart"
-    bl_label = "LuxCore Debug Restart"
+class SUPERLUXCORE_OT_debug_restart(bpy.types.Operator):
+    bl_idname = "superluxcore.debug_restart"
+    bl_label = "SuperLuxCore Debug Restart"
     bl_description = "Restart Blender and recover session"
 
     def execute(self, context):

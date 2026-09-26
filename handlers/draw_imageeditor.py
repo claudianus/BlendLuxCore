@@ -10,7 +10,7 @@ handle = None
 def handler():
     context = bpy.context
 
-    if context.scene.render.engine != "LUXCORE":
+    if context.scene.render.engine != "SUPERLUXCORE":
         return
 
     _tile_highlight(context)
@@ -21,13 +21,13 @@ def _tile_highlight(context):
     current_image = context.space_data.image
     if current_image is None or current_image.type != "RENDER_RESULT":
         return
-    from ..engine.base import LuxCoreRenderEngine
-    if not LuxCoreRenderEngine.final_running:
+    from ..engine.base import SuperLuxCoreRenderEngine
+    if not SuperLuxCoreRenderEngine.final_running:
         return
 
     # This is a method that handles the correct translation and scale in the view
     view_to_region = context.region.view2d.view_to_region
-    display = context.scene.luxcore.display
+    display = context.scene.superluxcore.display
 
     if display.show_converged:
         passcounts = TileStats.converged_passcounts if display.show_passcounts else []

@@ -1,7 +1,7 @@
 import bpy
 from bpy.props import FloatProperty, EnumProperty
-from ..base import LuxCoreNodeMaterial
-from ..sockets import LuxCoreSocketFloat
+from ..base import SuperLuxCoreNodeMaterial
+from ..sockets import SuperLuxCoreSocketFloat
 from ...utils import node as utils_node
 
 REPEATU_DESCRIPTION = "Repetition count of pattern in U direction"
@@ -10,19 +10,19 @@ REPEATV_DESCRIPTION = "Repetition count of pattern in V direction"
 
 # Note: we need to keep this class around for backwards compatibility reasons,
 # even if it is not used (we need it so we can port old cloth nodes to new ones)
-class LuxCoreSocketRepeatU(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketRepeatU(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(min=0, soft_max=10000, description=REPEATU_DESCRIPTION)
     slider = True
 
 
 # Note: we need to keep this class around for backwards compatibility reasons,
 # even if it is not used (we need it so we can port old cloth nodes to new ones)
-class LuxCoreSocketRepeatV(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketRepeatV(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(min=0, soft_max=10000, description=REPEATV_DESCRIPTION)
     slider = True
 
 
-class LuxCoreNodeMatCloth(LuxCoreNodeMaterial, bpy.types.Node):
+class SuperLuxCoreNodeMatCloth(SuperLuxCoreNodeMaterial, bpy.types.Node):
     """Cloth material node"""
     bl_label = "Cloth Material"
     bl_width_default = 160
@@ -45,13 +45,13 @@ class LuxCoreNodeMatCloth(LuxCoreNodeMaterial, bpy.types.Node):
                              description=REPEATV_DESCRIPTION)
     
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Wrap Diffuse Color", (0.7, 0.05, 0.05))
-        self.add_input("LuxCoreSocketColor", "Wrap Specular Color", (0.04, 0.04, 0.04))
-        self.add_input("LuxCoreSocketColor", "Weft Diffuse Color", (0.64, 0.64, 0.64))
-        self.add_input("LuxCoreSocketColor", "Weft Specular Color", (0.04, 0.04, 0.04))
+        self.add_input("SuperLuxCoreSocketColor", "Wrap Diffuse Color", (0.7, 0.05, 0.05))
+        self.add_input("SuperLuxCoreSocketColor", "Wrap Specular Color", (0.04, 0.04, 0.04))
+        self.add_input("SuperLuxCoreSocketColor", "Weft Diffuse Color", (0.64, 0.64, 0.64))
+        self.add_input("SuperLuxCoreSocketColor", "Weft Specular Color", (0.04, 0.04, 0.04))
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
         # Info about UV mapping (only show if default is used,
@@ -63,7 +63,7 @@ class LuxCoreNodeMatCloth(LuxCoreNodeMaterial, bpy.types.Node):
 
         layout.prop(self, "preset")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "cloth",
             "preset": self.preset,
@@ -75,4 +75,4 @@ class LuxCoreNodeMatCloth(LuxCoreNodeMaterial, bpy.types.Node):
             "repeat_v": self.repeat_v,
         }
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

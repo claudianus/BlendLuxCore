@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# E2E: Cycles ShaderNodeTexIES -> LuxCore mappoint + iesblob.
+# E2E: Cycles ShaderNodeTexIES -> SuperLuxCore mappoint + iesblob.
 #
 # A point light's Emission node is driven by an IES texture node whose
 # profile lives in a Text datablock. The same scene is then rendered
-# with a LuxCore-native light (light.luxcore.ies, file path) using the
+# with a SuperLuxCore-native light (light.superluxcore.ies, file path) using the
 # identical profile. Both should produce the same directional falloff
 # on the floor; a plain point-light control render must differ.
 #
@@ -105,7 +105,7 @@ def build_scene(light_setup):
         bpy.data.lights.remove(li)
 
     scene = bpy.context.scene
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
 
     # Floor plane
     bpy.ops.mesh.primitive_plane_add(size=20, location=(0, 0, 0))
@@ -134,13 +134,13 @@ def build_scene(light_setup):
     scene.collection.objects.link(cam)
     scene.camera = cam
 
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.device = "OCL"
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.device = "OCL"
     scene.render.resolution_x = 128
     scene.render.resolution_y = 128
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_samples = True
-    scene.luxcore.halt.samples = 64
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_samples = True
+    scene.superluxcore.halt.samples = 64
     return scene
 
 
@@ -158,23 +158,23 @@ def setup_cycles_ies(ld):
     ies.inputs["Strength"].default_value = 1.0
     nt.links.new(ies.outputs["Factor"], em.inputs["Strength"])
     nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
-    ld.luxcore.use_cycles_settings = True
+    ld.superluxcore.use_cycles_settings = True
 
 
-def setup_luxcore_ies(ld):
-    ld.luxcore.use_cycles_settings = False
-    ld.luxcore.ies.use = True
-    ld.luxcore.ies.file_type = "PATH"
-    ld.luxcore.ies.file_path = IES_PATH
+def setup_superluxcore_ies(ld):
+    ld.superluxcore.use_cycles_settings = False
+    ld.superluxcore.ies.use = True
+    ld.superluxcore.ies.file_type = "PATH"
+    ld.superluxcore.ies.file_path = IES_PATH
     # Same convention as the Cycles mapping: nadir points down (-Z).
-    ld.luxcore.ies.flipz = True
+    ld.superluxcore.ies.flipz = True
     # Match the Cycles path's gain (light.energy = 200).
-    ld.luxcore.gain = 200
+    ld.superluxcore.gain = 200
 
 
 def setup_plain(ld):
     ld.use_nodes = False
-    ld.luxcore.use_cycles_settings = True
+    ld.superluxcore.use_cycles_settings = True
 
 
 def render(scene, path):
@@ -190,8 +190,8 @@ def main():
     scene = build_scene(setup_cycles_ies)
     w, h, px_cycles = render(scene, "/tmp/e13_cycles_ies.png")
 
-    scene = build_scene(setup_luxcore_ies)
-    w, h, px_lux = render(scene, "/tmp/e13_luxcore_ies.png")
+    scene = build_scene(setup_superluxcore_ies)
+    w, h, px_lux = render(scene, "/tmp/e13_superluxcore_ies.png")
 
     scene = build_scene(setup_plain)
     w, h, px_plain = render(scene, "/tmp/e13_plain.png")
@@ -211,10 +211,10 @@ def main():
 
     check("cycles IES lights the floor", c_cycles > 5,
           f"center={c_cycles:.1f}")
-    check("cycles IES vs luxcore IES center parity",
+    check("cycles IES vs superluxcore IES center parity",
           abs(c_cycles - c_lux) / max(1.0, c_lux) < 0.35,
           f"cycles={c_cycles:.1f} lux={c_lux:.1f}")
-    check("cycles IES vs luxcore IES corner parity",
+    check("cycles IES vs superluxcore IES corner parity",
           abs(e_cycles - e_lux) / max(1.0, e_lux) < 0.35,
           f"cycles={e_cycles:.1f} lux={e_lux:.1f}")
     # The downlight profile concentrates flux below the light, so the

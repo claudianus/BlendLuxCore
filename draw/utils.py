@@ -16,11 +16,11 @@
 
 import numpy as np
 import bpy
-import pyluxcore
+import pysuperluxcore
 
 
 class ConvertFilmChannelOutput:
-    """Inject a LuxCore film output into a Blender rendering buffer."""
+    """Inject a SuperLuxCore film output into a Blender rendering buffer."""
 
     def __init__(
         self,
@@ -49,20 +49,20 @@ class ConvertFilmChannelOutput:
 
     @staticmethod
     def check_size(render_engine, width, height):
-        """Check consistency between LuxCore and Blender buffer sizes."""
+        """Check consistency between SuperLuxCore and Blender buffer sizes."""
         resx, resy = render_engine.resolutionx, render_engine.resolutiony
 
         if resx != width or resy != height:
             msg = (
                 f"Size mismatch: Blender buffer size: {resx}x{resy} "
-                f"versus LuxCore size: {width}x{height}"
+                f"versus SuperLuxCore size: {width}x{height}"
             )
             raise ValueError(msg)
 
     def __call__(
         self,
-        film: pyluxcore.Film,
-        output_type: pyluxcore.FilmOutputType,
+        film: pysuperluxcore.Film,
+        output_type: pysuperluxcore.FilmOutputType,
         output_index: int,
         width: int,
         height: int,
@@ -72,7 +72,7 @@ class ConvertFilmChannelOutput:
         # Destination depth - in most cases, it is 4; but for UV, it will be 3
         dst_depth = self.dst_depth
 
-        # Get LuxCore data in a float buffer
+        # Get SuperLuxCore data in a float buffer
         buf = np.empty([width, height, self.src_depth], dtype=self.src_dtype)
         if self.src_dtype == np.float32:
             film.GetOutputFloat(

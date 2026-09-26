@@ -3,12 +3,12 @@ import os
 import mathutils
 from math import radians
 from bpy.props import EnumProperty, PointerProperty, StringProperty, IntProperty, BoolProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ... import utils
-import pyluxcore
+import pysuperluxcore
 
 from ... import icons
-from ...utils.errorlog import LuxCoreErrorLog
+from ...utils.errorlog import SuperLuxCoreErrorLog
 from ...handlers import frame_change_pre
 
 
@@ -24,7 +24,7 @@ HIGH_RES_DESC= (
     "The high resolution amplification used for generating the smoke data"
 )
 
-class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexOpenVDB(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "OpenVDB File"
     bl_width_default = 200
 
@@ -51,14 +51,14 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
                 old_sockets[e.name] = links.copy()
 
             self.outputs.clear()
-            names = pyluxcore.GetOpenVDBGridNames(bpy.path.abspath(self.file_path))
+            names = pysuperluxcore.GetOpenVDBGridNames(bpy.path.abspath(self.file_path))
             self.has_high_resolution = False
             self.use_high_resolution = False
 
             for name in names:
                 # metadata is only exposed for blender cache files, its a list with the following data
                 # [min_bbox, max_bbox, res, min_res, max_res, base_res, obmat, obj_shift_f]
-                creator, bbox, bBox_world, transform, gridtype, metadata = pyluxcore.GetOpenVDBGridInfo(bpy.path.abspath(self.file_path), name)
+                creator, bbox, bBox_world, transform, gridtype, metadata = pysuperluxcore.GetOpenVDBGridInfo(bpy.path.abspath(self.file_path), name)
                 if creator == "Blender/Smoke":
                     if "low" in name:
                         self.has_high_resolution = True
@@ -86,9 +86,9 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
                         self.nz = abs(bbox[2] - bbox[5])
 
                 if gridtype == "float":
-                    self.outputs.new("LuxCoreSocketFloatPositive", name)
+                    self.outputs.new("SuperLuxCoreSocketFloatPositive", name)
                 else:
-                    self.outputs.new("LuxCoreSocketColor", name)
+                    self.outputs.new("SuperLuxCoreSocketColor", name)
 
             # Reconnect output sockets with same name as previously connected ones
             for output in self.outputs:
@@ -195,18 +195,18 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
 
 
     def init(self, context):
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
         if self.file_path != "":
             names = []
             self.outputs.clear()
-            names = pyluxcore.GetOpenVDBGridNames(bpy.path.abspath(self.file_path))
+            names = pysuperluxcore.GetOpenVDBGridNames(bpy.path.abspath(self.file_path))
             for name in names:
-                creator, bbox, bBox_world, transform, gridtype, metadata = pyluxcore.GetOpenVDBGridInfo(bpy.path.abspath(self.file_path), name)
+                creator, bbox, bBox_world, transform, gridtype, metadata = pysuperluxcore.GetOpenVDBGridInfo(bpy.path.abspath(self.file_path), name)
 
                 if gridtype[0] == "float":
-                    self.outputs.new("LuxCoreSocketFloatPositive", name)
+                    self.outputs.new("SuperLuxCoreSocketFloatPositive", name)
                 else:
-                    self.outputs.new("LuxCoreSocketColor", name)
+                    self.outputs.new("SuperLuxCoreSocketColor", name)
 
 
     def draw_buttons(self, context, layout):
@@ -271,17 +271,17 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
         frame = utils.clamp(frame, self.first_frame, self.last_frame)
         return frame
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if not self.domain or self.file_path == "":
             error = "No Domain object selected."
             msg = 'Node "%s" in tree "%s": %s' % (self.name, self.id_data.name, error)
-            LuxCoreErrorLog.add_warning(msg)
+            SuperLuxCoreErrorLog.add_warning(msg)
 
             definitions = {
                 "type": "constfloat3",
                 "value": [0, 0, 0],
             }
-            return self.create_props(props, definitions, luxcore_name)
+            return self.create_props(props, definitions, superluxcore_name)
 
         domain_eval = self.domain.evaluated_get(depsgraph)
         smoke_domain_mod = utils.find_smoke_domain_modifier(domain_eval)
@@ -335,7 +335,7 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
             grid_name = grid_name + "_low"
 
         # Get grid information from OpenVDB file, i.e. grid bounding box and type
-        creator, bbox, bBox_world, trans_matrix, gridtype, metadata = pyluxcore.GetOpenVDBGridInfo(bpy.path.abspath(file_path), grid_name)
+        creator, bbox, bBox_world, trans_matrix, gridtype, metadata = pysuperluxcore.GetOpenVDBGridInfo(bpy.path.abspath(file_path), grid_name)
 
         ovdb_transform = mathutils.Matrix(
             (trans_matrix[0:4], trans_matrix[4:8], trans_matrix[8:12], trans_matrix[12:16])).transposed()
@@ -450,7 +450,7 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
 
                 houdini_transform = houdini_transform @ ovdb
                 obmat = mathutils.Matrix()
-        # LuxCore normalize grid dimensions to [0..1] range, if the dimension of the bounding box of different grids
+        # SuperLuxCore normalize grid dimensions to [0..1] range, if the dimension of the bounding box of different grids
         # in one file is different the bounding box offset, e.g. lower corner of the box has to be considered,
         # e.g. in smoke / flame simulations
 
@@ -477,4 +477,4 @@ class LuxCoreNodeTexOpenVDB(LuxCoreNodeTexture, bpy.types.Node):
         }
         definitions.update(mapping_definitions)
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

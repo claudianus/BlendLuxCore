@@ -1,5 +1,5 @@
 """
-Stage-wise memory regression test (standalone pyluxcore).
+Stage-wise memory regression test (standalone pysuperluxcore).
 
     python3 dev-tools/memory_stages_test.py
 
@@ -7,7 +7,7 @@ Builds a scene with a .lxm proxy mesh (mapped, not copied) plus an
 8192^2 texture under a FIXED resize policy (streamed decode), then
 samples ru_maxrss after each stage:
 
-  S0  pyluxcore.Init()
+  S0  pysuperluxcore.Init()
   S1  scene asset creation (.ply -> .lxm bake, texture write)
   S2  Scene.Parse of the proxy mesh + texture object
   S3  RenderConfig + session Start (BVH build, imagemap preprocess)
@@ -25,7 +25,7 @@ import resource
 import sys
 
 import numpy as np
-import pyluxcore
+import pysuperluxcore
 
 RES = (1280, 720)
 PLY = "/tmp/memstage_src.ply"
@@ -93,13 +93,13 @@ def write_texture():
 
 
 def bake_lxm():
-    s = pyluxcore.Scene()
+    s = pysuperluxcore.Scene()
     s.Parse(build_scene_props(PLY))
     s.SaveMesh(PLY, LXM)
 
 
 def build_scene_props(mesh_path):
-    props = pyluxcore.Properties()
+    props = pysuperluxcore.Properties()
     props.SetFromString(f"""
 scene.objects.quad.ply = "{mesh_path}"
 scene.objects.quad.material = "mat"
@@ -119,7 +119,7 @@ scene.camera.up = 0 0 1
 
 
 def main():
-    pyluxcore.Init()
+    pysuperluxcore.Init()
     s0 = rss_mb()
 
     write_ply()
@@ -127,11 +127,11 @@ def main():
     bake_lxm()
     s1 = rss_mb()
 
-    scene = pyluxcore.Scene()
+    scene = pysuperluxcore.Scene()
     scene.Parse(build_scene_props(LXM))
     s2 = rss_mb()
 
-    cfg = pyluxcore.Properties()
+    cfg = pysuperluxcore.Properties()
     cfg.SetFromString(f"""
 renderengine.type = "PATHCPU"
 sampler.type = "SOBOL"
@@ -143,8 +143,8 @@ film.outputs.0.filename = /tmp/memstage_render.png
 scene.images.resizepolicy.type = "FIXED"
 scene.images.resizepolicy.scale = 64
 """)
-    rc = pyluxcore.RenderConfig(cfg, scene)
-    session = pyluxcore.RenderSession(rc)
+    rc = pysuperluxcore.RenderConfig(cfg, scene)
+    session = pysuperluxcore.RenderSession(rc)
     session.Start()
     s3 = rss_mb()
 

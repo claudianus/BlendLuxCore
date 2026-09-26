@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import IntProperty, FloatProperty, BoolProperty, EnumProperty, IntVectorProperty
-from ..base import LuxCoreNodeShape
+from ..base import SuperLuxCoreNodeShape
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeShapeVectorDisplacement(LuxCoreNodeShape, bpy.types.Node):
+class SuperLuxCoreNodeShapeVectorDisplacement(SuperLuxCoreNodeShape, bpy.types.Node):
     bl_label = "Vector Displacement"
     bl_width_default = 150
 
@@ -24,9 +24,9 @@ class LuxCoreNodeShapeVectorDisplacement(LuxCoreNodeShape, bpy.types.Node):
                                update=utils_node.force_viewport_mesh_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketShape", "Shape")
-        self.add_input("LuxCoreSocketColor", "Vector", (0, 0, 0))
-        self.outputs.new("LuxCoreSocketShape", "Shape")
+        self.add_input("SuperLuxCoreSocketShape", "Shape")
+        self.add_input("SuperLuxCoreSocketColor", "Vector", (0, 0, 0))
+        self.outputs.new("SuperLuxCoreSocketShape", "Shape")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "scale")

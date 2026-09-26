@@ -47,9 +47,9 @@ def check_for_normalmap_slow(image):
     return True
 
 
-class LUXCORE_OT_import_multiple_images(bpy.types.Operator, ImportHelper):
+class SUPERLUXCORE_OT_import_multiple_images(bpy.types.Operator, ImportHelper):
     """"""
-    bl_idname = "luxcore.import_multiple_images"
+    bl_idname = "superluxcore.import_multiple_images"
     bl_label = "Import Multiple Images"
     bl_description = "Import multiple imagemaps into the node editor at once"
     bl_options = {"UNDO"}
@@ -69,7 +69,7 @@ class LUXCORE_OT_import_multiple_images(bpy.types.Operator, ImportHelper):
 
     @classmethod
     def poll(cls, context):
-        return (context.scene.render.engine == "LUXCORE"
+        return (context.scene.render.engine == "SUPERLUXCORE"
                 and getattr(context.space_data, "node_tree", None)
                 and context.space_data.node_tree.bl_idname in TREE_TYPES)
 
@@ -83,7 +83,7 @@ class LUXCORE_OT_import_multiple_images(bpy.types.Operator, ImportHelper):
             image = load_image(filepath, check_existing=True)
 
             node_tree = context.space_data.node_tree
-            node = node_tree.nodes.new('LuxCoreNodeTexImagemap')
+            node = node_tree.nodes.new('SuperLuxCoreNodeTexImagemap')
             node.image = image
             node.location = location
             # Nodes are spawned in a vertical column

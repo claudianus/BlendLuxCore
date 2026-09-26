@@ -1,5 +1,5 @@
 """
-Spill + scene-edit regression test (standalone pyluxcore, PATHOCL/Metal).
+Spill + scene-edit regression test (standalone pysuperluxcore, PATHOCL/Metal).
 
     PYTHONPATH=<site-packages> python3.13 dev-tools/spill_edit_test.py
 
@@ -12,12 +12,12 @@ Verifies no crash, correct spill logs, and a valid post-edit frame.
 import os
 import sys
 import time
-import pyluxcore
+import pysuperluxcore
 
-pyluxcore.Init()
+pysuperluxcore.Init()
 
 WIDTH, HEIGHT = 1280, 720
-OUT = "/tmp/luxcore_spill_edit_720p.png"
+OUT = "/tmp/superluxcore_spill_edit_720p.png"
 
 
 def write_ply(path, n=600):
@@ -50,7 +50,7 @@ with open("/tmp/spill_edit_lamp.ply", "w") as f:
             "element face 1\nproperty list uchar int vertex_indices\n"
             "end_header\n-1 -1 0\n1 -1 0\n1 1 0\n-1 1 0\n4 0 1 2 3\n")
 
-scn_props = pyluxcore.Properties()
+scn_props = pysuperluxcore.Properties()
 scn_props.SetFromString(f"""
 scene.camera.lookat.orig = 0 -7 3.5
 scene.camera.lookat.target = 0 0 0.5
@@ -73,12 +73,12 @@ scene.spill.minbytes = 1048576
 scene.spill.images = 1
 """)
 
-# NOTE: pyluxcore.Scene(props) treats the single-Properties overload as a
+# NOTE: pysuperluxcore.Scene(props) treats the single-Properties overload as a
 # resize-policy ctor (empty scene) — the scene definition goes via Parse().
-scene = pyluxcore.Scene()
+scene = pysuperluxcore.Scene()
 scene.Parse(scn_props)
 
-cfg_props = pyluxcore.Properties()
+cfg_props = pysuperluxcore.Properties()
 cfg_props.SetFromString(f"""
 film.width = {WIDTH}
 film.height = {HEIGHT}
@@ -93,8 +93,8 @@ path.pathdepth.total = 4
 opencl.devices.select = 01
 """)
 
-config = pyluxcore.RenderConfig(cfg_props, scene)
-session = pyluxcore.RenderSession(config)
+config = pysuperluxcore.RenderConfig(cfg_props, scene)
+session = pysuperluxcore.RenderSession(config)
 session.Start()
 
 # Render ~25s so all uploads complete and spills fire

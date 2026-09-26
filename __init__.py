@@ -6,7 +6,7 @@ import pathlib
 from importlib.metadata import version
 
 if platform.system() in {"Linux", "Darwin"}:
-    # Required for downloads from the LuxCore Online Library
+    # Required for downloads from the SuperLuxCore Online Library
     import certifi
 
     os.environ["SSL_CERT_FILE"] = certifi.where()
@@ -25,11 +25,11 @@ import nodeitems_utils
 if bpy.app.version < (4, 2, 0):
     raise RuntimeError(
         "\n\nUnsupported Blender version. "
-        "4.2 or higher is required by BlendLuxCore."
+        "4.2 or higher is required by SuperLuxCore."
     )
 
 
-# Take care of PyLuxCore, as other modules may want to import it
+# Take care of PySuperLuxCore, as other modules may want to import it
 from . import luxloader
 
 if _needs_reload:
@@ -37,13 +37,13 @@ if _needs_reload:
 
     luxloader = importlib.reload(luxloader)
 
-luxloader.ensure_pyluxcore()
+luxloader.ensure_pysuperluxcore()
 
-# Import pyluxcore
+# Import pysuperluxcore
 try:
-    import pyluxcore
+    import pysuperluxcore
 except ImportError as error:
-    msg = f"\n\nCould not import pyluxcore. \n\nImportError: {error}"
+    msg = f"\n\nCould not import pysuperluxcore. \n\nImportError: {error}"
     # Raise from None to suppress the unhelpful
     # "during handling of the above exception, ..."
     raise RuntimeError(msg) from error
@@ -72,10 +72,10 @@ submodules = (properties, nodes, operators, handlers, engine, ui)
 def register():
     utils.register_module("Main", [], submodules)
 
-    pyluxcore.Init(utils.log.LuxCoreLog.add)
+    pysuperluxcore.Init(utils.log.SuperLuxCoreLog.add)
     print(
-        f"BlendLuxCore {utils.get_version_string()} registered "
-        f"(with pyluxcore {version('pyluxcore')})"
+        f"SuperLuxCore {utils.get_version_string()} registered "
+        f"(with pysuperluxcore {version('pysuperluxcore')})"
     )
 
 

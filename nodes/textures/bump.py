@@ -1,6 +1,6 @@
 import bpy
 from bpy.props import FloatProperty
-from ..base import LuxCoreNodeTexture, LuxCoreNodeMaterial
+from ..base import SuperLuxCoreNodeTexture, SuperLuxCoreNodeMaterial
 from ...utils import node as utils_node
 from ... import icons
 
@@ -12,7 +12,7 @@ SAMPLING_DISTANCE_DESC = (
 )
 
 
-class LuxCoreNodeTexBump(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexBump(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Bump"
     bl_width_default = 200
 
@@ -24,21 +24,21 @@ class LuxCoreNodeTexBump(LuxCoreNodeTexture, bpy.types.Node):
                                      update=utils_node.force_viewport_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketFloatUnbounded", "Value", 0.0)
-        self.add_input("LuxCoreSocketBumpHeight", "Bump Height", 0.001)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Value", 0.0)
+        self.add_input("SuperLuxCoreSocketBumpHeight", "Bump Height", 0.001)
 
-        self.outputs.new("LuxCoreSocketBump", "Bump")
+        self.outputs.new("SuperLuxCoreSocketBump", "Bump")
 
     def draw_buttons(self, context, layout):
         utils_node.draw_uv_info(context, layout)
 
         show_triplanar_warning = False
         value_node = utils_node.get_linked_node(self.inputs["Value"])
-        if value_node and value_node.bl_idname == "LuxCoreNodeTexTriplanar":
+        if value_node and value_node.bl_idname == "SuperLuxCoreNodeTexTriplanar":
             show_triplanar_warning = True
         else:
             height_node = utils_node.get_linked_node(self.inputs["Bump Height"])
-            if height_node and height_node.bl_idname == "LuxCoreNodeTexTriplanar":
+            if height_node and height_node.bl_idname == "SuperLuxCoreNodeTexTriplanar":
                 show_triplanar_warning = True
 
         if show_triplanar_warning:
@@ -46,13 +46,13 @@ class LuxCoreNodeTexBump(LuxCoreNodeTexture, bpy.types.Node):
 
         col = layout.column()
         output = self.outputs["Bump"]
-        col.active = output.is_linked and isinstance(output.links[0].to_node, LuxCoreNodeMaterial)
+        col.active = output.is_linked and isinstance(output.links[0].to_node, SuperLuxCoreNodeMaterial)
         col.prop(self, "sampling_distance")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "scale",
             "texture1": self.inputs["Value"].export(exporter, depsgraph, props),
             "texture2": self.inputs["Bump Height"].export(exporter, depsgraph, props),
         }
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

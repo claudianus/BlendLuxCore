@@ -4,8 +4,8 @@ from bpy.props import (
     FloatVectorProperty, BoolProperty, StringProperty
 )
 import math
-from .ies import LuxCoreIESProps
-from .image_user import LuxCoreImageUser
+from .ies import SuperLuxCoreIESProps
+from .image_user import SuperLuxCoreImageUser
 from .config import ENVLIGHT_CACHE_DESC
 from ..utils.light_descriptions import (
     RGB_GAIN_DESC, IMPORTANCE_DESCRIPTION, POWER_DESCRIPTION, NORMALIZEBYCOLOR_DESCRIPTION,
@@ -17,7 +17,7 @@ from ..utils.light_descriptions import (
 )
 
 
-class LuxCoreLightProps(bpy.types.PropertyGroup):
+class SuperLuxCoreLightProps(bpy.types.PropertyGroup):
     def update_image(self, context):
         self.image_user.update(self.image)
 
@@ -35,7 +35,7 @@ class LuxCoreLightProps(bpy.types.PropertyGroup):
     use_cycles_settings: BoolProperty(name="Use Cycles Settings", default=False)
 
     ##############################################
-    # BlendLuxCore specific properties needed to translate LuxCore light concepts to Blender
+    # SuperLuxCore specific properties needed to translate SuperLuxCore light concepts to Blender
     light_types = [
         ("sun", "Sun", "Physically correct sun that emits parallel light rays and changes color with elevation", 0),
         ("distant", "Distant", "Distant star without atmosphere simulation (emits parallel light)", 1),
@@ -83,7 +83,7 @@ class LuxCoreLightProps(bpy.types.PropertyGroup):
     # mappoint: mapfile
     # projection: mapfile
     image: PointerProperty(name="Image", type=bpy.types.Image, update=update_image)
-    image_user: PointerProperty(type=LuxCoreImageUser)
+    image_user: PointerProperty(type=SuperLuxCoreImageUser)
     gamma: FloatProperty(name="Gamma", default=1, min=0, description=GAMMA_DESCRIPTION)
 
     # infinite
@@ -110,7 +110,7 @@ class LuxCoreLightProps(bpy.types.PropertyGroup):
     normalizebycolor: BoolProperty(name="Normalize by Color Luminance", default=False, description=NORMALIZEBYCOLOR_DESCRIPTION)
 
     # mappoint
-    ies: PointerProperty(type=LuxCoreIESProps)
+    ies: PointerProperty(type=SuperLuxCoreIESProps)
 
     # spot
     # Note: coneangle and conedeltaangle are set with default Blender properties
@@ -167,12 +167,12 @@ class LuxCoreLightProps(bpy.types.PropertyGroup):
 
     @classmethod
     def register(cls):        
-        bpy.types.Light.luxcore = PointerProperty(
-            name="LuxCore Light Settings",
-            description="LuxCore light settings",
+        bpy.types.Light.superluxcore = PointerProperty(
+            name="SuperLuxCore Light Settings",
+            description="SuperLuxCore light settings",
             type=cls,
         )
 
     @classmethod
     def unregister(cls):
-        del bpy.types.Light.luxcore
+        del bpy.types.Light.superluxcore

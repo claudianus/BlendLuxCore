@@ -1,7 +1,7 @@
 import bpy
 from bpy.props import FloatProperty, BoolProperty, EnumProperty
-from ..base import LuxCoreNodeMaterial
-from ..sockets import LuxCoreSocketFloat
+from ..base import SuperLuxCoreNodeMaterial
+from ..sockets import SuperLuxCoreSocketFloat
 from ...utils.node import get_active_output
 from ... import icons
 from ...utils import node as utils_node
@@ -28,10 +28,10 @@ THIN_FILM_DESCRIPTION = (
     "the film thickness, film IOR and the angle of incidence"
 )
 
-class LuxCoreSocketCauchyC(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketCauchyC(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     """
     For consistency of renewed variable naming, this class should be called 
-    "LuxCoreSocketCauchyB". However, the name was retained for backward compatibility.
+    "SuperLuxCoreSocketCauchyB". However, the name was retained for backward compatibility.
     """
     default_value: FloatProperty(name="Dispersion", default=0, min=0, soft_max=0.01342,
                                  step=0.1, precision=5, description=CAUCHYB_DESCRIPTION,
@@ -51,8 +51,8 @@ class LuxCoreSocketCauchyC(bpy.types.NodeSocket, LuxCoreSocketFloat):
         super().draw(context, layout, node, text)
 
 
-class LuxCoreNodeMatGlass(LuxCoreNodeMaterial, bpy.types.Node):
-    """ Node for the three LuxCore materials glass, roughglass and archglass """
+class SuperLuxCoreNodeMatGlass(SuperLuxCoreNodeMaterial, bpy.types.Node):
+    """ Node for the three SuperLuxCore materials glass, roughglass and archglass """
     bl_label = "Glass Material"
     bl_width_default = 190
 
@@ -77,17 +77,17 @@ class LuxCoreNodeMatGlass(LuxCoreNodeMaterial, bpy.types.Node):
                                update=utils_node.force_viewport_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Transmission Color", (1, 1, 1))
-        self.add_input("LuxCoreSocketColor", "Reflection Color", (1, 1, 1))
-        self.add_input("LuxCoreSocketIOR", "IOR", 1.5)
-        self.add_input("LuxCoreSocketCauchyC", "Dispersion", 0)
+        self.add_input("SuperLuxCoreSocketColor", "Transmission Color", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketColor", "Reflection Color", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketIOR", "IOR", 1.5)
+        self.add_input("SuperLuxCoreSocketCauchyC", "Dispersion", 0)
         ThinFilmCoating.init(self)
         
         Roughness.init(self, default=0.05, init_enabled=False)
 
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
         Roughness.update_anisotropy(self, context)
         
 
@@ -110,7 +110,7 @@ class LuxCoreNodeMatGlass(LuxCoreNodeMaterial, bpy.types.Node):
         if self.get_interior_volume():
             layout.label(text="Using IOR of interior volume", icon=icons.INFO)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.rough:
             type = "roughglass"
         elif self.architectural:
@@ -140,7 +140,7 @@ class LuxCoreNodeMatGlass(LuxCoreNodeMaterial, bpy.types.Node):
             Roughness.export(self, exporter, depsgraph, props, definitions)
         self.export_common_inputs(exporter, depsgraph, props, definitions)
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)
 
 
     def get_interior_volume(self):

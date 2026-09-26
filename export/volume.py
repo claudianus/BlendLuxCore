@@ -3,11 +3,11 @@ import os
 import bpy
 import mathutils
 import numpy as np
-import pyluxcore
+import pysuperluxcore
 
 from .. import utils
 from ..utils import node as utils_node
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from .caches.exported_data import ExportedObject
 
 
@@ -98,7 +98,7 @@ def _pick_grids(filepath):
     for the density, scattering albedo and fire emission. Either may be None.
     """
     try:
-        names = list(pyluxcore.GetOpenVDBGridNames(filepath))
+        names = list(pysuperluxcore.GetOpenVDBGridNames(filepath))
     except Exception as e:
         raise Exception('Could not read OpenVDB file "%s": %s' % (filepath, e))
 
@@ -129,14 +129,14 @@ def volume_info_grid_defs(node, output_socket_name, obj_name):
     obj = bpy.data.objects.get(obj_name)
     vol_data = getattr(obj, "data", None)
     if obj is None or obj.type != "VOLUME" or vol_data is None:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume Info node "%s": object "%s" is not an OpenVDB volume '
             "object" % (node.name, obj_name), obj_name=obj_name)
         return None
 
     filepath = _resolve_frame_filepath(vol_data, bpy.context.scene)
     if not filepath or not os.path.isfile(filepath):
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume Info node "%s": no readable OpenVDB file on object "%s"'
             % (node.name, obj_name), obj_name=obj_name)
         return None
@@ -144,7 +144,7 @@ def volume_info_grid_defs(node, output_socket_name, obj_name):
     try:
         density_grid, color_grid, fire_grid = _pick_grids(filepath)
     except Exception as e:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume Info node "%s": %s' % (node.name, e), obj_name=obj_name)
         return None
 
@@ -158,17 +158,17 @@ def volume_info_grid_defs(node, output_socket_name, obj_name):
     }
     grid = socket_to_grid.get(output_socket_name)
     if not grid:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume Info node "%s": no OpenVDB grid for output "%s"'
             % (node.name, output_socket_name), obj_name=obj_name)
         return None
 
     try:
         _creator, bbox, bbox_world, _trans, _gridtype, _metadata = (
-            pyluxcore.GetOpenVDBGridInfo(filepath, grid)
+            pysuperluxcore.GetOpenVDBGridInfo(filepath, grid)
         )
     except Exception as e:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume Info node "%s": could not read grid "%s": %s'
             % (node.name, grid, e), obj_name=obj_name)
         return None
@@ -182,7 +182,7 @@ def volume_info_grid_defs(node, output_socket_name, obj_name):
     bb_max = mathutils.Vector(bbox_world[3:6])
     extent = bb_max - bb_min
     if extent.length < 1e-9:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume Info node "%s": degenerate grid bounds' % node.name,
             obj_name=obj_name)
         return None
@@ -251,27 +251,27 @@ def convert_volume_obj(
     obj,
     obj_key,
     depsgraph,
-    luxcore_scene,
+    superluxcore_scene,
     scene_props,
     is_viewport_render,
     view_layer,
 ):
     """
     Convert a Blender VOLUME object (OpenVDB file) to a bounded box mesh
-    carrying a heterogeneous LuxCore volume fed by densitygrid textures.
+    carrying a heterogeneous SuperLuxCore volume fed by densitygrid textures.
     """
     vol_data = obj.data
     scene = depsgraph.scene_eval if depsgraph.scene_eval else bpy.context.scene
 
     filepath = _resolve_frame_filepath(vol_data, scene)
     if not filepath:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume object "%s": generated (in-memory) volumes are not '
             "supported yet; import an OpenVDB file instead" % obj.name
         )
         return None
     if not os.path.isfile(filepath):
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume object "%s": file not found: %s' % (obj.name, filepath)
         )
         return None
@@ -279,15 +279,15 @@ def convert_volume_obj(
     try:
         density_grid, color_grid, fire_grid = _pick_grids(filepath)
     except Exception as e:
-        LuxCoreErrorLog.add_warning('Volume object "%s": %s' % (obj.name, e))
+        SuperLuxCoreErrorLog.add_warning('Volume object "%s": %s' % (obj.name, e))
         return None
 
     try:
         _creator, bbox, bbox_world, _trans, gridtype, _metadata = (
-            pyluxcore.GetOpenVDBGridInfo(filepath, density_grid)
+            pysuperluxcore.GetOpenVDBGridInfo(filepath, density_grid)
         )
     except Exception as e:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume object "%s": could not read grid info: %s' % (obj.name, e)
         )
         return None
@@ -296,7 +296,7 @@ def convert_volume_obj(
     ny = abs(bbox[1] - bbox[4])
     nz = abs(bbox[2] - bbox[5])
 
-    # LuxCore normalizes the grid's *active voxel* bbox to [0,1]^3, so the
+    # SuperLuxCore normalizes the grid's *active voxel* bbox to [0,1]^3, so the
     # carrier box and the texture mapping must span exactly that region.
     # bbox_world is the active bbox in the grid's world frame, which Blender
     # presents as object-local space.
@@ -304,7 +304,7 @@ def convert_volume_obj(
     bb_max = mathutils.Vector(bbox_world[3:6])
     extent = bb_max - bb_min
     if extent.length < 1e-9:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Volume object "%s": degenerate bounds' % obj.name
         )
         return None
@@ -325,7 +325,7 @@ def convert_volume_obj(
     )
 
     mesh_name = obj_key + "_volumebox"
-    luxcore_scene.DefineMeshExt(
+    superluxcore_scene.DefineMeshExt(
         name=mesh_name,
         points=loop_points,
         triangles=_CUBE_TRIANGLES,

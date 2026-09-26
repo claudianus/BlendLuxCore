@@ -11,7 +11,7 @@ if _needs_reload:
     import importlib
     importlib.reload(utils)
 
-RELEVANT_NODES = {"LuxCoreNodeTexImagemap", "LuxCoreNodeTexOpenVDB", "LuxCoreNodeTexTimeInfo"}
+RELEVANT_NODES = {"SuperLuxCoreNodeTexImagemap", "SuperLuxCoreNodeTexOpenVDB", "SuperLuxCoreNodeTexTimeInfo"}
 
 # Flags that save us from having to iterate all node trees when no related nodes are used (the common case).
 # Set in relevant node export methods, reset when new .blend is loaded in load_post.
@@ -24,15 +24,15 @@ have_to_check_node_trees = False
 def handler(scene):
     global have_to_check_node_trees
 
-    if not have_to_check_node_trees or scene.render.engine != "LUXCORE":
+    if not have_to_check_node_trees or scene.render.engine != "SUPERLUXCORE":
         return
 
     found_relevant_node = False
     for mat in bpy.data.materials:
-        if not mat.luxcore.node_tree:
+        if not mat.superluxcore.node_tree:
             continue
 
-        if utils_node.has_nodes_multi(mat.luxcore.node_tree, RELEVANT_NODES, True):
+        if utils_node.has_nodes_multi(mat.superluxcore.node_tree, RELEVANT_NODES, True):
             found_relevant_node = True
             # Force a viewport update
             mat.diffuse_color = mat.diffuse_color
@@ -52,7 +52,7 @@ def handler(scene):
     #     if node_tree.bl_idname not in TREE_TYPES:
     #         continue
     #
-    #     for node in utils_node.find_nodes(node_tree, "LuxCoreNodeTexImagemap"):
+    #     for node in utils_node.find_nodes(node_tree, "SuperLuxCoreNodeTexImagemap"):
     #         if node.image and node.image.source == "SEQUENCE":
     #             # Force a viewport update
     #             node.image = node.image

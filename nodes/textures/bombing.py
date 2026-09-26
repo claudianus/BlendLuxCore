@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import FloatProperty, BoolProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexBombing(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexBombing(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Bombing"
     bl_width_default = 200
 
@@ -14,11 +14,11 @@ class LuxCoreNodeTexBombing(LuxCoreNodeTexture, bpy.types.Node):
                                       update=utils_node.force_viewport_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Background", [0.3, 0.3, 0.3])
-        self.add_input("LuxCoreSocketColor", "Bullet", [0.7, 0, 0])
-        self.add_input("LuxCoreSocketFloat0to1", "Mask", 1)
-        self.add_input("LuxCoreSocketMapping2D", "2D Mapping")
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.add_input("SuperLuxCoreSocketColor", "Background", [0.3, 0.3, 0.3])
+        self.add_input("SuperLuxCoreSocketColor", "Bullet", [0.7, 0, 0])
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Mask", 1)
+        self.add_input("SuperLuxCoreSocketMapping2D", "2D Mapping")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         if not self.inputs["2D Mapping"].is_linked:
@@ -27,7 +27,7 @@ class LuxCoreNodeTexBombing(LuxCoreNodeTexture, bpy.types.Node):
         layout.prop(self, "random_scale", slider=True)
         layout.prop(self, "use_random_rotation")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         # TODO support for multiple bullets?
         definitions = {
             "type": "bombing",
@@ -38,4 +38,4 @@ class LuxCoreNodeTexBombing(LuxCoreNodeTexture, bpy.types.Node):
             "bullet.randomrotation.enable": self.use_random_rotation,
         }
         definitions.update(self.inputs["2D Mapping"].export(exporter, depsgraph, props))
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

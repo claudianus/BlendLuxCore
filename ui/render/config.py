@@ -7,14 +7,14 @@ from bl_ui.properties_render import RENDER_PT_context
 from bl_ui.properties_render import RenderButtonsPanel
 
 
-def luxcore_render_draw(panel, context):
+def superluxcore_render_draw(panel, context):
     layout = panel.layout
     scene = context.scene
 
-    if scene.render.engine != "LUXCORE":
+    if scene.render.engine != "SUPERLUXCORE":
         return
 
-    config = context.scene.luxcore.config
+    config = context.scene.superluxcore.config
 
     # Device
     col_device = layout.column(align=True)
@@ -26,22 +26,22 @@ def luxcore_render_draw(panel, context):
 
             if gpu_backend == "OPENCL" and not utils.luxutils.is_opencl_build():
                 col_device.label(
-                    text="No OpenCL support in this BlendLuxCore version",
+                    text="No OpenCL support in this SuperLuxCore version",
                     icon=icons.ERROR,
                 )
             if gpu_backend == "CUDA" and not utils.luxutils.is_cuda_build():
                 col_device.label(
-                    text="No CUDA support in this BlendLuxCore version",
+                    text="No CUDA support in this SuperLuxCore version",
                     icon=icons.ERROR,
                 )
             if gpu_backend == "METAL" and not utils.luxutils.is_metal_build():
                 col_device.label(
-                    text="No Metal support in this BlendLuxCore version",
+                    text="No Metal support in this SuperLuxCore version",
                     icon=icons.ERROR,
                 )
             if gpu_backend == "VULKAN" and not utils.luxutils.is_vulkan_build():
                 col_device.label(
-                    text="No Vulkan support in this BlendLuxCore version",
+                    text="No Vulkan support in this SuperLuxCore version",
                     icon=icons.ERROR,
                 )
     else:
@@ -54,17 +54,17 @@ def luxcore_render_draw(panel, context):
 
     row = layout.row()
     row.operator(
-        "luxcore.use_cycles_settings",
+        "superluxcore.use_cycles_settings",
         icon_value=icon_manager.get_icon_id("link"),
     )
     row.operator(
-        "luxcore.render_settings_helper",
+        "superluxcore.render_settings_helper",
         icon_value=icon_manager.get_icon_id("help"),
     )
 
 
-class LUXCORE_RENDER_PT_lightpaths(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_lightpaths(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Light Paths"
     bl_order = 20
 
@@ -76,14 +76,14 @@ class LUXCORE_RENDER_PT_lightpaths(RenderButtonsPanel, Panel):
         pass
 
 
-class LUXCORE_RENDER_PT_lightpaths_bounces(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDER_PT_lightpaths"
+class SUPERLUXCORE_RENDER_PT_lightpaths_bounces(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_lightpaths"
     bl_label = "Max Bounces"
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -110,18 +110,18 @@ class LUXCORE_RENDER_PT_lightpaths_bounces(RenderButtonsPanel, Panel):
             col.prop(config, "bidir_light_maxdepth")
 
 
-class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Light Tracing"
-    bl_parent_id = "LUXCORE_RENDER_PT_lightpaths"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_lightpaths"
     bl_options = {"DEFAULT_CLOSED"}
 
     @classmethod
     def poll(cls, context):
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         if simple.enabled and not simple.show_advanced:
             return False
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         engine = context.scene.render.engine
         # Tiled path supports GPU light tracing (TILEPATHOCL); the CPU
         # tile engine has no light pass, so keep the panel hidden there
@@ -129,7 +129,7 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
         return (
             config.engine == "PATH"
             and tiles_ok
-            and engine == "LUXCORE"
+            and engine == "SUPERLUXCORE"
         )
 
     def error(self, context):
@@ -139,7 +139,7 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         layout.prop(config.path, "hybridbackforward_enable", text="")
 
         if config.path.hybridbackforward_enable and self.error(context):
@@ -147,7 +147,7 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -162,6 +162,10 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
                 # (RTPATHOCL); TILEPATHOCL runs the split population
                 layout.prop(config.path, "lighttracing_only")
             layout.prop(config.path, "vertex_connection")
+            if config.path.vertex_connection:
+                col = layout.column(align=True)
+                col.prop(config.path, "vertex_connection_connects")
+                col.prop(config.path, "vertex_connection_pool")
             col = layout.column(align=True)
             col.prop(config.path, "lighttracing_focus")
             if config.path.lighttracing_focus:
@@ -177,34 +181,34 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
 
         if self.error(context):
             layout.label(
-                text='Enable "Use CPUs" in LuxCore device settings',
+                text='Enable "Use CPUs" in SuperLuxCore device settings',
                 icon=icons.WARNING,
             )
 
             col = layout.column(align=True)
             col.use_property_split = False
             col.prop(
-                context.scene.luxcore.devices,
+                context.scene.superluxcore.devices,
                 "use_native_cpu",
                 toggle=True,
                 text="Fix this problem",
             )
 
 
-class LUXCORE_RENDER_PT_lightpaths_clamping(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDER_PT_lightpaths"
+class SUPERLUXCORE_RENDER_PT_lightpaths_clamping(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_lightpaths"
     bl_label = "Clamping"
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         layout.prop(config.path, "use_clamping", text="")
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -241,7 +245,7 @@ class LUXCORE_RENDER_PT_lightpaths_clamping(RenderButtonsPanel, Panel):
                 % config.path.suggested_clamping_value
             )
             layout.operator(
-                "luxcore.set_suggested_clamping_value", text=op_text
+                "superluxcore.set_suggested_clamping_value", text=op_text
             )
 
 
@@ -256,12 +260,12 @@ def compatible_panels():
 
 def register():
     # We append our draw function to the existing Blender render panel
-    RENDER_PT_context.append(luxcore_render_draw)
+    RENDER_PT_context.append(superluxcore_render_draw)
     for panel in compatible_panels():
-        panel.COMPAT_ENGINES.add("LUXCORE")
+        panel.COMPAT_ENGINES.add("SUPERLUXCORE")
 
 
 def unregister():
-    RENDER_PT_context.remove(luxcore_render_draw)
+    RENDER_PT_context.remove(superluxcore_render_draw)
     for panel in compatible_panels():
-        panel.COMPAT_ENGINES.remove("LUXCORE")
+        panel.COMPAT_ENGINES.remove("SUPERLUXCORE")

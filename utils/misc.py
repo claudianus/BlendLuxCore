@@ -3,7 +3,7 @@
 The advantage of placing objects here rather than in __init__.py is that these
 objects will be available to utils submodules, even if utils is not fully
 built, which avoids "ImportError: cannot import name 'xxx' from partially
-initialised module "bl_ext.blc_dbg.BlendLuxCore.utils".
+initialised module "bl_ext.blc_dbg.superluxcore.utils".
 """
 
 def get_name_with_lib(datablock):

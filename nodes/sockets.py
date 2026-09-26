@@ -8,7 +8,7 @@ from bpy.props import (
 )
 from ..utils import node as utils_node
 from ..utils.luxutils import matrix_to_list
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from .. import icons
 
 # The rules for socket classes are these:
@@ -29,7 +29,7 @@ IOR_DESCRIPTION = (
 )
 
 
-class LuxCoreNodeSocket:
+class SuperLuxCoreNodeSocket:
     bl_label = ""
 
     color = (1, 1, 1, 1)
@@ -38,7 +38,7 @@ class LuxCoreNodeSocket:
     def draw_prop(self, context, layout, node, text):
         """
         This method can be overriden by subclasses to draw their property differently
-        (e.g. done by LuxCoreSocketColor)
+        (e.g. done by SuperLuxCoreSocketColor)
         """
         layout.prop(self, "default_value", text=text, slider=self.slider)
 
@@ -74,13 +74,13 @@ class LuxCoreNodeSocket:
             )
             # Don't show for volume sockets on volume output
             if (
-                self.bl_idname == "LuxCoreSocketVolume"
-                and node.bl_idname == "LuxCoreNodeVolOutput"
+                self.bl_idname == "SuperLuxCoreSocketVolume"
+                and node.bl_idname == "SuperLuxCoreNodeVolOutput"
             ):
                 show_operator = False
 
             if show_operator:
-                op = layout.operator("luxcore.add_node", icon=icons.ADD)
+                op = layout.operator("superluxcore.add_node", icon=icons.ADD)
                 op.node_type = self.default_node
                 op.socket_type = self.bl_idname
                 op.input_socket = self.name
@@ -94,17 +94,17 @@ class LuxCoreNodeSocket:
     def export_default(self):
         """
         Subclasses have to implement this method.
-        It should return the default value in a form ready for a pyluxcore.Property()
+        It should return the default value in a form ready for a pysuperluxcore.Property()
         e.g. convert colors to a list
         """
         return None
 
-    def export(self, exporter, depsgraph, props, luxcore_name=None):
+    def export(self, exporter, depsgraph, props, superluxcore_name=None):
         link = utils_node.get_link(self)
 
         if link:
             return link.from_node.export(
-                exporter, depsgraph, props, luxcore_name, link.from_socket
+                exporter, depsgraph, props, superluxcore_name, link.from_socket
             )
         elif hasattr(self, "default_value"):
             return self.export_default()
@@ -126,34 +126,34 @@ class Color:
     shape = (0.0, 0.68, 0.51, 1.0)
 
 
-class LuxCoreSocketMaterial(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketMaterial(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.material
     # no default value
 
 
-class LuxCoreSocketVolume(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketVolume(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.volume
     # The node type that can be instantly added to this node
-    # (via operator drawn in LuxCoreNodeSocket)
-    default_node = "LuxCoreNodeTreePointer"
+    # (via operator drawn in SuperLuxCoreNodeSocket)
+    default_node = "SuperLuxCoreNodeTreePointer"
     # no default value
 
 
-class LuxCoreSocketFresnel(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketFresnel(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.fresnel_texture
     # The node type that can be instantly added to this node
-    # (via operator drawn in LuxCoreNodeSocket)
-    default_node = "LuxCoreNodeTexFresnel"
+    # (via operator drawn in SuperLuxCoreNodeSocket)
+    default_node = "SuperLuxCoreNodeTexFresnel"
     # no default value
 
 
-class LuxCoreSocketMatEmission(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketMatEmission(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     """Special socket for material emission"""
 
     color = Color.mat_emission
     # The node type that can be instantly added to this node
-    # (via operator drawn in LuxCoreNodeSocket)
-    default_node = "LuxCoreNodeMatEmission"
+    # (via operator drawn in SuperLuxCoreNodeSocket)
+    default_node = "SuperLuxCoreNodeMatEmission"
     # no default value
 
     def export_emission(self, exporter, depsgraph, props, definitions):
@@ -163,7 +163,7 @@ class LuxCoreSocketMatEmission(bpy.types.NodeSocket, LuxCoreNodeSocket):
             if not linked_node:
                 return
 
-            if linked_node.bl_idname == "LuxCoreNodeMatEmission":
+            if linked_node.bl_idname == "SuperLuxCoreNodeMatEmission":
                 linked_node.export_emission(
                     exporter, depsgraph, props, definitions
                 )
@@ -171,12 +171,12 @@ class LuxCoreSocketMatEmission(bpy.types.NodeSocket, LuxCoreNodeSocket):
                 print("ERROR: can't export emission; not an emission node")
 
 
-class LuxCoreSocketBump(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketBump(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.bump_texture
     # no default value
 
 
-class LuxCoreSocketColor(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketColor(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.color_texture
     default_value: FloatVectorProperty(
         subtype="COLOR",
@@ -196,7 +196,7 @@ class LuxCoreSocketColor(bpy.types.NodeSocket, LuxCoreNodeSocket):
 
 
 # Base class for float sockets (can't be used directly)
-class LuxCoreSocketFloat(LuxCoreNodeSocket):
+class SuperLuxCoreSocketFloat(SuperLuxCoreNodeSocket):
     color = Color.float_texture
 
     def export_default(self):
@@ -204,14 +204,14 @@ class LuxCoreSocketFloat(LuxCoreNodeSocket):
 
 
 # Use this socket for normal float values without min/max bounds.
-# For some unkown reason, we can't use the LuxCoreSocketFloat directly.
-class LuxCoreSocketFloatUnbounded(bpy.types.NodeSocket, LuxCoreSocketFloat):
+# For some unkown reason, we can't use the SuperLuxCoreSocketFloat directly.
+class SuperLuxCoreSocketFloatUnbounded(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(
         description="Float value", update=utils_node.force_viewport_update
     )
 
 
-class LuxCoreSocketFloatPositive(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketFloatPositive(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(
         min=0,
         description="Positive float value",
@@ -220,7 +220,7 @@ class LuxCoreSocketFloatPositive(bpy.types.NodeSocket, LuxCoreSocketFloat):
     )
 
 
-class LuxCoreSocketFloat0to1(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketFloat0to1(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(
         min=0,
         max=1,
@@ -231,7 +231,7 @@ class LuxCoreSocketFloat0to1(bpy.types.NodeSocket, LuxCoreSocketFloat):
     slider = True
 
 
-class LuxCoreSocketFloat0to2(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketFloat0to2(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(
         min=0,
         max=2,
@@ -243,7 +243,7 @@ class LuxCoreSocketFloat0to2(bpy.types.NodeSocket, LuxCoreSocketFloat):
 
 
 # Just another float socket with different defaults and finer controls
-class LuxCoreSocketBumpHeight(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketBumpHeight(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     # Allow negative values for inverting the bump.
     default_value: FloatProperty(
         default=0.001,
@@ -257,7 +257,7 @@ class LuxCoreSocketBumpHeight(bpy.types.NodeSocket, LuxCoreSocketFloat):
     )
 
 
-class LuxCoreSocketFloatDisneySheen(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketFloatDisneySheen(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(
         min=0,
         max=100,
@@ -269,7 +269,7 @@ class LuxCoreSocketFloatDisneySheen(bpy.types.NodeSocket, LuxCoreSocketFloat):
     slider = True
 
 
-class LuxCoreSocketVector(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketVector(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.vector_texture
     default_value: FloatVectorProperty(
         name="",
@@ -308,7 +308,7 @@ class LuxCoreSocketVector(bpy.types.NodeSocket, LuxCoreNodeSocket):
         return list(self.default_value)
 
 
-class LuxCoreSocketRoughness(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketRoughness(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     # Reflections look weird when roughness gets too small
     default_value: FloatProperty(
         min=0.001,
@@ -321,7 +321,7 @@ class LuxCoreSocketRoughness(bpy.types.NodeSocket, LuxCoreSocketFloat):
     slider = True
 
 
-class LuxCoreSocketIOR(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketIOR(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(
         name="IOR",
         min=0.0001,
@@ -343,7 +343,7 @@ class LuxCoreSocketIOR(bpy.types.NodeSocket, LuxCoreSocketFloat):
         super().draw(context, layout, node, text)
 
 
-class LuxCoreSocketFilmThickness(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketFilmThickness(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(
         min=0,
         precision=1,
@@ -354,7 +354,7 @@ class LuxCoreSocketFilmThickness(bpy.types.NodeSocket, LuxCoreSocketFloat):
     )
 
 
-class LuxCoreSocketFilmIOR(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketFilmIOR(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     default_value: FloatProperty(
         min=1,
         soft_max=4.0,
@@ -366,7 +366,7 @@ class LuxCoreSocketFilmIOR(bpy.types.NodeSocket, LuxCoreSocketFloat):
     )
 
 
-class LuxCoreSocketVolumeAsymmetry(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketVolumeAsymmetry(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.vector_texture
     default_value: FloatVectorProperty(
         name="",
@@ -393,17 +393,17 @@ class LuxCoreSocketVolumeAsymmetry(bpy.types.NodeSocket, LuxCoreNodeSocket):
         return list(self.default_value)
 
 
-class LuxCoreSocketMapping2D(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketMapping2D(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.mapping_2d
     # The node type that can be instantly added to this node
-    # (via operator drawn in LuxCoreNodeSocket)
-    default_node = "LuxCoreNodeTexMapping2D"
+    # (via operator drawn in SuperLuxCoreNodeSocket)
+    default_node = "SuperLuxCoreNodeTexMapping2D"
     # We have to set the default_value to something
-    # so export_default() is called by LuxCoreNodeSocket.export()
+    # so export_default() is called by SuperLuxCoreNodeSocket.export()
     default_value = None
 
     def export_default(self):
-        # These are not the LuxCore API default values because
+        # These are not the SuperLuxCore API default values because
         # we have to compensate Blenders mirrored V axis
         return {
             "mapping.type": "uvmapping2d",
@@ -414,13 +414,13 @@ class LuxCoreSocketMapping2D(bpy.types.NodeSocket, LuxCoreNodeSocket):
         }
 
 
-class LuxCoreSocketMapping3D(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketMapping3D(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.mapping_3d
     # The node type that can be instantly added to this node
-    # (via operator drawn in LuxCoreNodeSocket)
-    default_node = "LuxCoreNodeTexMapping3D"
+    # (via operator drawn in SuperLuxCoreNodeSocket)
+    default_node = "SuperLuxCoreNodeTexMapping3D"
     # We have to set the default_value to something
-    # so export_default() is called by LuxCoreNodeSocket.export()
+    # so export_default() is called by SuperLuxCoreNodeSocket.export()
     default_value = None
 
     def export_default(self):
@@ -432,7 +432,7 @@ class LuxCoreSocketMapping3D(bpy.types.NodeSocket, LuxCoreNodeSocket):
         }
 
 
-class LuxCoreSocketShape(bpy.types.NodeSocket, LuxCoreNodeSocket):
+class SuperLuxCoreSocketShape(bpy.types.NodeSocket, SuperLuxCoreNodeSocket):
     color = Color.shape
     # Default value is the base mesh (correct name is passed during export)
     default_value = "[Base Mesh]"
@@ -449,7 +449,7 @@ class LuxCoreSocketShape(bpy.types.NodeSocket, LuxCoreNodeSocket):
                     exporter, depsgraph, props, base_shape_name
                 )
             except Exception as error:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     "Error during shape export:", str(error)
                 )
 
@@ -458,31 +458,31 @@ class LuxCoreSocketShape(bpy.types.NodeSocket, LuxCoreNodeSocket):
 
 # Specify the allowed inputs of sockets. Subclasses inherit the settings of their parents.
 # We have to do this here because some sockets (e.g. Material) need to refer to their own class.
-LuxCoreSocketMaterial.allowed_inputs = {LuxCoreSocketMaterial}
-LuxCoreSocketVolume.allowed_inputs = {LuxCoreSocketVolume}
-LuxCoreSocketFresnel.allowed_inputs = {LuxCoreSocketFresnel}
-LuxCoreSocketMatEmission.allowed_inputs = {LuxCoreSocketMatEmission}
-LuxCoreSocketBump.allowed_inputs = {
-    LuxCoreSocketBump,
-    LuxCoreSocketColor,
-    LuxCoreSocketFloat,
+SuperLuxCoreSocketMaterial.allowed_inputs = {SuperLuxCoreSocketMaterial}
+SuperLuxCoreSocketVolume.allowed_inputs = {SuperLuxCoreSocketVolume}
+SuperLuxCoreSocketFresnel.allowed_inputs = {SuperLuxCoreSocketFresnel}
+SuperLuxCoreSocketMatEmission.allowed_inputs = {SuperLuxCoreSocketMatEmission}
+SuperLuxCoreSocketBump.allowed_inputs = {
+    SuperLuxCoreSocketBump,
+    SuperLuxCoreSocketColor,
+    SuperLuxCoreSocketFloat,
 }
-LuxCoreSocketColor.allowed_inputs = {
-    LuxCoreSocketColor,
-    LuxCoreSocketFloat,
-    LuxCoreSocketVector,
+SuperLuxCoreSocketColor.allowed_inputs = {
+    SuperLuxCoreSocketColor,
+    SuperLuxCoreSocketFloat,
+    SuperLuxCoreSocketVector,
 }
 # Note: Utility nodes like "math" can be used to add bumpmaps together, so we allow Bump input here
-LuxCoreSocketFloat.allowed_inputs = {
-    LuxCoreSocketColor,
-    LuxCoreSocketFloat,
-    LuxCoreSocketBump,
+SuperLuxCoreSocketFloat.allowed_inputs = {
+    SuperLuxCoreSocketColor,
+    SuperLuxCoreSocketFloat,
+    SuperLuxCoreSocketBump,
 }
-LuxCoreSocketVector.allowed_inputs = {
-    LuxCoreSocketVector,
-    LuxCoreSocketColor,
-    LuxCoreSocketFloat,
+SuperLuxCoreSocketVector.allowed_inputs = {
+    SuperLuxCoreSocketVector,
+    SuperLuxCoreSocketColor,
+    SuperLuxCoreSocketFloat,
 }
-LuxCoreSocketMapping2D.allowed_inputs = {LuxCoreSocketMapping2D}
-LuxCoreSocketMapping3D.allowed_inputs = {LuxCoreSocketMapping3D}
-LuxCoreSocketShape.allowed_inputs = {LuxCoreSocketShape}
+SuperLuxCoreSocketMapping2D.allowed_inputs = {SuperLuxCoreSocketMapping2D}
+SuperLuxCoreSocketMapping3D.allowed_inputs = {SuperLuxCoreSocketMapping3D}
+SuperLuxCoreSocketShape.allowed_inputs = {SuperLuxCoreSocketShape}

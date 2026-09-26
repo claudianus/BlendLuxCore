@@ -2,7 +2,7 @@ import bpy
 from bpy.props import IntProperty, BoolProperty
 
 
-class LuxCoreDisplaySettings(bpy.types.PropertyGroup):
+class SuperLuxCoreDisplaySettings(bpy.types.PropertyGroup):
     refresh = False
     paused = False
     stop_requested = False

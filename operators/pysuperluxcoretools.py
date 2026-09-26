@@ -5,8 +5,8 @@ from subprocess import Popen, PIPE, run
 from shutil import which
 
 
-class LUXCORE_OT_install_pyside(bpy.types.Operator):
-    bl_idname = "luxcore.install_pyside"
+class SUPERLUXCORE_OT_install_pyside(bpy.types.Operator):
+    bl_idname = "superluxcore.install_pyside"
     bl_label = "You need PySide. Install it now?"
     bl_description = ""
 
@@ -27,7 +27,7 @@ class LUXCORE_OT_install_pyside(bpy.types.Operator):
 
         script = (
             "'"
-            + 'echo "This will install PySide (required by pyluxcoretools UI)";'
+            + 'echo "This will install PySide (required by pysuperluxcoretools UI)";'
             # Show which command will be used to install PySide
             + 'echo "' + install_command.replace('"', '\\"') + '";'
             # Execute the command to install PySide
@@ -41,10 +41,10 @@ class LUXCORE_OT_install_pyside(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_start_pyluxcoretools(bpy.types.Operator):
-    bl_idname = "luxcore.start_pyluxcoretools"
-    bl_label = "LuxCore Network Render"
-    bl_description = ("Open the pyluxcoretools that can be used to "
+class SUPERLUXCORE_OT_start_pysuperluxcoretools(bpy.types.Operator):
+    bl_idname = "superluxcore.start_pysuperluxcoretools"
+    bl_label = "SuperLuxCore Network Render"
+    bl_description = ("Open the pysuperluxcoretools that can be used to "
                       "start and control network rendering sessions")
 
     def execute(self, context):
@@ -61,7 +61,7 @@ class LUXCORE_OT_start_pyluxcoretools(bpy.types.Operator):
             except FileNotFoundError:
                 msg = "pip3 not installed, see wiki for instructions"
                 self.report({"WARNING"}, msg)
-                bpy.ops.luxcore.open_website_popup("INVOKE_DEFAULT",
+                bpy.ops.superluxcore.open_website_popup("INVOKE_DEFAULT",
                                                    message=msg,
                                                    url="https://wiki.luxcorerender.org/LuxCoreRender_Network_Rendering")
                 return {"CANCELLED"}
@@ -69,29 +69,29 @@ class LUXCORE_OT_start_pyluxcoretools(bpy.types.Operator):
             if "PySide2" not in installed_packages:
                 msg = "PySide2 not installed, see wiki for instructions"
                 self.report({"WARNING"}, msg)
-                bpy.ops.luxcore.open_website_popup("INVOKE_DEFAULT",
+                bpy.ops.superluxcore.open_website_popup("INVOKE_DEFAULT",
                                                    message=msg,
                                                    url="https://wiki.luxcorerender.org/LuxCoreRender_Network_Rendering")
                 return {"CANCELLED"}
 
         if platform.system() == "Linux":
             # On Linux, PySide can not be bundled because of this bug:
-            # https://github.com/LuxCoreRender/LuxCore/issues/80#issuecomment-378223152
+            # https://github.com/LuxCoreRender/SuperLuxCore/issues/80#issuecomment-378223152
             # So we need to check if PySide is installed, and install it if necessary
             result = run(["pip3", "list"], stdout=PIPE)
             installed_packages = result.stdout.decode()
 
             if "PySide" not in installed_packages:
-                bpy.ops.luxcore.install_pyside("INVOKE_DEFAULT")
+                bpy.ops.superluxcore.install_pyside("INVOKE_DEFAULT")
                 return {"CANCELLED"}
 
         current_dir = os.path.dirname(os.path.realpath(__file__))
-        # Call dirname once to go up 1 level (from BlendLuxCore/operators/)
-        blendluxcore_dir = os.path.dirname(current_dir)
-        bin_dir = os.path.join(blendluxcore_dir, "bin")
+        # Call dirname once to go up 1 level (from superluxcore/operators/)
+        superluxcore_dir = os.path.dirname(current_dir)
+        bin_dir = os.path.join(superluxcore_dir, "bin")
 
         # Set system/version dependent "start_new_session" analogs.
-        # This ensures that the pyluxcoretools process is not stopped
+        # This ensures that the pysuperluxcoretools process is not stopped
         # when the parent process (Blender) is stopped.
         # Adapted from https://stackoverflow.com/a/13256908
         kwargs = {}
@@ -102,14 +102,14 @@ class LUXCORE_OT_start_pyluxcoretools(bpy.types.Operator):
         else:
             kwargs.update(start_new_session=True)
 
-        # Set the current working directory to the bin folder so pyluxcore is found
+        # Set the current working directory to the bin folder so pysuperluxcore is found
         kwargs.update(cwd=bin_dir)
 
         if (platform.system() == "Linux") or (platform.system() == "Darwin"):
-            zip_path = os.path.join(bin_dir, "pyluxcoretools.zip")
+            zip_path = os.path.join(bin_dir, "pysuperluxcoretools.zip")
             command = ["python3", zip_path]
         elif platform.system() == "Windows":
-            exe_path = os.path.join(bin_dir, "pyluxcoretool.exe")
+            exe_path = os.path.join(bin_dir, "pysuperluxcoretool.exe")
             command = exe_path
         else:
             raise NotImplementedError("Unsupported system: " + platform.system())

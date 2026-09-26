@@ -1,7 +1,7 @@
 """
-e37: CPU/GPU adapter parity snapshot (LuxCore parity plan 3.3).
+e37: CPU/GPU adapter parity snapshot (SuperLuxCore parity plan 3.3).
 
-The same artist-facing settings must export an equivalent luxcore
+The same artist-facing settings must export an equivalent superluxcore
 property set on CPU and GPU devices. This test flips
 config.device between "CPU" and "OCL" across a set of feature
 profiles and diffs the exported definitions:
@@ -20,7 +20,7 @@ Run:
 import bpy
 import sys
 
-from bl_ext.user_default.blendluxcore.export import config as export_config
+from bl_ext.user_default.superluxcore.export import config as export_config
 
 results = []
 
@@ -35,7 +35,7 @@ def fresh_scene():
     # for type="EMPTY" - bpy.data.scenes.new gives real defaults
     # (same workaround as e15_auto_config_test.py)
     scene = bpy.data.scenes.new("e37")
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     return scene
 
 
@@ -89,11 +89,11 @@ def add_light_portal(scene):
     mesh.update()
     obj = bpy.data.objects.new("portal", mesh)
     scene.collection.objects.link(obj)
-    obj.luxcore.is_light_portal = True
+    obj.superluxcore.is_light_portal = True
 
 
 # Artist profiles: (name, mutator). Each mutator configures
-# scene.luxcore.config the way a user would in the UI.
+# scene.superluxcore.config the way a user would in the UI.
 PROFILES = [
     ("default", lambda c, s: None),
     ("lighttracing", lambda c, s: setattr(
@@ -112,19 +112,21 @@ PROFILES = [
         c, "sampler_gpu" if c.device == "OCL" else "sampler",
         "METROPOLIS")),
     ("denoiser", lambda c, s: setattr(
-        s.luxcore.denoiser, "enabled", True)),
+        s.superluxcore.denoiser, "enabled", True)),
     ("light_portal", lambda c, s: add_light_portal(s)),
     # M6: vertex connection rides on the GPU light-task population; the
     # mutator mimics the UI flow (Light Tracing panel + VC toggle)
     ("vertex_connection", lambda c, s: (
         setattr(c.path, "hybridbackforward_enable", True),
-        setattr(c.path, "vertex_connection", True))),
+        setattr(c.path, "vertex_connection", True),
+        setattr(c.path, "vertex_connection_connects", 4),
+        setattr(c.path, "vertex_connection_pool", 4))),
 ]
 
 
 def export_with(device, mutator):
     scene = fresh_scene()
-    config = scene.luxcore.config
+    config = scene.superluxcore.config
     config.device = device
     mutator(config, scene)
     props = export_config.convert(None, scene)

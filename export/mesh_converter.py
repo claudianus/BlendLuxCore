@@ -10,7 +10,7 @@ import bpy
 from . import caches
 from . import named_attributes
 from .. import utils
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 
 if _needs_reload:
     import importlib
@@ -44,7 +44,7 @@ def convert(
     obj,
     mesh_key,
     depsgraph,
-    luxcore_scene,
+    superluxcore_scene,
     is_viewport_render,
     use_instancing,
     transform,
@@ -121,14 +121,14 @@ def convert(
             for attribute in mesh.color_attributes
         ]
         # ascontiguousarray so the slices can be adopted zero-copy by
-        # pyluxcore (non-contiguous inputs would force a copy anyway)
+        # pysuperluxcore (non-contiguous inputs would force a copy anyway)
         rgb = [np.ascontiguousarray(rgba[:, :3]) for rgba in rgba_colors]
         alphas = [
             np.ascontiguousarray(rgba[:, 3]) for rgba in rgba_colors
         ]
 
         # Generic named attributes (Geometry Nodes "Store Named Attribute"
-        # outputs etc.) → LuxCore vertex AOV / triangle AOV / extra color
+        # outputs etc.) → SuperLuxCore vertex AOV / triangle AOV / extra color
         # layers. The name→index map is registered for the node reader.
         vert_aovs, face_attrs, extra_cols = named_attributes.collect(
             mesh, loop_vertices, len(rgb), obj.name
@@ -202,7 +202,7 @@ def convert(
         want_motion_maps = (
             exporter is not None
             and getattr(exporter, "motion_blur_enabled", False)
-            and getattr(obj.luxcore, "enable_motion_blur", False)
+            and getattr(obj.superluxcore, "enable_motion_blur", False)
         )
 
         # Log
@@ -222,7 +222,7 @@ def convert(
 
         # Each submesh only gets the vertices its triangles actually
         # use: previously every material slot carried a full copy of all
-        # loop-expanded arrays, so LuxCore-side geometry memory scaled
+        # loop-expanded arrays, so SuperLuxCore-side geometry memory scaled
         # with the material count. The mask+remap scheme is O(V) per
         # submesh instead of np.unique's O(V log V) sort.
         vert_count = len(exp_points)
@@ -279,7 +279,7 @@ def convert(
                 f"{len(sub_points)} points"
             )
 
-            luxcore_scene.DefineMeshExt(
+            superluxcore_scene.DefineMeshExt(
                 name=name,
                 points=sub_points,
                 triangles=sub_tris,
@@ -291,10 +291,10 @@ def convert(
             )
             for aov_index, aov in enumerate(exp_aovs):
                 sub_aov = aov if is_identity else aov[uniq]
-                luxcore_scene.SetMeshVertexAOV(name, aov_index, sub_aov.tolist())
+                superluxcore_scene.SetMeshVertexAOV(name, aov_index, sub_aov.tolist())
             for aov_index, attr in enumerate(face_attrs):
                 face_vals = named_attributes.face_values(attr)
-                luxcore_scene.SetMeshTriangleAOV(
+                superluxcore_scene.SetMeshTriangleAOV(
                     name,
                     aov_index,
                     face_vals[tri_polygon_index[mat_tri_ids]].tolist(),

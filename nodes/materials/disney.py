@@ -1,11 +1,11 @@
 import bpy
 from bpy.props import BoolProperty
-from ..base import LuxCoreNodeMaterial
+from ..base import SuperLuxCoreNodeMaterial
 from .glass import THIN_FILM_DESCRIPTION
 from ...utils.node import ThinFilmCoating
 
 
-class LuxCoreNodeMatDisney(LuxCoreNodeMaterial, bpy.types.Node):
+class SuperLuxCoreNodeMatDisney(SuperLuxCoreNodeMaterial, bpy.types.Node):
     bl_label = "Disney Material"
     bl_width_default = 190
     
@@ -19,27 +19,27 @@ class LuxCoreNodeMatDisney(LuxCoreNodeMaterial, bpy.types.Node):
                                       update=update_use_thinfilmcoating)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Base Color", [0.7] * 3)
-        self.add_input("LuxCoreSocketFloat0to1", "Subsurface", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "Metallic", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "Specular", 0.5)
-        self.add_input("LuxCoreSocketFloat0to1", "Specular Tint", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "Roughness", 0.2)
-        self.add_input("LuxCoreSocketFloat0to1", "Anisotropic", 0)
-        self.add_input("LuxCoreSocketFloatDisneySheen", "Sheen", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "Sheen Tint", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "Clearcoat", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "Clearcoat Gloss", 1)
-        self.add_input("LuxCoreSocketFloat0to1", "Film Amount", 1, enabled=False)
+        self.add_input("SuperLuxCoreSocketColor", "Base Color", [0.7] * 3)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Subsurface", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Metallic", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Specular", 0.5)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Specular Tint", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Roughness", 0.2)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Anisotropic", 0)
+        self.add_input("SuperLuxCoreSocketFloatDisneySheen", "Sheen", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Sheen Tint", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Clearcoat", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Clearcoat Gloss", 1)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Film Amount", 1, enabled=False)
         ThinFilmCoating.init(self)
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
         
     def draw_buttons(self, context, layout):
         layout.prop(self, "use_thinfilmcoating")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "disney",
             "basecolor": self.inputs["Base Color"].export(exporter, depsgraph, props),
@@ -64,4 +64,4 @@ class LuxCoreNodeMatDisney(LuxCoreNodeMaterial, bpy.types.Node):
                 ThinFilmCoating.export(self, exporter, depsgraph, props, definitions)
 
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

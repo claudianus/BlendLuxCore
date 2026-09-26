@@ -1,12 +1,12 @@
 import bpy
 from bpy.props import EnumProperty, IntProperty, FloatProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 
 from ..base import NOISE_BASIS_ITEMS, NOISE_TYPE_ITEMS, MIN_NOISE_SIZE
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexBlenderMarble(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexBlenderMarble(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Blender Marble"
     bl_width_default = 200    
 
@@ -36,8 +36,8 @@ class LuxCoreNodeTexBlenderMarble(LuxCoreNodeTexture, bpy.types.Node):
     contrast: FloatProperty(update=utils_node.force_viewport_update, name="Contrast", default=1.0, min=0)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "marble_type", expand=True)
@@ -53,7 +53,7 @@ class LuxCoreNodeTexBlenderMarble(LuxCoreNodeTexture, bpy.types.Node):
         column.prop(self, "bright")
         column.prop(self, "contrast")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "blender_marble",
             "noisebasis": self.noise_basis,
@@ -66,4 +66,4 @@ class LuxCoreNodeTexBlenderMarble(LuxCoreNodeTexture, bpy.types.Node):
             "contrast": self.contrast,
         }
         definitions.update(self.inputs["3D Mapping"].export(exporter, depsgraph, props))
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

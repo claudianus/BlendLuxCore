@@ -21,7 +21,7 @@ from ..utils.statistics import (
 )
 
 
-class LuxCoreRenderStats:
+class SuperLuxCoreRenderStats:
     def __init__(self):
         # Some stats use rounding getter functions, because it is better for the user
         # if values that only differ by a very small amount appear as equal in the UI.
@@ -32,7 +32,7 @@ class LuxCoreRenderStats:
                                 0, smaller_is_better, time_to_string, get_rounded)
         self.samples_eye = Stat("Samples", categories[-1], 0, greater_is_better)
         # Tiled engines only: -1 renders as "n/a" (see _init_stats and
-        # update_from_luxcore_stats)
+        # update_from_superluxcore_stats)
         self.convergence = Stat("Convergence", categories[-1], -1.0,
                                 greater_is_better, convergence_to_string)
         categories.append("Performance")
@@ -101,7 +101,7 @@ class LuxCoreRenderStats:
         for stat in self.to_list():
             stat.reset()
 
-    def update_from_luxcore_stats(self, stat_props):
+    def update_from_superluxcore_stats(self, stat_props):
         self.render_time.value = stat_props.Get("stats.renderengine.time").GetFloat()
         self.samples_eye.value = stat_props.Get("stats.renderengine.pass.eye").GetInt()
         # Engines running a convergence test (TILEPATH*, or any engine with
@@ -117,9 +117,9 @@ class LuxCoreRenderStats:
         self.vram.value = get_vram_usage(stat_props)
 
 
-class LuxCoreRenderStatsCollection(PropertyGroup):
+class SuperLuxCoreRenderStatsCollection(PropertyGroup):
     # Important: All access to _slots needs to be through the __getitem__ method so we can add slots if necessary!
-    _slots = [LuxCoreRenderStats() for i in range(8)]
+    _slots = [SuperLuxCoreRenderStats() for i in range(8)]
 
     compare: BoolProperty(name="Compare", default=False,
                            description="Compare the statistics of two slots")
@@ -141,7 +141,7 @@ class LuxCoreRenderStatsCollection(PropertyGroup):
         # There is a known bug with using a callback,
         # Python must keep a reference to the strings
         # returned or Blender will misbehave or even crash.
-        LuxCoreRenderStatsCollection.first_slot_callback_strings = items
+        SuperLuxCoreRenderStatsCollection.first_slot_callback_strings = items
         return items
 
     def second_slot_items_callback(self, context):
@@ -149,7 +149,7 @@ class LuxCoreRenderStatsCollection(PropertyGroup):
         # There is a known bug with using a callback,
         # Python must keep a reference to the strings
         # returned or Blender will misbehave or even crash.
-        LuxCoreRenderStatsCollection.second_slot_callback_strings = items
+        SuperLuxCoreRenderStatsCollection.second_slot_callback_strings = items
         return items
 
     first_slot: EnumProperty(name="First Slot", description="The first slot",
@@ -162,7 +162,7 @@ class LuxCoreRenderStatsCollection(PropertyGroup):
         Important: All access to self._slots needs to be through this method so we can add slots if necessary!
         """
         while len(self._slots) < slot_index + 1:
-            self._slots.append(LuxCoreRenderStats())
+            self._slots.append(SuperLuxCoreRenderStats())
         return self._slots[slot_index]
 
     def reset(self, slot_index):

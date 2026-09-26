@@ -2,7 +2,7 @@
 #
 # Exercises the final-render incremental export lifecycle end to end:
 #   R1  first render            -> full export, scene cached
-#   R2  unchanged re-render     -> cached pyluxcore.Scene reused as-is
+#   R2  unchanged re-render     -> cached pysuperluxcore.Scene reused as-is
 #   R3  object moved            -> transform-only delta on the same Scene
 #   R4  mesh edited via bmesh   -> in-place mesh delta (same Scene)
 #   R5  unchanged re-render     -> new cache entry reused
@@ -14,7 +14,7 @@
 #                                  delta (depsgraph reports nothing
 #                                  on frame changes — see frame_change)
 #   M1  material node edit      -> in-place material delta (same Scene)
-#   M2  material renamed        -> rebuild (LuxCore name changes)
+#   M2  material renamed        -> rebuild (SuperLuxCore name changes)
 #   M3  slot reassigned         -> rebuild (geometry flags)
 #   M4  driver-animated color   -> frame change keeps Scene, refreshes
 #   M5  displacement node added -> shape signature mismatch, rebuild
@@ -30,7 +30,7 @@
 #   blender --background --factory-startup \
 #       --python dev-tools/a6_persistent_scene_test.py
 #
-# Requires the BlendLuxCore addon (with pyluxcore) installed. Exits 0 on
+# Requires the SuperLuxCore addon (with pysuperluxcore) installed. Exits 0 on
 # PASS, 1 on FAIL. Rendered images land in $A6_TEST_OUT (default /tmp).
 
 import importlib
@@ -57,7 +57,7 @@ def find_addon_key():
     return next(
         a.module
         for a in bpy.context.preferences.addons
-        if "luxcore" in a.module.lower()
+        if "superluxcore" in a.module.lower()
     )
 
 
@@ -107,14 +107,14 @@ for obj in list(bpy.data.objects):
     bpy.data.objects.remove(obj)
 
 scene = bpy.context.scene
-scene.luxcore.config.engine = "PATH"
-scene.luxcore.config.device = "OCL"
-scene.luxcore.devices.use_native_cpu = False
-scene.luxcore.halt.enable = True
-scene.luxcore.halt.use_time = True
-scene.luxcore.halt.time = 6
-scene.luxcore.halt.use_samples = False
-scene.render.engine = "LUXCORE"
+scene.superluxcore.config.engine = "PATH"
+scene.superluxcore.config.device = "OCL"
+scene.superluxcore.devices.use_native_cpu = False
+scene.superluxcore.halt.enable = True
+scene.superluxcore.halt.use_time = True
+scene.superluxcore.halt.time = 6
+scene.superluxcore.halt.use_samples = False
+scene.render.engine = "SUPERLUXCORE"
 scene.render.resolution_x = 320
 scene.render.resolution_y = 240
 scene.render.resolution_percentage = 100
@@ -281,7 +281,7 @@ check(
 render("r2")
 entry = entry_of(persistent_scene)
 check(
-    "R2: same pyluxcore.Scene reused",
+    "R2: same pysuperluxcore.Scene reused",
     entry["scene"] is scene_r1,
 )
 
@@ -291,7 +291,7 @@ bpy.context.view_layer.update()
 render("r3")
 entry = entry_of(persistent_scene)
 check(
-    "R3: same pyluxcore.Scene after transform delta",
+    "R3: same pysuperluxcore.Scene after transform delta",
     entry["scene"] is scene_r1,
 )
 bake = entry["bake"].get(mover_key)
@@ -440,7 +440,7 @@ check(
     entry["scene"] is scene_f15,
 )
 
-# ---------- M2: material rename -> rebuild (LuxCore name changes) -----
+# ---------- M2: material rename -> rebuild (SuperLuxCore name changes) -----
 mat2.name = "Renamed"
 bpy.context.view_layer.update()
 render("m2")

@@ -4,7 +4,7 @@ Out-of-core image-map spilling regression test.
     Blender -b --python dev-tools/imgspill_test.py
 
 Builds a scene whose floor uses a generated 1024x1024 float image
-(~16 MB pixel storage) and enables scene.luxcore.config.spill_geometry
+(~16 MB pixel storage) and enables scene.superluxcore.config.spill_geometry
 + spill_images, then renders at 720p.
 
 What it verifies:
@@ -24,7 +24,7 @@ import bpy
 import mathutils
 import numpy as np
 
-OUT = "/tmp/luxcore_imgspill_720p.png"
+OUT = "/tmp/superluxcore_imgspill_720p.png"
 TEX_SIZE = 2048  # 2048x2048 RGB byte -> 12 MB image-map storage
 
 
@@ -126,21 +126,21 @@ def main():
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.filepath = OUT
     scene.render.image_settings.file_format = "PNG"
 
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.sampler = "SOBOL"
-    scene.luxcore.config.spill_geometry = True
-    scene.luxcore.config.spill_geometry_minmb = 1
-    scene.luxcore.config.spill_images = True
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 20
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.sampler = "SOBOL"
+    scene.superluxcore.config.spill_geometry = True
+    scene.superluxcore.config.spill_geometry_minmb = 1
+    scene.superluxcore.config.spill_images = True
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 20
 
     print("[ImgSpillTest] Rendering 1280x720 with image-map spilling ...")
     bpy.ops.render.render(write_still=True)

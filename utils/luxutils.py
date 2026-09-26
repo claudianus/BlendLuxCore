@@ -1,6 +1,6 @@
-"""Various utilities requiring pyluxcore."""
+"""Various utilities requiring pysuperluxcore."""
 
-import pyluxcore
+import pysuperluxcore
 
 
 def create_props(prefix, definitions):
@@ -8,12 +8,12 @@ def create_props(prefix, definitions):
     :param prefix: string, will be prepended to each key part of the definitions.
                    Example: "scene.camera." (note the trailing dot)
     :param definitions: dictionary of definition pairs. Example: {"fieldofview", 45}
-    :return: pyluxcore.Properties() object, initialized with the given definitions.
+    :return: pysuperluxcore.Properties() object, initialized with the given definitions.
     """
-    props = pyluxcore.Properties()
+    props = pysuperluxcore.Properties()
 
     for key, value in definitions.items():
-        props.Set(pyluxcore.Property(prefix + key, value))
+        props.Set(pysuperluxcore.Property(prefix + key, value))
 
     return props
 
@@ -30,39 +30,39 @@ def matrix_to_list(matrix, invert=False):
     if invert:
         matrix.invert_safe()
 
-    return pyluxcore.BlenderMatrix4x4ToList(matrix)
+    return pysuperluxcore.BlenderMatrix4x4ToList(matrix)
 
 
 def is_opencl_build():
-    """Check if pyluxcore has been built with OpenCL support."""
+    """Check if pysuperluxcore has been built with OpenCL support."""
     return (
-        pyluxcore.GetPlatformDesc()
+        pysuperluxcore.GetPlatformDesc()
         .Get("compile.LUXRAYS_ENABLE_OPENCL")
         .GetBool()
     )
 
 
 def is_cuda_build():
-    """Check if pyluxcore has been built with Cuda support."""
+    """Check if pysuperluxcore has been built with Cuda support."""
     return (
-        pyluxcore.GetPlatformDesc()
+        pysuperluxcore.GetPlatformDesc()
         .Get("compile.LUXRAYS_ENABLE_CUDA")
         .GetBool()
     )
 
 def is_metal_build():
-    """Check if pyluxcore has been built with Metal support."""
+    """Check if pysuperluxcore has been built with Metal support."""
     return (
-        pyluxcore.GetPlatformDesc()
+        pysuperluxcore.GetPlatformDesc()
         .Get("compile.LUXRAYS_ENABLE_METAL")
         .GetBool()
     )
 
 
 def is_vulkan_build():
-    """Check if pyluxcore has been built with Vulkan support."""
+    """Check if pysuperluxcore has been built with Vulkan support."""
     return (
-        pyluxcore.GetPlatformDesc()
+        pysuperluxcore.GetPlatformDesc()
         .Get("compile.LUXRAYS_ENABLE_VULKAN")
         .GetBool()
     )

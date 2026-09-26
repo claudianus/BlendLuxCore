@@ -3,7 +3,7 @@
 Status: phase 1+2 implemented (persistent cache + dirty tracking +
 transform deltas); per-object geometry deltas and instancer re-flush
 still fall back to full export. Roadmap item A6-II — reuse the
-exported LuxCore scene across renders instead of rebuilding it from
+exported SuperLuxCore scene across renders instead of rebuilding it from
 scratch on every F12 / frame change.
 
 ## Problem and evidence
@@ -17,9 +17,9 @@ though most objects are static between frames.
 
 ## Feasibility (verified against the APIs)
 
-- `pyluxcore.RenderConfig(props, scene)` accepts an externally owned
-  `Scene` (`luxcore.h` RenderConfig::Create) — a module-level
-  `pyluxcore.Scene` can outlive the RenderEngine that Blender destroys
+- `pysuperluxcore.RenderConfig(props, scene)` accepts an externally owned
+  `Scene` (`superluxcore.h` RenderConfig::Create) — a module-level
+  `pysuperluxcore.Scene` can outlive the RenderEngine that Blender destroys
   after each final render.
 - Scene edits are already supported live: `Parse(props)`,
   `UpdateObjectTransformation`, `UpdateObjectMaterial`,
@@ -35,9 +35,9 @@ though most objects are static between frames.
 ## Design
 
 1. **Persistent scene cache** (`export/caches/persistent_scene.py`):
-   module-level `{"scene": pyluxcore.Scene, "fingerprints": {obj_key:
+   module-level `{"scene": pysuperluxcore.Scene, "fingerprints": {obj_key:
    fp}, "frame": int}` keyed by Blender scene pointer. Built by the
-   normal `first_run` export — after `luxcore_scene.Parse(props)` we
+   normal `first_run` export — after `superluxcore_scene.Parse(props)` we
    keep the Scene instead of dropping it.
 2. **Dirty tracking**: a `depsgraph_update_post` app handler appends
    `(id.as_pointer(), flags)` to a per-scene dirty set between renders.
@@ -79,7 +79,7 @@ though most objects are static between frames.
   instance set — still a win vs full-scene export.
 - **RenderConfig ownership**: *verified* — `RenderConfigImpl(props,
   scn)` stores a non-owning reference (`sceneRef`), so a Python-owned
-  `pyluxcore.Scene` safely outlives each RenderConfig/session.
+  `pysuperluxcore.Scene` safely outlives each RenderConfig/session.
 - **Stale-property risk**: `Scene.Parse` cannot delete properties —
   a toggled DoF, removed env light, or changed motion-blur step count
   would leave stale definitions in a reused scene. Reuse therefore
@@ -136,16 +136,16 @@ though most objects are static between frames.
     object-side `FLAG_SHADING` are classified as *echoes* — compatible
     with a material delta but unable to start one. A shading echo
     without an accompanying `Material` datablock update (world/light
-    node trees look identical here, and luxcore-mode worlds do not
+    node trees look identical here, and superluxcore-mode worlds do not
     read the node tree at all) forces a full rebuild.
   - *Identity/topology signatures*: `mat_sig` (material pointer ->
-    LuxCore name) catches renames — a rename changes the
+    SuperLuxCore name) catches renames — a rename changes the
     `scene.materials.*` key objects reference — and `slot_sig`
     (per-object slot material/link layout) catches binding edits.
     Both force a rebuild; slot reassignment additionally flags
     geometry anyway.
 - **Shape-stack signature guards material edits that change the
-  wrapper chain** — adding a displacement link or a luxcore shape
+  wrapper chain** — adding a displacement link or a superluxcore shape
   node means the object needs a *new* `scene.shapes.*` wrapper a
   material delta cannot create (the cached scene has no such shape).
   `_shape_stack_sig()` replays the same `define_shapes`/

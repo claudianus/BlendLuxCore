@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import EnumProperty, FloatProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexBrick(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexBrick(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Brick"
     bl_width_default = 200   
 
@@ -26,11 +26,11 @@ class LuxCoreNodeTexBrick(LuxCoreNodeTexture, bpy.types.Node):
     modulation_bias: FloatProperty(update=utils_node.force_viewport_update, name="Modulation Bias", description="", default=0, min=-1, max=1)
     
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Brick Color 1", (0.3, 0.3, 0.3))
-        self.add_input("LuxCoreSocketColor", "Brick Color 2", (0.6, 0.6, 0.6))
-        self.add_input("LuxCoreSocketColor", "Mortar Color", (0.2, 0.2, 0.2))
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.add_input("SuperLuxCoreSocketColor", "Brick Color 1", (0.3, 0.3, 0.3))
+        self.add_input("SuperLuxCoreSocketColor", "Brick Color 2", (0.6, 0.6, 0.6))
+        self.add_input("SuperLuxCoreSocketColor", "Mortar Color", (0.2, 0.2, 0.2))
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "brickbond")
@@ -41,7 +41,7 @@ class LuxCoreNodeTexBrick(LuxCoreNodeTexture, bpy.types.Node):
         layout.prop(self, "brickrun")
         layout.prop(self, "modulation_bias")
     
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "brick",
             "brickbond": self.brickbond.replace("_", " "),
@@ -56,4 +56,4 @@ class LuxCoreNodeTexBrick(LuxCoreNodeTexture, bpy.types.Node):
             "brickrun": self.brickrun / 100,
         }
         definitions.update(self.inputs["3D Mapping"].export(exporter, depsgraph, props))
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

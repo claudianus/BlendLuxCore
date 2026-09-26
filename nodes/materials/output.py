@@ -1,12 +1,12 @@
 import bpy
 from bpy.props import BoolProperty, PointerProperty, IntProperty, FloatVectorProperty
-import pyluxcore
+import pysuperluxcore
 from ... import utils
 from ...utils import node as utils_node
 from ... import icons
-from ...utils.errorlog import LuxCoreErrorLog
+from ...utils.errorlog import SuperLuxCoreErrorLog
 from ...utils.node import get_active_output
-from ..output import update_active, LuxCoreNodeOutput
+from ..output import update_active, SuperLuxCoreNodeOutput
 
 SHADOWCATCHER_DESC = (
     "Make this material transparent and only catch shadows on it. "
@@ -21,7 +21,7 @@ ONLY_INFINITE_DESC = (
 
 MATERIAL_ID_DESC = (
     "ID for Material ID AOV, if -1 is set a random ID is chosen. "
-    "Note that the random IDs of LuxCore can be greater than 32767 "
+    "Note that the random IDs of SuperLuxCore can be greater than 32767 "
     "(the ID Mask node in the compositor can't handle those numbers)"
 )
 
@@ -45,7 +45,7 @@ SHADOW_COLOR_OVERRIDE_DESC = (
 )
 
 
-class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
+class SuperLuxCoreNodeMatOutput(SuperLuxCoreNodeOutput, bpy.types.Node):
     """
     Material output node.
     This is where the export starts (if the output is active).
@@ -77,10 +77,10 @@ class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
                          description="If an override material is defined, this will not be replaced.")
 
     def init(self, context):
-        self.inputs.new("LuxCoreSocketMaterial", "Material")
-        self.inputs.new("LuxCoreSocketVolume", "Interior Volume")
-        self.inputs.new("LuxCoreSocketVolume", "Exterior Volume")
-        self.inputs.new("LuxCoreSocketShape", "Shape")
+        self.inputs.new("SuperLuxCoreSocketMaterial", "Material")
+        self.inputs.new("SuperLuxCoreSocketVolume", "Interior Volume")
+        self.inputs.new("SuperLuxCoreSocketVolume", "Exterior Volume")
+        self.inputs.new("SuperLuxCoreSocketShape", "Shape")
         super().init(context)
 
     def copy(self, orig_node):
@@ -124,7 +124,7 @@ class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
         row.prop(self, "shadow_color_override", text="Allow extra light rays")
 
         # PhotonGI
-        photongi_enabled = context.scene.luxcore.config.photongi.enabled
+        photongi_enabled = context.scene.superluxcore.config.photongi.enabled
         col = box.column()
         col.active = photongi_enabled
         if not photongi_enabled:
@@ -135,7 +135,7 @@ class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
         row.prop(self, "use_photongi")
 
         # All of the options below only work with the Path engine, not with Bidir
-        engine = context.scene.luxcore.config.engine
+        engine = context.scene.superluxcore.config.engine
         col = box.column()
         col.active = engine == "PATH"
         if engine == "BIDIR":
@@ -144,7 +144,7 @@ class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
         # Holdout
         col.prop(self, "is_holdout")
         if self.is_holdout and engine == "PATH" and utils.is_valid_camera(context.scene.camera):
-            pipeline = context.scene.camera.data.luxcore.imagepipeline
+            pipeline = context.scene.camera.data.superluxcore.imagepipeline
             if not pipeline.transparent_film:
                 col.prop(pipeline, "transparent_film", text="Enable Transparent Film",
                             icon=icons.CAMERA, toggle=True)
@@ -159,36 +159,36 @@ class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
             col.prop(self, "shadow_catcher_only_infinite")
             # Some settings that should be used with shadow catcher
             if utils.is_valid_camera(context.scene.camera):
-                pipeline = context.scene.camera.data.luxcore.imagepipeline
+                pipeline = context.scene.camera.data.superluxcore.imagepipeline
                 if not pipeline.transparent_film:
                     col.prop(pipeline, "transparent_film", text="Enable Transparent Film",
                              icon=icons.CAMERA, toggle=True)
             if context.scene.world:
-                luxcore_world = context.scene.world.luxcore
-                is_ground_black = luxcore_world.ground_enable and tuple(luxcore_world.ground_color) == (0, 0, 0)
+                superluxcore_world = context.scene.world.superluxcore
+                is_ground_black = superluxcore_world.ground_enable and tuple(superluxcore_world.ground_color) == (0, 0, 0)
 
-                if luxcore_world.light == "sky2" and not is_ground_black:
-                    col.operator("luxcore.world_set_ground_black", icon=icons.WORLD)
-                elif luxcore_world.light == "infinite" and not luxcore_world.sampleupperhemisphereonly:
-                    col.prop(luxcore_world, "sampleupperhemisphereonly",
+                if superluxcore_world.light == "sky2" and not is_ground_black:
+                    col.operator("superluxcore.world_set_ground_black", icon=icons.WORLD)
+                elif superluxcore_world.light == "infinite" and not superluxcore_world.sampleupperhemisphereonly:
+                    col.prop(superluxcore_world, "sampleupperhemisphereonly",
                              icon=icons.WORLD, toggle=True)
 
-    def export(self, exporter, depsgraph, props, luxcore_name):
-        prefix = "scene.materials." + luxcore_name + "."
+    def export(self, exporter, depsgraph, props, superluxcore_name):
+        prefix = "scene.materials." + superluxcore_name + "."
         definitions = {}
 
         # Invalidate node cache
         # TODO have one global properties object so this is no longer necessary
         exporter.node_cache.clear()
 
-        # We have to export volumes before the material definition because LuxCore properties
+        # We have to export volumes before the material definition because SuperLuxCore properties
         # do not support forward declarations (the volume has to be already defined when it is
         # referenced in the material)
         interior_volume_name = self.inputs["Interior Volume"].export(exporter, depsgraph, props)
         exterior_volume_name = self.inputs["Exterior Volume"].export(exporter, depsgraph, props)
 
         # Export the material
-        exported_name = self.inputs["Material"].export(exporter, depsgraph, props, luxcore_name)
+        exported_name = self.inputs["Material"].export(exporter, depsgraph, props, superluxcore_name)
 
         # Attach the volumes
         if interior_volume_name:
@@ -196,13 +196,13 @@ class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
         if exterior_volume_name:
             definitions["volume.exterior"] = exterior_volume_name
 
-        if exported_name is None or exported_name != luxcore_name:
+        if exported_name is None or exported_name != superluxcore_name:
             # Export failed, e.g. because no node is linked or it's not a material node
             # Define a black material that signals an unconnected material socket
-            self._convert_fallback(props, luxcore_name)
+            self._convert_fallback(props, superluxcore_name)
 
         if self.id != -1:
-            # LuxCore only assigns a random ID if the ID is not set at all
+            # SuperLuxCore only assigns a random ID if the ID is not set at all
             definitions["id"] = self.id
         definitions["shadowcatcher.enable"] = self.is_shadow_catcher
         definitions["shadowcatcher.onlyinfinitelights"] = self.shadow_catcher_only_infinite
@@ -218,18 +218,18 @@ class LuxCoreNodeMatOutput(LuxCoreNodeOutput, bpy.types.Node):
             return None
 
         try:
-            luxcore_name = utils.get_luxcore_name(node_tree)
+            superluxcore_name = utils.get_superluxcore_name(node_tree)
             active_output = get_active_output(node_tree)
-            active_output.export(exporter, depsgraph, props, luxcore_name)
-            return luxcore_name
+            active_output.export(exporter, depsgraph, props, superluxcore_name)
+            return superluxcore_name
         except Exception as error:
             msg = 'Node Tree "%s": %s' % (node_tree.name, error)
-            LuxCoreErrorLog.add_warning(msg)
+            SuperLuxCoreErrorLog.add_warning(msg)
             import traceback
             traceback.print_exc()
             return None
 
-    def _convert_fallback(self, props, luxcore_name):
-        prefix = "scene.materials." + luxcore_name + "."
-        props.Set(pyluxcore.Property(prefix + "type", "matte"))
-        props.Set(pyluxcore.Property(prefix + "kd", [0, 0, 0]))
+    def _convert_fallback(self, props, superluxcore_name):
+        prefix = "scene.materials." + superluxcore_name + "."
+        props.Set(pysuperluxcore.Property(prefix + "type", "matte"))
+        props.Set(pysuperluxcore.Property(prefix + "kd", [0, 0, 0]))

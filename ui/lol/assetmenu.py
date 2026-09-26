@@ -31,7 +31,7 @@ class OBJECT_MT_LOL_asset_menu(bpy.types.Menu):
 
     def draw(self, context):
         layout = self.layout
-        ui_props = context.scene.luxcoreOL.ui
+        ui_props = context.scene.superluxcoreOL.ui
 
         assets = context.scene['assets']
 

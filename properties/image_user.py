@@ -27,7 +27,7 @@ WRAP_NONE_DESC = (
 )
 
 
-class LuxCoreImageUser(PropertyGroup):
+class SuperLuxCoreImageUser(PropertyGroup):
     """
     We can't use Blender's ImageUser class, so we have to create our own.
     The ImageUser contains information about how an image is used by a datablock.

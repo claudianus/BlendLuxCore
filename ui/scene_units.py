@@ -2,26 +2,26 @@ from bl_ui.properties_scene import SceneButtonsPanel
 from bpy.types import Panel
 from .. import icons
 
-class LUXCORE_PT_unit_advanced(SceneButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_label = "Advanced LuxCore Settings"
+class SUPERLUXCORE_PT_unit_advanced(SceneButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_label = "Advanced SuperLuxCore Settings"
     bl_parent_id ="SCENE_PT_unit"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        return context.scene.render.engine == "SUPERLUXCORE"
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         if config.min_epsilon >= config.max_epsilon:
             layout.label(text="", icon=icons.WARNING)
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        config = scene.luxcore.config
+        config = scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False       

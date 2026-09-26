@@ -113,7 +113,7 @@ def draw_callback_3d_progress(self, context):
 def draw_callback_3d(self, context):
     """Draw snapped bbox while dragging"""
 
-    ui_props = context.scene.luxcoreOL.ui
+    ui_props = context.scene.superluxcoreOL.ui
 
     if ui_props.dragging and ui_props.asset_type == "MODEL":
         if ui_props.draw_snapped_bounds:
@@ -133,8 +133,8 @@ def draw_callback_3d(self, context):
 
 def draw_callback_2d_search(self, context):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
-    assetbar_props = scene.luxcoreOL.ui.assetbar
+    ui_props = scene.superluxcoreOL.ui
+    assetbar_props = scene.superluxcoreOL.ui.assetbar
     assets = utils.get_search_props(context)
 
     if ui_props.local:
@@ -143,11 +143,11 @@ def draw_callback_2d_search(self, context):
     if ui_props.free_only:
         assets = [asset for asset in assets if not asset["locked"]]
 
-    if scene.luxcoreOL.on_search:
+    if scene.superluxcoreOL.on_search:
         assets = [
             asset
             for asset in assets
-            if asset["category"] == scene.luxcoreOL.search_category
+            if asset["category"] == scene.superluxcoreOL.search_category
         ]
 
     region = self.region
@@ -389,7 +389,7 @@ def draw_callback_2d_search(self, context):
 def draw_tooltip(context, x, y, text="", author="", asset=None, gravatar=None):
     region = context.region
     scale = context.preferences.view.ui_scale
-    ui_props = context.scene.luxcoreOL.ui
+    ui_props = context.scene.superluxcoreOL.ui
     user_preferences = get_addon_preferences(context)
 
     ttipmargin = 2
@@ -611,8 +611,8 @@ def draw_tooltip(context, x, y, text="", author="", asset=None, gravatar=None):
 
 
 class LOLAssetBarOperator(Operator):
-    bl_idname = "view3d.luxcore_ol_asset_bar"
-    bl_label = "LuxCore Online Library Asset Bar UI"
+    bl_idname = "view3d.superluxcore_ol_asset_bar"
+    bl_label = "SuperLuxCore Online Library Asset Bar UI"
     bl_options = {"REGISTER", "UNDO", "INTERNAL"}
 
     do_search: BoolProperty(
@@ -646,7 +646,7 @@ class LOLAssetBarOperator(Operator):
 
     def invoke(self, context, event):
         scene = context.scene
-        ui_props = scene.luxcoreOL.ui
+        ui_props = scene.superluxcoreOL.ui
         assetbar_props = ui_props.assetbar
 
         user_preferences = get_addon_preferences(context)
@@ -664,8 +664,8 @@ class LOLAssetBarOperator(Operator):
         assetbar_props.resize_y_top = False
         assetbar_props.resize_y_down = False
 
-        scene.luxcoreOL.search_category = ""
-        scene.luxcoreOL.on_search = self.do_search
+        scene.superluxcoreOL.search_category = ""
+        scene.superluxcoreOL.on_search = self.do_search
 
         if not ui_props.ToC_loaded:
             if not utils.download_table_of_contents(context):
@@ -674,14 +674,14 @@ class LOLAssetBarOperator(Operator):
         assets = utils.get_search_props(context)
 
         if ui_props.asset_type == "MODEL":
-            if not scene.luxcoreOL.model.thumbnails_loaded:
+            if not scene.superluxcoreOL.model.thumbnails_loaded:
                 utils.load_previews(context, ui_props.asset_type)
-                scene.luxcoreOL.model.thumbnails_loaded = True
+                scene.superluxcoreOL.model.thumbnails_loaded = True
 
         elif ui_props.asset_type == "MATERIAL":
-            if not scene.luxcoreOL.material.thumbnails_loaded:
+            if not scene.superluxcoreOL.material.thumbnails_loaded:
                 utils.load_previews(context, ui_props.asset_type)
-                scene.luxcoreOL.material.thumbnails_loaded = True
+                scene.superluxcoreOL.material.thumbnails_loaded = True
 
         ui_props.scrolloffset = 0
 
@@ -691,13 +691,13 @@ class LOLAssetBarOperator(Operator):
         if ui_props.free_only:
             assets = [asset for asset in assets if not asset["locked"]]
 
-        if scene.luxcoreOL.on_search:
+        if scene.superluxcoreOL.on_search:
             assets = [
                 asset
                 for asset in assets
-                if asset["category"] == scene.luxcoreOL.search_category
+                if asset["category"] == scene.superluxcoreOL.search_category
             ]
-            scene.luxcoreOL.search_category = self.category
+            scene.superluxcoreOL.search_category = self.category
 
         if ui_props.assetbar_on:
             if not self.keep_running:
@@ -768,7 +768,7 @@ class LOLAssetBarOperator(Operator):
 
     def modal(self, context, event):
         scene = context.scene
-        ui_props = context.scene.luxcoreOL.ui
+        ui_props = context.scene.superluxcoreOL.ui
         assetbar_props = ui_props.assetbar
 
         user_preferences = get_addon_preferences(context)
@@ -787,11 +787,11 @@ class LOLAssetBarOperator(Operator):
         if ui_props.free_only:
             assets = [asset for asset in assets if not asset["locked"]]
 
-        if scene.luxcoreOL.on_search:
+        if scene.superluxcoreOL.on_search:
             assets = [
                 asset
                 for asset in assets
-                if asset["category"] == scene.luxcoreOL.search_category
+                if asset["category"] == scene.superluxcoreOL.search_category
             ]
 
         areas = []
@@ -860,7 +860,7 @@ class LOLAssetBarOperator(Operator):
                 # and mx > 0 and mx < r.width and my > 0:
                 context.window.cursor_set("NONE")
 
-                sprops = bpy.context.scene.luxcoreOL.model
+                sprops = bpy.context.scene.superluxcoreOL.model
                 if event.type == "WHEELUPMOUSE":
                     sprops.offset_rotation_amount += (
                         sprops.offset_rotation_step
@@ -1187,7 +1187,7 @@ class LOLAssetBarOperator(Operator):
             mx = event.mouse_x - region.x
             my = event.mouse_y - region.y
 
-            ui_props = context.scene.luxcoreOL.ui
+            ui_props = context.scene.superluxcoreOL.ui
             if event.value == "PRESS":
                 if (
                     mx - assetbar_props.x_offset - assetbar_props.start - 1
@@ -1481,7 +1481,7 @@ class LOLAssetBarOperator(Operator):
             region = self.region
             mx = event.mouse_x - region.x
             my = event.mouse_y - region.y
-            ui_props = context.scene.luxcoreOL.ui
+            ui_props = context.scene.superluxcoreOL.ui
             assetbar_props = ui_props.assetbar
 
             if ui_bgl.mouse_in_asset_bar(context, mx, my):
@@ -1506,8 +1506,8 @@ class LOLAssetBarOperator(Operator):
 class LOLAssetKillDownloadOperator(bpy.types.Operator):
     """Kill a download"""
 
-    bl_idname = "scene.luxcore_ol_download_kill"
-    bl_label = "LuxCore Online Library Kill Asset Download"
+    bl_idname = "scene.superluxcore_ol_download_kill"
+    bl_label = "SuperLuxCore Online Library Kill Asset Download"
     bl_options = {"REGISTER", "INTERNAL"}
 
     thread_index: IntProperty(

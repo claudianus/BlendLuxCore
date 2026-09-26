@@ -54,5 +54,5 @@ idx = node.inputs.find("Transmission Weight")   # works for disabled sockets
 node.inputs[idx].enabled = True                 # not node.inputs["..."]
 ```
 
-First hit in `LuxCoreNodeMatOpenPBR` lobe toggles (dev-tools
+First hit in `SuperLuxCoreNodeMatOpenPBR` lobe toggles (dev-tools
 e32_openpbr_node_test.py exercises this).

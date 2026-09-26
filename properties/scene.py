@@ -6,28 +6,28 @@ from . import (
 
 
 #def init():
-#    bpy.types.Scene.luxcore = PointerProperty(type=LuxCoreScene)
+#    bpy.types.Scene.superluxcore = PointerProperty(type=SuperLuxCoreScene)
 
 
-class LuxCoreScene(bpy.types.PropertyGroup):
-    config: PointerProperty(type=config.LuxCoreConfig)
-    denoiser: PointerProperty(type=denoiser.LuxCoreDenoiser)
-    halt: PointerProperty(type=halt.LuxCoreHaltConditions)
-    display: PointerProperty(type=display.LuxCoreDisplaySettings)
-    devices: PointerProperty(type=devices.LuxCoreDeviceSettings)
-    lightgroups: PointerProperty(type=lightgroups.LuxCoreLightGroupSettings)
-    viewport: PointerProperty(type=viewport.LuxCoreViewportSettings)
-    statistics: PointerProperty(type=statistics.LuxCoreRenderStatsCollection)
-    debug: PointerProperty(type=debug.LuxCoreDebugSettings)
+class SuperLuxCoreScene(bpy.types.PropertyGroup):
+    config: PointerProperty(type=config.SuperLuxCoreConfig)
+    denoiser: PointerProperty(type=denoiser.SuperLuxCoreDenoiser)
+    halt: PointerProperty(type=halt.SuperLuxCoreHaltConditions)
+    display: PointerProperty(type=display.SuperLuxCoreDisplaySettings)
+    devices: PointerProperty(type=devices.SuperLuxCoreDeviceSettings)
+    lightgroups: PointerProperty(type=lightgroups.SuperLuxCoreLightGroupSettings)
+    viewport: PointerProperty(type=viewport.SuperLuxCoreViewportSettings)
+    statistics: PointerProperty(type=statistics.SuperLuxCoreRenderStatsCollection)
+    debug: PointerProperty(type=debug.SuperLuxCoreDebugSettings)
 
     @classmethod
     def register(cls):
-        bpy.types.Scene.luxcore = PointerProperty(
-            name="LuxCore Scene Settings",
-            description="LuxCore scene settings",
+        bpy.types.Scene.superluxcore = PointerProperty(
+            name="SuperLuxCore Scene Settings",
+            description="SuperLuxCore scene settings",
             type=cls,
         )
 
     @classmethod
     def unregister(cls):
-        del bpy.types.Scene.luxcore
+        del bpy.types.Scene.superluxcore

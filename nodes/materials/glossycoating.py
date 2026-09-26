@@ -1,6 +1,6 @@
 import bpy
 from bpy.props import BoolProperty, EnumProperty
-from ..base import LuxCoreNodeMaterial
+from ..base import SuperLuxCoreNodeMaterial
 from ...utils import node as utils_node
 from .glossytranslucent import (IOR_DESCRIPTION,
                               DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION)
@@ -8,7 +8,7 @@ from ... import icons
 from ...utils.node import Roughness
 
 
-class LuxCoreNodeMatGlossyCoating(LuxCoreNodeMaterial, bpy.types.Node):
+class SuperLuxCoreNodeMatGlossyCoating(SuperLuxCoreNodeMaterial, bpy.types.Node):
     bl_label = "Glossy Coating Material"
     bl_width_default = 160
 
@@ -36,17 +36,17 @@ class LuxCoreNodeMatGlossyCoating(LuxCoreNodeMaterial, bpy.types.Node):
                                update=utils_node.force_viewport_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketMaterial", "Base Material")
-        self.add_input("LuxCoreSocketColor", "Specular Color", [0.05] * 3)
-        self.add_input("LuxCoreSocketIOR", "IOR", 1.5, enabled=False)
-        self.add_input("LuxCoreSocketColor", "Absorption Color", [0] * 3)
-        self.add_input("LuxCoreSocketFloatPositive", "Absorption Depth (nm)", 0)
+        self.add_input("SuperLuxCoreSocketMaterial", "Base Material")
+        self.add_input("SuperLuxCoreSocketColor", "Specular Color", [0.05] * 3)
+        self.add_input("SuperLuxCoreSocketIOR", "IOR", 1.5, enabled=False)
+        self.add_input("SuperLuxCoreSocketColor", "Absorption Color", [0] * 3)
+        self.add_input("SuperLuxCoreSocketFloatPositive", "Absorption Depth (nm)", 0)
         Roughness.init(self, 0.05)
         self.add_common_inputs()
         # glossycoating does not support the transparency property
         self.inputs["Opacity"].enabled = False
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "distribution")
@@ -57,7 +57,7 @@ class LuxCoreNodeMatGlossyCoating(LuxCoreNodeMaterial, bpy.types.Node):
         if not self.inputs["Base Material"].is_linked:
             layout.label(text="No base material!", icon=icons.WARNING)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         base = utils_node.export_material_input(self.inputs["Base Material"], exporter, depsgraph, props)
 
         definitions = {
@@ -77,4 +77,4 @@ class LuxCoreNodeMatGlossyCoating(LuxCoreNodeMaterial, bpy.types.Node):
 
         Roughness.export(self, exporter, depsgraph, props, definitions)
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

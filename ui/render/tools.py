@@ -3,18 +3,18 @@ from bpy.types import Panel
 from ... import icons
 from ...icons import icon_manager
 
-class LUXCORE_RENDER_PT_tools(Panel, RenderButtonsPanel):
-    bl_label = "LuxCore Tools"
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_tools(Panel, RenderButtonsPanel):
+    bl_label = "SuperLuxCore Tools"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 999
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw(self, context):
@@ -25,57 +25,57 @@ class LUXCORE_RENDER_PT_tools(Panel, RenderButtonsPanel):
         # Buttons for Network Render and Wiki
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
         col = flow.column(align=True)
-        col.operator("luxcore.start_pyluxcoretools")
+        col.operator("superluxcore.start_pysuperluxcoretools")
         col = flow.column(align=True)
-        op = col.operator("luxcore.open_website", icon=icons.URL, text="Wiki")
+        op = col.operator("superluxcore.open_website", icon=icons.URL, text="Wiki")
         op.url = "https://wiki.luxcorerender.org/BlendLuxCore_Network_Rendering"
 
-        layout.operator("luxcore.convert_to_v23")
+        layout.operator("superluxcore.convert_to_v23")
     
     def draw_header(self, context):
         layout = self.layout
         layout.label(text="", icon_value=icon_manager.get_icon_id("logotype"))
 
-class LUXCORE_RENDER_PT_filesaver(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_label = "LuxCore Filesaver"
+class SUPERLUXCORE_RENDER_PT_filesaver(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_label = "SuperLuxCore Filesaver"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "LUXCORE_RENDER_PT_tools"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         layout.prop(config, "use_filesaver", text="")
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
 
         layout.enabled = config.use_filesaver
-        layout.label(text="Only write LuxCore scene to disk", icon=icons.INFO)
+        layout.label(text="Only write SuperLuxCore scene to disk", icon=icons.INFO)
 
         col = layout.column(align=True)
         col.prop(config, "filesaver_format")
         col.prop(config, "filesaver_path")
 
 
-class LUXCORE_RENDER_PT_external(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_external(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "External Process Render"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "LUXCORE_RENDER_PT_tools"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         layout.prop(config, "external_process", text="")
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -87,7 +87,7 @@ class LUXCORE_RENDER_PT_external(RenderButtonsPanel, Panel):
         layout.label(text="memory is released while rendering.")
         layout.label(text="Result lands in the render output path.")
 
-        if not context.scene.luxcore.halt.enable:
+        if not context.scene.superluxcore.halt.enable:
             layout.label(
                 text="No halt condition set — render runs until the",
                 icon=icons.ERROR,
@@ -95,20 +95,20 @@ class LUXCORE_RENDER_PT_external(RenderButtonsPanel, Panel):
             layout.label(text="process is killed manually.")
 
 
-class LUXCORE_RENDER_PT_geospill(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_geospill(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Out-of-Core Spilling"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "LUXCORE_RENDER_PT_tools"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         layout.prop(config, "spill_geometry", text="")
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -122,20 +122,20 @@ class LUXCORE_RENDER_PT_geospill(RenderButtonsPanel, Panel):
         layout.prop(config, "spill_images")
 
 
-class LUXCORE_RENDER_PT_autoproxy(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_autoproxy(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Automatic Mesh Proxy"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "LUXCORE_RENDER_PT_tools"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         layout.prop(config, "proxy_auto", text="")
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False

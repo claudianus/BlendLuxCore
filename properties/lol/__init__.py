@@ -1,15 +1,15 @@
 from ... import utils
-from . import LuxCoreOLScene
+from . import SuperLuxCoreOLScene
 
 classes = (
-    LuxCoreOLScene.LuxCoreOnlineLibraryAssetBar,
-    LuxCoreOLScene.LuxCoreOnlineLibraryUI,
-    LuxCoreOLScene.LuxCoreOnlineLibraryModel,
-    LuxCoreOLScene.LuxCoreOnlineLibraryMaterial,
-    LuxCoreOLScene.LuxCoreOnlineLibraryScene,
-    LuxCoreOLScene.LuxCoreOnlineLibraryAsset,
-    LuxCoreOLScene.LuxCoreOnlineLibraryUpload,
-    LuxCoreOLScene.LuxCoreOnlineLibrary,
+    SuperLuxCoreOLScene.SuperLuxCoreOnlineLibraryAssetBar,
+    SuperLuxCoreOLScene.SuperLuxCoreOnlineLibraryUI,
+    SuperLuxCoreOLScene.SuperLuxCoreOnlineLibraryModel,
+    SuperLuxCoreOLScene.SuperLuxCoreOnlineLibraryMaterial,
+    SuperLuxCoreOLScene.SuperLuxCoreOnlineLibraryScene,
+    SuperLuxCoreOLScene.SuperLuxCoreOnlineLibraryAsset,
+    SuperLuxCoreOLScene.SuperLuxCoreOnlineLibraryUpload,
+    SuperLuxCoreOLScene.SuperLuxCoreOnlineLibrary,
 )
 
 def register():

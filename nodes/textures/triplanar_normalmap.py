@@ -1,12 +1,12 @@
 import bpy
 from bpy.props import BoolProperty, FloatProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ... import utils
 from ...utils import node as utils_node
 from .imagemap import NORMAL_SCALE_DESC
 
 
-class LuxCoreNodeTexTriplanarNormalmap(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexTriplanarNormalmap(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Triplanar Normal Mapping"
     bl_width_default = 165
 
@@ -32,20 +32,20 @@ class LuxCoreNodeTexTriplanarNormalmap(LuxCoreNodeTexture, bpy.types.Node):
                          description=NORMAL_SCALE_DESC)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Color", [0.5, 0.5, 1])
-        self.add_input("LuxCoreSocketColor", "Color Y", [0.5, 0.5, 1])
+        self.add_input("SuperLuxCoreSocketColor", "Color", [0.5, 0.5, 1])
+        self.add_input("SuperLuxCoreSocketColor", "Color Y", [0.5, 0.5, 1])
         self.inputs["Color Y"].enabled = False
-        self.add_input("LuxCoreSocketColor", "Color Z", [0.5, 0.5, 1])
+        self.add_input("SuperLuxCoreSocketColor", "Color Z", [0.5, 0.5, 1])
         self.inputs["Color Z"].enabled = False
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
 
-        self.outputs.new("LuxCoreSocketBump", "Bump")
+        self.outputs.new("SuperLuxCoreSocketBump", "Bump")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "multiple_textures")
         layout.prop(self, "scale")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.multiple_textures:
             tex1 = self.inputs["Color X"].export(exporter, depsgraph, props)
             tex2 = self.inputs["Color Y"].export(exporter, depsgraph, props)
@@ -64,13 +64,13 @@ class LuxCoreNodeTexTriplanarNormalmap(LuxCoreNodeTexture, bpy.types.Node):
         if not utils_node.get_link(self.inputs["3D Mapping"]):
             definitions["mapping.type"] = "localmapping3d"
 
-        luxcore_name = self.create_props(props, definitions, luxcore_name)
+        superluxcore_name = self.create_props(props, definitions, superluxcore_name)
         
-        tex_name = luxcore_name + "_normalmap"
+        tex_name = superluxcore_name + "_normalmap"
         helper_prefix = "scene.textures." + tex_name + "."
         helper_defs = {
             "type": "normalmap",
-            "texture": luxcore_name,
+            "texture": superluxcore_name,
             "scale": self.scale,
         }
         props.Set(utils.luxutils.create_props(helper_prefix, helper_defs))

@@ -1,14 +1,14 @@
 # import collections
 
 
-class LuxCoreLog:
+class SuperLuxCoreLog:
     _listeners = []
 
     @staticmethod
     def add(msg):
         print(msg)
 
-        for listener in LuxCoreLog._listeners:
+        for listener in SuperLuxCoreLog._listeners:
             listener(msg)
 
     @staticmethod

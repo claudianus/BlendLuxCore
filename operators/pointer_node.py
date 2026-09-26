@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import StringProperty, IntProperty
-from .utils import poll_node, LUXCORE_OT_set_node_tree, LUXCORE_MT_node_tree, show_nodetree
+from .utils import poll_node, SUPERLUXCORE_OT_set_node_tree, SUPERLUXCORE_MT_node_tree, show_nodetree
 
 
-class LUXCORE_OT_pointer_unlink_node_tree(bpy.types.Operator):
-    bl_idname = "luxcore.pointer_unlink_node_tree"
+class SUPERLUXCORE_OT_pointer_unlink_node_tree(bpy.types.Operator):
+    bl_idname = "superluxcore.pointer_unlink_node_tree"
     bl_label = "Unlink"
     bl_description = "Unlink this node tree"
     bl_options = {"UNDO"}
@@ -18,10 +18,10 @@ class LUXCORE_OT_pointer_unlink_node_tree(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_pointer_set_node_tree(bpy.types.Operator, LUXCORE_OT_set_node_tree):
+class SUPERLUXCORE_OT_pointer_set_node_tree(bpy.types.Operator, SUPERLUXCORE_OT_set_node_tree):
     """ Dropdown operator pointer node version """
 
-    bl_idname = "luxcore.pointer_set_node_tree"
+    bl_idname = "superluxcore.pointer_set_node_tree"
 
     node_tree_index: IntProperty()
 
@@ -36,10 +36,10 @@ class LUXCORE_OT_pointer_set_node_tree(bpy.types.Operator, LUXCORE_OT_set_node_t
 
 
 # This is a menu, not an operator
-class LUXCORE_MT_pointer_select_node_tree(bpy.types.Menu, LUXCORE_MT_node_tree):
+class SUPERLUXCORE_MT_pointer_select_node_tree(bpy.types.Menu, SUPERLUXCORE_MT_node_tree):
     """ Dropdown menu pointer version """
 
-    bl_idname = "LUXCORE_MT_pointer_select_node_tree"
+    bl_idname = "SUPERLUXCORE_MT_pointer_select_node_tree"
     bl_description = "Select a node tree"
 
     def draw(self, context):
@@ -47,12 +47,12 @@ class LUXCORE_MT_pointer_select_node_tree(bpy.types.Menu, LUXCORE_MT_node_tree):
             # this shouldn't happen, because draw is only called when the menu is open
             return
         node = context.node
-        assert node.bl_idname == "LuxCoreNodeTreePointer"
-        self.custom_draw(node.filter, "luxcore.pointer_set_node_tree")
+        assert node.bl_idname == "SuperLuxCoreNodeTreePointer"
+        self.custom_draw(node.filter, "superluxcore.pointer_set_node_tree")
 
 
-class LUXCORE_OT_pointer_show_node_tree(bpy.types.Operator):
-    bl_idname = "luxcore.pointer_show_node_tree"
+class SUPERLUXCORE_OT_pointer_show_node_tree(bpy.types.Operator):
+    bl_idname = "superluxcore.pointer_show_node_tree"
     bl_label = "Show"
     bl_description = "Switch to the node tree"
 

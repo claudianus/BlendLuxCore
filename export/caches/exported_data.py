@@ -29,7 +29,7 @@ class ExportedMesh:
 
 
 class ExportedData:
-    def delete(self, luxcore_scene):
+    def delete(self, superluxcore_scene):
         raise NotImplementedError()
 
 
@@ -98,16 +98,16 @@ class ExportedObject(ExportedData):
 
         return utils.luxutils.create_props(prefix, definitions)
 
-    def delete(self, luxcore_scene):
+    def delete(self, superluxcore_scene):
         for part in self.parts:
             for i in range(self.duplicate_count):
-                luxcore_scene.DeleteObject(part.lux_obj + "dupli" + str(i))
-            luxcore_scene.DeleteObject(part.lux_obj)
+                superluxcore_scene.DeleteObject(part.lux_obj + "dupli" + str(i))
+            superluxcore_scene.DeleteObject(part.lux_obj)
 
 
 class ExportedLight(ExportedData):
     def __init__(self, lux_light_name):
         self.lux_light_name = lux_light_name
 
-    def delete(self, luxcore_scene):
-        luxcore_scene.DeleteLight(self.lux_light_name)
+    def delete(self, superluxcore_scene):
+        superluxcore_scene.DeleteLight(self.lux_light_name)

@@ -3,7 +3,7 @@ import math
 from array import array
 import mathutils
 import numpy as np
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from .caches.exported_data import ExportedObject, ExportedLight
 from .caches.object_cache import _instance_key, _dupli_motion_enabled
@@ -15,9 +15,9 @@ from .hair import _read_curves_points
 # TODO fix motion blur of area lights, they get a wrong transformation
 
 def convert(context, engine, scene, depsgraph, exported_objects,
-            luxcore_scene=None, instances=None):
+            superluxcore_scene=None, instances=None):
     assert scene.camera
-    motion_blur = scene.camera.data.luxcore.motion_blur
+    motion_blur = scene.camera.data.superluxcore.motion_blur
     assert motion_blur.enable and (motion_blur.object_blur or motion_blur.camera_blur)
 
     steps = motion_blur.steps
@@ -33,11 +33,11 @@ def convert(context, engine, scene, depsgraph, exported_objects,
     # Per-step deforming-mesh vertex samples for vertex motion blur (E9):
     # {mesh_key: {"mesh": ExportedMesh, "data": [arr|None]*steps,
     #             "ok": bool}}
-    vert_steps = {} if luxcore_scene is not None else None
+    vert_steps = {} if superluxcore_scene is not None else None
     # Per-step strand control-point samples for hair/curve motion blur
     # (E9): {strand_mesh_name: {"rec": strand_rec, "data": {...},
     # "ok": bool}}
-    strand_steps = {} if luxcore_scene is not None else None
+    strand_steps = {} if superluxcore_scene is not None else None
     matrices = _get_matrices(context, engine, scene, steps, frame_offsets,
                              depsgraph, exported_objects, instances,
                              dupli_steps, vert_steps, strand_steps)
@@ -48,10 +48,10 @@ def convert(context, engine, scene, depsgraph, exported_objects,
     _build_pointcloud_motion(exported_objects, matrices, frame_offsets, steps)
 
     if vert_steps is not None:
-        _build_vertex_motion(vert_steps, frame_offsets, luxcore_scene)
+        _build_vertex_motion(vert_steps, frame_offsets, superluxcore_scene)
 
     if strand_steps is not None:
-        _build_strand_motion(strand_steps, frame_offsets, luxcore_scene)
+        _build_strand_motion(strand_steps, frame_offsets, superluxcore_scene)
 
     # Find and delete entries of non-moving objects (where all matrices are equal)
     for prefix, matrix_steps in list(matrices.items()):
@@ -62,7 +62,7 @@ def convert(context, engine, scene, depsgraph, exported_objects,
             del matrices[prefix]
 
     # Export the properties for moving objects
-    props = pyluxcore.Properties()
+    props = pysuperluxcore.Properties()
 
     for prefix, matrix_steps in matrices.items():
         for step in range(steps):
@@ -89,7 +89,7 @@ def _calc_frame_offsets(shutter, steps):
 def _get_matrices(context, engine, scene, steps, frame_offsets, depsgraph,
                   exported_objects, instances=None, dupli_steps=None,
                   vert_steps=None, strand_steps=None):
-    motion_blur = scene.camera.data.luxcore.motion_blur
+    motion_blur = scene.camera.data.superluxcore.motion_blur
     matrices = {}  # {prefix: [matrix1, matrix2, ...]}
 
     frame_center = scene.frame_current
@@ -154,7 +154,7 @@ def _append_object_matrices(depsgraph, exported_objects, matrices, step,
         # The first dupli instance exists as a real scene object and is
         # covered by the object-level motion props below — extend the gate
         # with the A5 rule so flagging the instanced object blurs it too.
-        if not (obj.luxcore.enable_motion_blur or dupli_mb):
+        if not (obj.superluxcore.enable_motion_blur or dupli_mb):
             continue
 
         obj_key = utils.make_key_from_instance(dg_obj_instance)
@@ -313,7 +313,7 @@ def _build_dupli_motion(instances, dupli_steps, frame_offsets, steps):
                     duplis.motion_missing += 1
                 else:
                     duplis.motion.extend(
-                        pyluxcore.BlenderMatrix4x4ToList(matrix)
+                        pysuperluxcore.BlenderMatrix4x4ToList(matrix)
                     )
                 duplis.motion_times.append(frame_offsets[s])
         total_missing += duplis.motion_missing
@@ -394,7 +394,7 @@ def _sample_loop_points(eval_obj, depsgraph, vert_sig):
             object_eval.to_mesh_clear()
 
 
-def _build_vertex_motion(vert_steps, frame_offsets, luxcore_scene):
+def _build_vertex_motion(vert_steps, frame_offsets, superluxcore_scene):
     """Attach the collected per-step vertex buffers to every base shape
     of each sampled mesh via Scene.SetMeshVertexMotion. The shutter
     times are the same frame_offsets used by the transform motion props,
@@ -416,10 +416,10 @@ def _build_vertex_motion(vert_steps, frame_offsets, luxcore_scene):
             # matches the shape's vertex count.
             uniq = rec["mesh"].submesh_maps.get(shape_name)
             if uniq is None:
-                luxcore_scene.SetMeshVertexMotion(shape_name, times, steps_data)
+                superluxcore_scene.SetMeshVertexMotion(shape_name, times, steps_data)
             else:
                 sub_steps = [d[uniq] for d in steps_data]
-                luxcore_scene.SetMeshVertexMotion(shape_name, times, sub_steps)
+                superluxcore_scene.SetMeshVertexMotion(shape_name, times, sub_steps)
 
 
 def _collect_strand_step(strand_steps, exported_thing, eval_obj, depsgraph, step):
@@ -427,7 +427,7 @@ def _collect_strand_step(strand_steps, exported_thing, eval_obj, depsgraph, step
     control points at the current shutter step. The sample must match
     the raw strand layout recorded at export time (per-strand point
     counts for hair curves, particle range/counts for particle hair);
-    LuxCore re-filters the raw points through the stored source map, so
+    SuperLuxCore re-filters the raw points through the stored source map, so
     this returns raw (unfiltered) positions in the same space the base
     export stored them.
     """
@@ -507,9 +507,9 @@ def _sample_strand_points(rec, eval_obj, depsgraph):
         return None
 
 
-def _build_strand_motion(strand_steps, frame_offsets, luxcore_scene):
+def _build_strand_motion(strand_steps, frame_offsets, superluxcore_scene):
     """Attach the collected per-step strand control-point buffers to
-    each strand mesh via Scene.SetStrandsVertexMotion. LuxCore
+    each strand mesh via Scene.SetStrandsVertexMotion. SuperLuxCore
     re-tessellates every step through the strand motion recipe stored
     at definition time, so the exported strand layout only needs to
     match in raw input space. Strands that failed a layout check or
@@ -524,4 +524,4 @@ def _build_strand_motion(strand_steps, frame_offsets, luxcore_scene):
         if all(np.array_equal(s, steps_data[0]) for s in steps_data[1:]):
             # Strands do not deform — no point series needed
             continue
-        luxcore_scene.SetStrandsVertexMotion(mesh_name, times, steps_data)
+        superluxcore_scene.SetStrandsVertexMotion(mesh_name, times, steps_data)

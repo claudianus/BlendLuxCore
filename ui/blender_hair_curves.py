@@ -3,9 +3,9 @@ from bpy.types import Panel
 from .. import icons
 from ..icons import icon_manager
 
-class LUXCORE_DATA_PT_curve_hair(DataButtonsPanel, Panel):
-    bl_label = "LuxCore Hair Settings"
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_DATA_PT_curve_hair(DataButtonsPanel, Panel):
+    bl_label = "SuperLuxCore Hair Settings"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_order = 10
 
     def draw_header(self, context):
@@ -16,7 +16,7 @@ class LUXCORE_DATA_PT_curve_hair(DataButtonsPanel, Panel):
         layout = self.layout
 
         obj = context.object
-        settings = obj.luxcore.hair
+        settings = obj.superluxcore.hair
 
         layout.use_property_split = True
         layout.use_property_decorate = False

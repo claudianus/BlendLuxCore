@@ -1,6 +1,6 @@
 import bpy
 from bpy.props import EnumProperty, FloatProperty, BoolProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ... import utils
 from ... import icons
 from ...utils import node as utils_node
@@ -44,7 +44,7 @@ INPUT_SETTINGS = {
 }
 
 
-class LuxCoreNodeTexMath(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexMath(SuperLuxCoreNodeTexture, bpy.types.Node):
     """Math node with several math operations"""
     bl_label = "Math"
 
@@ -86,12 +86,12 @@ class LuxCoreNodeTexMath(LuxCoreNodeTexture, bpy.types.Node):
                                 description="Limit the output value to 0..1 range")
 
     def init(self, context):
-        self.add_input("LuxCoreSocketFloatUnbounded", "Value 1", 1)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Value 2", 1)
-        self.add_input("LuxCoreSocketFloat0to1", "Fac", 0.5)  # for mix mode
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Value 1", 1)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Value 2", 1)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Fac", 0.5)  # for mix mode
         self.inputs["Fac"].enabled = False
 
-        self.outputs.new("LuxCoreSocketFloatUnbounded", "Value")
+        self.outputs.new("SuperLuxCoreSocketFloatUnbounded", "Value")
 
     def draw_label(self):
         # Use the name of the selected operation as displayed node name
@@ -112,10 +112,10 @@ class LuxCoreNodeTexMath(LuxCoreNodeTexture, bpy.types.Node):
             if self.mode_clamp_min > self.mode_clamp_max:
                 layout.label(text="Min should be smaller than max!", icon=icons.WARNING)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.mode == 'sqrt':
             # Square-root added as explicit option rather than the non-obvious power-0.5 combo.
-            # Export as an alias to power because there is no dedicated implementation in LuxCore (yet).
+            # Export as an alias to power because there is no dedicated implementation in SuperLuxCore (yet).
             definitions = {
                 "type": "power",
             }
@@ -150,15 +150,15 @@ class LuxCoreNodeTexMath(LuxCoreNodeTexture, bpy.types.Node):
             definitions["texture1"] = self.inputs[0].export(exporter, depsgraph, props)
             definitions["texture2"] = self.inputs[1].export(exporter, depsgraph, props)
 
-        luxcore_name = self.create_props(props, definitions, luxcore_name)
+        superluxcore_name = self.create_props(props, definitions, superluxcore_name)
 
         if self.clamp_output and self.mode != "clamp":
             # Implicitly create a clamp texture with unique name
-            tex_name = luxcore_name + "_clamp"
+            tex_name = superluxcore_name + "_clamp"
             helper_prefix = "scene.textures." + tex_name + "."
             helper_defs = {
                 "type": "clamp",
-                "texture": luxcore_name,
+                "texture": superluxcore_name,
                 "min": 0,
                 "max": 1,
             }
@@ -167,4 +167,4 @@ class LuxCoreNodeTexMath(LuxCoreNodeTexture, bpy.types.Node):
             # The helper texture gets linked in front of this node
             return tex_name
         else:
-            return luxcore_name
+            return superluxcore_name

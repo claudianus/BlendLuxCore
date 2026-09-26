@@ -3,7 +3,7 @@ Viewport edit->pixel latency benchmark, run inside real Blender:
 
     Blender -b --python dev-tools/viewport_latency_bench.py
 
-Measures the end-to-end latency of the orbit path with real pyluxcore:
+Measures the end-to-end latency of the orbit path with real pysuperluxcore:
   camera props edit -> SessionWorker._do_edit -> render-thread frame
   boundary -> film reset -> first post-reset pass completes.
 
@@ -16,11 +16,11 @@ import sys
 import time
 
 import bpy
-import pyluxcore
+import pysuperluxcore
 
-import bl_ext.user_default.blendluxcore as blendluxcore  # noqa: F401
-from bl_ext.user_default.blendluxcore import export as blc_export
-from bl_ext.user_default.blendluxcore.engine.session_worker import (
+import bl_ext.user_default.superluxcore as superluxcore  # noqa: F401
+from bl_ext.user_default.superluxcore import export as blc_export
+from bl_ext.user_default.superluxcore.engine.session_worker import (
     SessionWorker,
 )
 
@@ -61,27 +61,27 @@ def main():
     if result is None:
         print("FAIL export_scene returned None")
         sys.exit(1)
-    luxcore_scene, config_props = result
+    superluxcore_scene, config_props = result
     print("base engine:", config_props.Get("renderengine.type").GetString())
 
     engine_type = sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else "RTPATHOCL"
-    config_props.Set(pyluxcore.Property("renderengine.type", [engine_type]))
+    config_props.Set(pysuperluxcore.Property("renderengine.type", [engine_type]))
     if engine_type == "RTPATHOCL":
-        config_props.Set(pyluxcore.Property("sampler.type", ["TILEPATHSAMPLER"]))
+        config_props.Set(pysuperluxcore.Property("sampler.type", ["TILEPATHSAMPLER"]))
         # Match the viewport path (export/config.py): coarse preview so
         # the first pass after a reset lands fast.
-        config_props.Set(pyluxcore.Property(
+        config_props.Set(pysuperluxcore.Property(
             "rtpath.resolutionreduction.preview", [8]))
-        config_props.Set(pyluxcore.Property(
+        config_props.Set(pysuperluxcore.Property(
             "rtpath.resolutionreduction.preview.step", [2]))
-        config_props.Set(pyluxcore.Property(
+        config_props.Set(pysuperluxcore.Property(
             "rtpath.resolutionreduction",
             [int(__import__("sys").argv[-1]) if __import__("sys").argv[-1].isdigit() else 4]))
     print("bench engine:", engine_type)
 
     engine = FakeEngine()
     worker = SessionWorker(engine)
-    worker.submit_start(luxcore_scene, config_props)
+    worker.submit_start(superluxcore_scene, config_props)
 
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
@@ -118,8 +118,8 @@ def main():
     N = 30
     fails = 0
     for i in range(N):
-        props = pyluxcore.Properties()
-        props.Set(pyluxcore.Property(
+        props = pysuperluxcore.Properties()
+        props.Set(pysuperluxcore.Property(
             "scene.camera.screenwindow",
             [-1.0, 1.0, -0.5 - 1e-4 * i, 0.5 + 1e-4 * i],
         ))

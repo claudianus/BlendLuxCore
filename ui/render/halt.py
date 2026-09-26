@@ -27,8 +27,8 @@ def draw(layout, context, halt):
     col.active = halt.use_samples
     col.prop(halt, "samples")
 
-    config = context.scene.luxcore.config
-    denoiser = context.scene.luxcore.denoiser
+    config = context.scene.superluxcore.config
+    denoiser = context.scene.superluxcore.denoiser
 
     using_hybridbackforward = utils.using_hybridbackforward(context.scene)
     using_only_lighttracing = config.using_only_lighttracing()
@@ -79,28 +79,28 @@ def draw(layout, context, halt):
         col.prop(halt, "noise_thresh_step")
 
 
-class LUXCORE_RENDER_PT_halt_conditions(Panel, RenderButtonsPanel):
+class SUPERLUXCORE_RENDER_PT_halt_conditions(Panel, RenderButtonsPanel):
     """
     These are the global halt conditions shown in the render settings
     """
 
     bl_label = "Halt Conditions"
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 70
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         layout = self.layout
         layout.label(text="", icon_value=icon_manager.get_icon_id("logotype"))
-        halt = context.scene.luxcore.halt
+        halt = context.scene.superluxcore.halt
         col = layout.column(align=True)
         col.prop(halt, "enable", text="")
 
@@ -109,12 +109,12 @@ class LUXCORE_RENDER_PT_halt_conditions(Panel, RenderButtonsPanel):
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        config = context.scene.luxcore.config
-        halt = context.scene.luxcore.halt
+        config = context.scene.superluxcore.config
+        halt = context.scene.superluxcore.halt
         draw(layout, context, halt)
 
         layers = context.scene.view_layers
-        overriding_layers = [layer for layer in layers if layer.use and layer.luxcore.halt.enable]
+        overriding_layers = [layer for layer in layers if layer.use and layer.superluxcore.halt.enable]
 
         if overriding_layers:
             layout.separator()
@@ -123,7 +123,7 @@ class LUXCORE_RENDER_PT_halt_conditions(Panel, RenderButtonsPanel):
             row = col.row()
             split = row.split(factor=0.8)
             split.label(text="View Layers Overriding Halt Conditions:")
-            op = split.operator("luxcore.switch_space_data_context",
+            op = split.operator("superluxcore.switch_space_data_context",
                                 text="Show", icon="RENDERLAYERS")
             op.target = "VIEW_LAYER"
 
@@ -131,7 +131,7 @@ class LUXCORE_RENDER_PT_halt_conditions(Panel, RenderButtonsPanel):
             using_only_lighttracing = config.using_only_lighttracing()
 
             for layer in overriding_layers:
-                halt = layer.luxcore.halt
+                halt = layer.superluxcore.halt
                 conditions = []
 
                 if halt.use_time:
@@ -152,7 +152,7 @@ class LUXCORE_RENDER_PT_halt_conditions(Panel, RenderButtonsPanel):
                     col.label(text=text, icon=icons.ERROR)
 
 
-class LUXCORE_RENDERLAYER_PT_halt_conditions(Panel, ViewLayerButtonsPanel):
+class SUPERLUXCORE_RENDERLAYER_PT_halt_conditions(Panel, ViewLayerButtonsPanel):
     """
     These are the per-renderlayer halt condition settings,
     they can override the global settings and are shown in the renderlayer settings
@@ -160,19 +160,19 @@ class LUXCORE_RENDERLAYER_PT_halt_conditions(Panel, ViewLayerButtonsPanel):
 
     bl_label = "Override Halt Conditions"
     bl_order = 40
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         vl = context.view_layer
-        halt = vl.luxcore.halt
+        halt = vl.superluxcore.halt
         layout = self.layout
         layout.label(text="", icon_value=icon_manager.get_icon_id("logotype"))
         col = layout.column(align=True)
@@ -180,5 +180,5 @@ class LUXCORE_RENDERLAYER_PT_halt_conditions(Panel, ViewLayerButtonsPanel):
 
     def draw(self, context):
         vl = context.view_layer
-        halt = vl.luxcore.halt
+        halt = vl.superluxcore.halt
         draw(self.layout, context, halt)

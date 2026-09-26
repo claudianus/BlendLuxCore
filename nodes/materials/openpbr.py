@@ -1,12 +1,12 @@
 import bpy
 from bpy.props import BoolProperty
-from ..base import LuxCoreNodeMaterial
+from ..base import SuperLuxCoreNodeMaterial
 from .glass import THIN_FILM_DESCRIPTION
 from ... import utils
 from ...utils.node import ThinFilmCoating
 
 
-class LuxCoreNodeMatOpenPBR(LuxCoreNodeMaterial, bpy.types.Node):
+class SuperLuxCoreNodeMatOpenPBR(SuperLuxCoreNodeMaterial, bpy.types.Node):
     """ASWF OpenPBR Surface v1.1 material.
 
     Lobe stack (top to bottom): fuzz -> coat -> specular/diffuse/metal ->
@@ -65,48 +65,48 @@ class LuxCoreNodeMatOpenPBR(LuxCoreNodeMaterial, bpy.types.Node):
 
     def init(self, context):
         # Base
-        self.add_input("LuxCoreSocketColor", "Base Color", [0.8] * 3)
-        self.add_input("LuxCoreSocketFloat0to1", "Base Weight", 1)
-        self.add_input("LuxCoreSocketFloat0to1", "Base Metalness", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "Diffuse Roughness", 0)
+        self.add_input("SuperLuxCoreSocketColor", "Base Color", [0.8] * 3)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Base Weight", 1)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Base Metalness", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Diffuse Roughness", 0)
         # Specular
-        self.add_input("LuxCoreSocketFloat0to1", "Specular Weight", 1)
-        self.add_input("LuxCoreSocketColor", "Specular Color", [1.0] * 3)
-        self.add_input("LuxCoreSocketFloat0to1", "Specular Roughness", 0.3)
-        self.add_input("LuxCoreSocketFloat0to1", "Specular Anisotropy", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "Specular Rotation", 0)
-        self.add_input("LuxCoreSocketIOR", "Specular IOR", 1.5)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Specular Weight", 1)
+        self.add_input("SuperLuxCoreSocketColor", "Specular Color", [1.0] * 3)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Specular Roughness", 0.3)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Specular Anisotropy", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Specular Rotation", 0)
+        self.add_input("SuperLuxCoreSocketIOR", "Specular IOR", 1.5)
         # Transmission
-        self.add_input("LuxCoreSocketFloat0to1", "Transmission Weight", 0, enabled=False)
-        self.add_input("LuxCoreSocketColor", "Transmission Color", [1.0] * 3, enabled=False)
-        self.add_input("LuxCoreSocketFloatPositive", "Transmission Depth", 0, enabled=False)
-        self.add_input("LuxCoreSocketColor", "Transmission Scatter", [0.0] * 3, enabled=False)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Transmission Scatter Anisotropy", 0, enabled=False)
-        self.add_input("LuxCoreSocketFloat0to1", "Dispersion", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Transmission Weight", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketColor", "Transmission Color", [1.0] * 3, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloatPositive", "Transmission Depth", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketColor", "Transmission Scatter", [0.0] * 3, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Transmission Scatter Anisotropy", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Dispersion", 0, enabled=False)
         # Subsurface
-        self.add_input("LuxCoreSocketFloat0to1", "Subsurface Weight", 0, enabled=False)
-        self.add_input("LuxCoreSocketColor", "Subsurface Color", [1.0] * 3, enabled=False)
-        self.add_input("LuxCoreSocketFloatPositive", "Subsurface Radius", 1, enabled=False)
-        self.add_input("LuxCoreSocketColor", "Subsurface Radius Scale", [1.0] * 3, enabled=False)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Subsurface Anisotropy", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Subsurface Weight", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketColor", "Subsurface Color", [1.0] * 3, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloatPositive", "Subsurface Radius", 1, enabled=False)
+        self.add_input("SuperLuxCoreSocketColor", "Subsurface Radius Scale", [1.0] * 3, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Subsurface Anisotropy", 0, enabled=False)
         # Coat
-        self.add_input("LuxCoreSocketFloat0to1", "Coat Weight", 0, enabled=False)
-        self.add_input("LuxCoreSocketColor", "Coat Color", [1.0] * 3, enabled=False)
-        self.add_input("LuxCoreSocketFloat0to1", "Coat Roughness", 0, enabled=False)
-        self.add_input("LuxCoreSocketFloat0to1", "Coat Anisotropy", 0, enabled=False)
-        self.add_input("LuxCoreSocketFloat0to1", "Coat Rotation", 0, enabled=False)
-        self.add_input("LuxCoreSocketIOR", "Coat IOR", 1.5, enabled=False)
-        self.add_input("LuxCoreSocketFloat0to1", "Coat Darkening", 1, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Coat Weight", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketColor", "Coat Color", [1.0] * 3, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Coat Roughness", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Coat Anisotropy", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Coat Rotation", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketIOR", "Coat IOR", 1.5, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Coat Darkening", 1, enabled=False)
         # Fuzz
-        self.add_input("LuxCoreSocketFloat0to1", "Fuzz Weight", 0, enabled=False)
-        self.add_input("LuxCoreSocketColor", "Fuzz Color", [1.0] * 3, enabled=False)
-        self.add_input("LuxCoreSocketFloat0to1", "Fuzz Roughness", 0.5, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Fuzz Weight", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketColor", "Fuzz Color", [1.0] * 3, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Fuzz Roughness", 0.5, enabled=False)
         # Thin film
-        self.add_input("LuxCoreSocketFloat0to1", "Film Weight", 1, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Film Weight", 1, enabled=False)
         ThinFilmCoating.init(self)
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
         col = layout.column(align=True)
@@ -116,7 +116,7 @@ class LuxCoreNodeMatOpenPBR(LuxCoreNodeMaterial, bpy.types.Node):
         col.prop(self, "use_fuzz")
         col.prop(self, "use_thinfilmcoating")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         exp = lambda n: self.inputs[n].export(exporter, depsgraph, props)
         definitions = {
             "type": "openpbr",
@@ -170,9 +170,9 @@ class LuxCoreNodeMatOpenPBR(LuxCoreNodeMaterial, bpy.types.Node):
                     (thickness_socket.is_linked or thickness > 0):
                 definitions["filmweight"] = weight
                 # The socket is in nm (artist convention, same as the Disney
-                # node); the LuxCore OpenPBR property is in micrometers.
+                # node); the SuperLuxCore OpenPBR property is in micrometers.
                 if isinstance(thickness, str):
-                    tex_name = utils.sanitize_luxcore_name(luxcore_name + "_film_nm_to_um")
+                    tex_name = utils.sanitize_superluxcore_name(superluxcore_name + "_film_nm_to_um")
                     props.Set(utils.luxutils.create_props("scene.textures." + tex_name + ".", {
                         "type": "scale",
                         "texture1": thickness,
@@ -186,4 +186,4 @@ class LuxCoreNodeMatOpenPBR(LuxCoreNodeMaterial, bpy.types.Node):
                         exporter, depsgraph, props)
 
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

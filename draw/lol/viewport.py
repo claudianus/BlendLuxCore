@@ -169,12 +169,12 @@ def draw_text(text, x, y, size, color=(1, 1, 1, 0.5)):
 
 def init_ui_size(context, area, region):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
     assetbar_props = ui_props.assetbar
 
     # assets = utils.get_search_props(context)
-    # if scene.luxcoreOL.on_search:
-    #     assets = [asset for asset in utils.get_search_props(context) if asset['category'] == scene.luxcoreOL.search_category]
+    # if scene.superluxcoreOL.on_search:
+    #     assets = [asset for asset in utils.get_search_props(context) if asset['category'] == scene.superluxcoreOL.search_category]
 
     user_preferences = get_addon_preferences(context)
     ui_scale = bpy.context.preferences.view.ui_scale
@@ -210,7 +210,7 @@ def init_ui_size(context, area, region):
 
 def update_ui_size(context, area, region):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
     assetbar_props = ui_props.assetbar
 
     assets = utils.get_search_props(context)
@@ -221,8 +221,8 @@ def update_ui_size(context, area, region):
     if ui_props.free_only:
         assets = [asset for asset in assets if not asset['locked']]
 
-    if scene.luxcoreOL.on_search:
-        assets = [asset for asset in assets if asset['category'] == scene.luxcoreOL.search_category]
+    if scene.superluxcoreOL.on_search:
+        assets = [asset for asset in assets if asset['category'] == scene.superluxcoreOL.search_category]
 
     user_preferences = get_addon_preferences(context)
 
@@ -302,7 +302,7 @@ def mouse_in_area(mx, my, x, y, w, h):
 
 def mouse_in_asset_bar(context, mx, my):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
     assetbar_props = ui_props.assetbar
 
     if assetbar_props.y - assetbar_props.height < my < assetbar_props.y \
@@ -321,7 +321,7 @@ def mouse_in_region(region, mx, my):
 
 def get_asset_under_mouse(context, mousex, mousey):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
     assetbar_props = ui_props.assetbar
 
     assets = utils.get_search_props(context)
@@ -332,8 +332,8 @@ def get_asset_under_mouse(context, mousex, mousey):
     if ui_props.free_only:
         assets = [asset for asset in assets if not asset['locked']]
 
-    if scene.luxcoreOL.on_search:
-        assets = [asset for asset in assets if asset['category'] == scene.luxcoreOL.search_category]
+    if scene.superluxcoreOL.on_search:
+        assets = [asset for asset in assets if asset['category'] == scene.superluxcoreOL.search_category]
 
     if assets is not None:
         h_draw = min(assetbar_props.hcount, math.ceil(len(assets) / assetbar_props.wcount))
@@ -371,7 +371,7 @@ def mouse_raycast(context, mx, my):
     if has_hit:
         snapped_rotation = snapped_normal.to_track_quat('Z', 'Y').to_euler()
         up = Vector((0, 0, 1))
-        props = bpy.context.scene.luxcoreOL.model
+        props = bpy.context.scene.superluxcoreOL.model
         if props.randomize_rotation and snapped_normal.angle(up) < math.radians(10.0):
             randoffset = props.offset_rotation_amount + math.pi + (
                     random.random() - 0.5) * props.randomize_rotation_amount
@@ -414,7 +414,7 @@ def floor_raycast(context, mx, my):
         matrix = None
         snapped_rotation = snapped_normal.to_track_quat('Z', 'Y').to_euler()
 
-        props = bpy.context.scene.luxcoreOL.model
+        props = bpy.context.scene.superluxcoreOL.model
         if props.randomize_rotation:
             randoffset = props.offset_rotation_amount + math.pi + (
                     random.random() - 0.5) * props.randomize_rotation_amount

@@ -33,23 +33,23 @@ enum_wheel_sources = (
     (
         "PyPI",
         "PyPI (default)",
-        "Get PyLuxCore from Python Package Index (PyPI)",
+        "Get PySuperLuxCore from Python Package Index (PyPI)",
     ),
     (
         "LocalWheel",
         "Local Wheel",
-        "Get PyLuxCore from a local wheel file, not including dependencies",
+        "Get PySuperLuxCore from a local wheel file, not including dependencies",
     ),
     (
         "LocalFolder",
         "Local Wheel + dependencies",
-        "Get PyLuxCore from a local folder, containing PyLuxCore wheel "
+        "Get PySuperLuxCore from a local folder, containing PySuperLuxCore wheel "
         "and all its dependencies",
     ),
 )
 
 
-class LuxCoreAddonPreferences(AddonPreferences):
+class SuperLuxCoreAddonPreferences(AddonPreferences):
     """Addon Preference panel."""
 
     # id name for 4.2
@@ -90,7 +90,7 @@ class LuxCoreAddonPreferences(AddonPreferences):
             "VULKAN": "VULKAN_GPU",
         }
 
-        devices = context.scene.luxcore.devices.devices
+        devices = context.scene.superluxcore.devices.devices
         device_type_filter = backend_to_type[self.gpu_backend]
         gpu_devices = [
             (index, device)
@@ -130,7 +130,7 @@ class LuxCoreAddonPreferences(AddonPreferences):
         ),
     )
 
-    # LuxCore online library properties
+    # SuperLuxCore online library properties
     global_dir: StringProperty(
         name="Global Files Directory",
         description=(
@@ -142,7 +142,7 @@ class LuxCoreAddonPreferences(AddonPreferences):
     )
     lol_host: StringProperty(
         name="Host URL",
-        description="Address of the LuxCore Online Library server",
+        description="Address of the SuperLuxCore Online Library server",
         default="https://luxcorerender.org/lol",
     )
     lol_http_host: StringProperty(
@@ -155,13 +155,13 @@ class LuxCoreAddonPreferences(AddonPreferences):
     )
     lol_version: StringProperty(
         name="Library Version",
-        description="Version of the LuxCore Online Library.",
+        description="Version of the SuperLuxCore Online Library.",
         default="v2.5",
     )
     lol_useragent: StringProperty(
         name="HTTP User-Agent",
         description="User Agent transmitted with requests",
-        default=f"BlendLuxCore/{utils.get_version_string()}",
+        default=f"SuperLuxCore/{utils.get_version_string()}",
     )
 
     max_assetbar_rows: IntProperty(
@@ -174,20 +174,20 @@ class LuxCoreAddonPreferences(AddonPreferences):
     thumb_size: IntProperty(
         name="Assetbar Thumbnail Size", default=96, min=-1, max=256
     )
-    use_library: BoolProperty(name="Use LuxCore Online Library", default=True)
+    use_library: BoolProperty(name="Use SuperLuxCore Online Library", default=True)
 
-    display_luxcore_logs: BoolProperty(name="Show LuxCore Logs", default=True)
+    display_superluxcore_logs: BoolProperty(name="Show SuperLuxCore Logs", default=True)
 
     # Read-only string property, returns the current date
-    def get_pyluxcore_version(self):
-        """Provide pyluxcore version."""
+    def get_pysuperluxcore_version(self):
+        """Provide pysuperluxcore version."""
         try:
-            pyluxcore_version = version("pyluxcore")
+            pysuperluxcore_version = version("pysuperluxcore")
         except ModuleNotFoundError:
-            pyluxcore_version = "ERROR: could not find pyluxcore"
-        return pyluxcore_version
+            pysuperluxcore_version = "ERROR: could not find pysuperluxcore"
+        return pysuperluxcore_version
 
-    pyluxcore_version: StringProperty(name="", get=get_pyluxcore_version)
+    pysuperluxcore_version: StringProperty(name="", get=get_pysuperluxcore_version)
 
     def _draw_general(self):
         """Draw general settings."""
@@ -225,47 +225,47 @@ class LuxCoreAddonPreferences(AddonPreferences):
         row = layout.row()
         row.label(text="Community:")
         op = row.operator(
-            "luxcore.open_website", text="Forums", icon=icons.URL
+            "superluxcore.open_website", text="Forums", icon=icons.URL
         )
         op.url = "https://forums.luxcorerender.org/"
         op = row.operator(
-            "luxcore.open_website", text="Discord", icon=icons.URL
+            "superluxcore.open_website", text="Discord", icon=icons.URL
         )
         op.url = "https://discord.gg/chPGsKV"
 
         row = layout.row()
         row.label(text="Download:")
         op = row.operator(
-            "luxcore.open_website",
-            text="BlendLuxCore Releases",
+            "superluxcore.open_website",
+            text="SuperLuxCore Releases",
             icon=icons.URL,
         )
-        op.url = "https://github.com/LuxCoreRender/BlendLuxCore/releases"
+        op.url = "https://github.com/claudianus/SuperBlendLuxCore/releases"
         row.label(text="")
 
-        # LuxCore logging
+        # SuperLuxCore logging
         row = layout.row()
         split = row.split(factor=SPLIT_FACTOR)
-        split.label(text="LuxCore Logs:")
-        split.prop(self, "display_luxcore_logs")
+        split.label(text="SuperLuxCore Logs:")
+        split.prop(self, "display_superluxcore_logs")
 
-        # pyluxcore version
+        # pysuperluxcore version
         row = layout.row()
         split = row.split(factor=SPLIT_FACTOR)
-        split.label(text="Pyluxcore version:")
-        split.prop(self, "pyluxcore_version")
+        split.label(text="Pysuperluxcore version:")
+        split.prop(self, "pysuperluxcore_version")
 
         # Final separator (keep at the end)
         layout.separator()
 
     def _draw_lol(self):
-        """Draw LuxCore Online Library (lol)."""
+        """Draw SuperLuxCore Online Library (lol)."""
 
         layout = self.layout
 
         row = layout.row()
         split = row.split(factor=SPLIT_FACTOR)
-        split.label(text="LuxCore Online Library (LOL):")
+        split.label(text="SuperLuxCore Online Library (LOL):")
         split.prop(self, "use_library")
 
         if self.use_library:
@@ -298,5 +298,5 @@ class LuxCoreAddonPreferences(AddonPreferences):
         # General settings
         self._draw_general()
 
-        # LuxCore Online Library
+        # SuperLuxCore Online Library
         self._draw_lol()

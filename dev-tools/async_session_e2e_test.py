@@ -21,13 +21,13 @@ import bpy
 # Import via the extension namespace so addon-preferences lookups
 # (context.preferences.addons[...]) resolve against the installed key.
 # The extension is auto-registered on Blender startup; do not re-register.
-import bl_ext.user_default.blendluxcore as blendluxcore
+import bl_ext.user_default.superluxcore as superluxcore
 
-from bl_ext.user_default.blendluxcore import export as blc_export
-from bl_ext.user_default.blendluxcore.export.recorded_scene import (
+from bl_ext.user_default.superluxcore import export as blc_export
+from bl_ext.user_default.superluxcore.export.recorded_scene import (
     RecordedScene,
 )
-from bl_ext.user_default.blendluxcore.engine.session_worker import (
+from bl_ext.user_default.superluxcore.engine.session_worker import (
     SessionWorker,
 )
 
@@ -78,14 +78,14 @@ def main():
     check("export_scene returns (scene, props)", result is not None)
     if result is None:
         sys.exit(1)
-    luxcore_scene, config_props = result
+    superluxcore_scene, config_props = result
     engine_type = config_props.Get("renderengine.type").GetString()
     print("  engine:", engine_type)
 
     # --- worker start -------------------------------------------------
     engine = FakeEngine()
     worker = SessionWorker(engine)
-    worker.submit_start(luxcore_scene, config_props)
+    worker.submit_start(superluxcore_scene, config_props)
 
     ok = wait_until(
         lambda: engine.session is not None and not worker.is_starting
@@ -101,14 +101,14 @@ def main():
     # --- scene edit via RecordedScene ----------------------------------
     # Add a light through the recorded path: the proxy records the Parse,
     # the worker replays it inside BeginSceneEdit/EndSceneEdit.
-    import pyluxcore
+    import pysuperluxcore
     rec = RecordedScene()
-    light_props = pyluxcore.Properties()
-    light_props.Set(pyluxcore.Property(
+    light_props = pysuperluxcore.Properties()
+    light_props.Set(pysuperluxcore.Property(
         "scene.lights.e2e_test_light.type", ["point"]))
-    light_props.Set(pyluxcore.Property(
+    light_props.Set(pysuperluxcore.Property(
         "scene.lights.e2e_test_light.gain", [1.0, 1.0, 1.0]))
-    light_props.Set(pyluxcore.Property(
+    light_props.Set(pysuperluxcore.Property(
         "scene.lights.e2e_test_light.position", [0.0, 0.0, 5.0]))
     rec.Parse(light_props)
     light_count_before = (
@@ -125,10 +125,10 @@ def main():
     check("no worker error on edit", err is None, err)
 
     # --- config restart ------------------------------------------------
-    import pyluxcore
-    new_props = pyluxcore.Properties(config_props)
+    import pysuperluxcore
+    new_props = pysuperluxcore.Properties(config_props)
     new_props.Set(
-        pyluxcore.Property("batch.halttime", [5])
+        pysuperluxcore.Property("batch.halttime", [5])
     )
     worker.submit_config(new_props)
     ok = wait_until(
@@ -143,18 +143,18 @@ def main():
     # Simulate dragging a color picker / orbiting: many edits + configs
     # submitted back-to-back must coalesce, land in order, and leave a
     # live session.
-    import pyluxcore
+    import pysuperluxcore
     for i in range(30):
         rec = RecordedScene()
-        p = pyluxcore.Properties()
-        p.Set(pyluxcore.Property(
+        p = pysuperluxcore.Properties()
+        p.Set(pysuperluxcore.Property(
             "scene.lights.e2e_test_light.position", [0.0, 0.0, 5.0 + i]))
         rec.Parse(p)
         worker.submit_edit(rec.drain())
     for i in range(5):
-        burst_props = pyluxcore.Properties(config_props)
+        burst_props = pysuperluxcore.Properties(config_props)
         burst_props.Set(
-            pyluxcore.Property("batch.halttime", [60 + i]))
+            pysuperluxcore.Property("batch.halttime", [60 + i]))
         worker.submit_config(burst_props)
     ok = wait_until(
         lambda: engine.session is not None
@@ -171,9 +171,9 @@ def main():
     check("film accumulates after burst", ok)
 
     # --- bad config: error surfaces, session dropped ----------------------
-    bad_props = pyluxcore.Properties(config_props)
+    bad_props = pysuperluxcore.Properties(config_props)
     bad_props.Set(
-        pyluxcore.Property("renderengine.type", ["NO_SUCH_ENGINE"]))
+        pysuperluxcore.Property("renderengine.type", ["NO_SUCH_ENGINE"]))
     worker.submit_config(bad_props)
     # Peek without consuming: pop_error() clears the latched error.
     ok = wait_until(lambda: worker._error is not None, timeout=30)

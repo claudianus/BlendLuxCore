@@ -1,7 +1,7 @@
 import bpy
 from bpy.props import PointerProperty, BoolProperty, FloatProperty, IntProperty, StringProperty
 from bpy.types import PropertyGroup
-from .hair import LuxCoreHair
+from .hair import SuperLuxCoreHair
 
 DESC_VISIBLE_TO_CAM = (
     "If disabled, the object will not be visible to camera rays. "
@@ -11,12 +11,12 @@ DESC_MOTION_BLUR = "Export this object as instance if object motion blur is enab
 DESC_OBJECT_ID = (
     "ID for Object ID AOV. If -1 is set, the object name is hashed to a number and used as ID. "
     "The ID can be accessed from the Object ID node in material node trees. "
-    "Note that the random IDs of LuxCore can be greater than 32767 "
+    "Note that the random IDs of SuperLuxCore can be greater than 32767 "
     "(the ID Mask node in the compositor can't handle those numbers)"
 )
 DESC_EXCLUDE_FROM_RENDER = (
     "The object will be excluded from render. "
-    "Useful if you need objects to render for other engines, but not for LuxCore"
+    "Useful if you need objects to render for other engines, but not for SuperLuxCore"
 )
 DESC_MESH_PROXY = (
     "Render from an .lxm proxy file instead of this object's mesh data: the "
@@ -35,7 +35,7 @@ DESC_LIGHT_PORTAL = (
 )
 
 
-class LuxCoreObjectProps(PropertyGroup):
+class SuperLuxCoreObjectProps(PropertyGroup):
     visible_to_camera: BoolProperty(
         name="Visible to Camera", default=True, description=DESC_VISIBLE_TO_CAM
     )
@@ -64,19 +64,19 @@ class LuxCoreObjectProps(PropertyGroup):
         description=DESC_MESH_PROXY,
     )
     hair: PointerProperty(
-        name="LuxCore Hair Curve Settings",
-        description="LuxCore hair curve settings",
-        type=LuxCoreHair,
+        name="SuperLuxCore Hair Curve Settings",
+        description="SuperLuxCore hair curve settings",
+        type=SuperLuxCoreHair,
     )
 
     @classmethod
     def register(cls):
-        bpy.types.Object.luxcore = PointerProperty(
-            name="LuxCore Object Settings",
-            description="LuxCore object settings",
+        bpy.types.Object.superluxcore = PointerProperty(
+            name="SuperLuxCore Object Settings",
+            description="SuperLuxCore object settings",
             type=cls,
         )
 
     @classmethod
     def unregister(cls):
-        del bpy.types.Object.luxcore
+        del bpy.types.Object.superluxcore

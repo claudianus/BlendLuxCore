@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexBlenderBlend(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexBlenderBlend(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Blender Blend"
     bl_width_default = 200    
 
@@ -30,8 +30,8 @@ class LuxCoreNodeTexBlenderBlend(LuxCoreNodeTexture, bpy.types.Node):
     contrast: FloatProperty(update=utils_node.force_viewport_update, name="Contrast", default=1.0, min=0)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "direction", expand=True)
@@ -41,7 +41,7 @@ class LuxCoreNodeTexBlenderBlend(LuxCoreNodeTexture, bpy.types.Node):
         col.prop(self, "bright")
         col.prop(self, "contrast")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "blender_blend",
             "progressiontype": self.progression_type,
@@ -50,4 +50,4 @@ class LuxCoreNodeTexBlenderBlend(LuxCoreNodeTexture, bpy.types.Node):
             "contrast": self.contrast,
         }
         definitions.update(self.inputs["3D Mapping"].export(exporter, depsgraph, props))
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

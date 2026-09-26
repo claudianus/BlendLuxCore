@@ -1,15 +1,15 @@
 import bpy
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...handlers import frame_change_pre
 
-class LuxCoreNodeTexTimeInfo(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexTimeInfo(SuperLuxCoreNodeTexture, bpy.types.Node):
     """ Access to time and frame information """
     bl_label = "Time Info"
     bl_width_default = 150
 
     def init(self, context):
-        self.outputs.new("LuxCoreSocketFloatPositive", "Frame")
-        self.outputs.new("LuxCoreSocketFloatPositive", "Time")
+        self.outputs.new("SuperLuxCoreSocketFloatPositive", "Frame")
+        self.outputs.new("SuperLuxCoreSocketFloatPositive", "Time")
 
     def draw_buttons(self, context, layout):
         depsgraph = context.evaluated_depsgraph_get()
@@ -26,7 +26,7 @@ class LuxCoreNodeTexTimeInfo(LuxCoreNodeTexture, bpy.types.Node):
         col.label(text='Time: %02d:%02d:%02d.%03d' % (hours, minutes, seconds, milliseconds))
 
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         scene = depsgraph.scene_eval
         frame_change_pre.have_to_check_node_trees = True
 
@@ -41,4 +41,4 @@ class LuxCoreNodeTexTimeInfo(LuxCoreNodeTexture, bpy.types.Node):
         else:
             raise Exception("Unknown output socket:", output_socket)
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

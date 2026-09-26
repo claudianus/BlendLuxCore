@@ -61,11 +61,11 @@ def init_mat_node_tree(node_tree):
 
     nodes = node_tree.nodes
 
-    output = nodes.new("LuxCoreNodeMatOutput")
+    output = nodes.new("SuperLuxCoreNodeMatOutput")
     output.location = 300, 200
     output.select = False
 
-    matte = nodes.new("LuxCoreNodeMatMatte")
+    matte = nodes.new("SuperLuxCoreNodeMatMatte")
     matte.location = 50, 200
 
     node_tree.links.new(matte.outputs[0], output.inputs[0])
@@ -79,7 +79,7 @@ def init_tex_node_tree(node_tree):
 
     nodes = node_tree.nodes
 
-    output = nodes.new("LuxCoreNodeTexOutput")
+    output = nodes.new("SuperLuxCoreNodeTexOutput")
     output.location = 300, 200
     output.select = False
 
@@ -92,24 +92,24 @@ def init_vol_node_tree(node_tree, default_IOR=1.5):
 
     nodes = node_tree.nodes
 
-    output = nodes.new("LuxCoreNodeVolOutput")
+    output = nodes.new("SuperLuxCoreNodeVolOutput")
     output.location = 300, 200
     output.select = False
 
-    clear = nodes.new("LuxCoreNodeVolClear")
+    clear = nodes.new("SuperLuxCoreNodeVolClear")
     clear.location = 50, 200
     clear.inputs["IOR"].default_value = default_IOR
 
     node_tree.links.new(clear.outputs[0], output.inputs[0])
 
 
-class LUXCORE_OT_set_node_tree:
+class SUPERLUXCORE_OT_set_node_tree:
     """
     Generic version. Do not use in UI.
     There are subclasses for materials and volumes
     """
 
-    bl_idname = "luxcore.set_node_tree"
+    bl_idname = "superluxcore.set_node_tree"
     bl_label = ""
     bl_description = "Assign this node tree"
     bl_options = {"UNDO"}
@@ -121,20 +121,20 @@ class LUXCORE_OT_set_node_tree:
         datablock.update_tag()
 
         if (isinstance(datablock, bpy.types.NodeTree)
-                and datablock.bl_idname == "luxcore_material_nodes"):
+                and datablock.bl_idname == "superluxcore_material_nodes"):
             # Also flag the materials for update
             for mat in bpy.data.materials:
-                if mat.luxcore.node_tree is datablock:
+                if mat.superluxcore.node_tree is datablock:
                     mat.update_tag()
 
 
-class LUXCORE_MT_node_tree:
+class SUPERLUXCORE_MT_node_tree:
     """
     Generic version. Do not use in UI.
     There are subclasses for materials and volumes
     """
 
-    bl_idname = "LUXCORE_MT_node_tree"
+    bl_idname = "SUPERLUXCORE_MT_node_tree"
     bl_label = "Select Node Tree"
     bl_description = "Select a node tree"
     # bl_options = {"UNDO"}
@@ -171,9 +171,9 @@ class LUXCORE_MT_node_tree:
                 tree_type_pretty = tree_type.split("_")[1]
                 col.label(text="No " + tree_type_pretty + " node trees available")
 
-            if tree_type == "luxcore_material_nodetree":
-                col.operator("luxcore.mat_nodetree_new", text="New Node Tree", icon=icons.ADD)
-                col.menu("LUXCORE_MT_node_tree_preset")
+            if tree_type == "superluxcore_material_nodetree":
+                col.operator("superluxcore.mat_nodetree_new", text="New Node Tree", icon=icons.ADD)
+                col.menu("SUPERLUXCORE_MT_node_tree_preset")
 
         for j, (index, tree, icon) in enumerate(trees):
             if j > 0 and j % 20 == 0:
@@ -189,15 +189,15 @@ def use_cycles_settings():
     use_cycles_material_nodes()
 
     for light in bpy.data.lights:
-        light.luxcore.use_cycles_settings = True
+        light.superluxcore.use_cycles_settings = True
         light.update_tag()
 
     for world in bpy.data.worlds:
-        world.luxcore.use_cycles_settings = True
+        world.superluxcore.use_cycles_settings = True
         world.update_tag()
 
 
 def use_cycles_material_nodes():
     for mat in bpy.data.materials:
         if mat.use_nodes and mat.node_tree:
-            mat.luxcore.use_cycles_nodes = True
+            mat.superluxcore.use_cycles_nodes = True

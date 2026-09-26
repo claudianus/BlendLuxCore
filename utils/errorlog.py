@@ -12,14 +12,14 @@ def update_ui():
         pass
 
 
-class LuxCoreError:
+class SuperLuxCoreError:
     def __init__(self, message, obj_name):
         self.message = str(message)
         self.count = 1
         self.obj_name = obj_name
 
 
-class LuxCoreErrorLog:
+class SuperLuxCoreErrorLog:
     """
     Errors here are serious exceptions that caused the render to abort
 
@@ -54,7 +54,7 @@ class LuxCoreErrorLog:
                 return
 
         print(prefix, message)
-        new = LuxCoreError(message, obj_name)
+        new = SuperLuxCoreError(message, obj_name)
         collection.append(new)
         if collection is cls.errors:
             cls._persist(message, obj_name)
@@ -71,7 +71,7 @@ class LuxCoreErrorLog:
             import os
             import tempfile
             path = os.path.join(tempfile.gettempdir(),
-                                "blendluxcore_errors.log")
+                                "superluxcore_errors.log")
             stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             obj = (" [%s]" % obj_name) if obj_name else ""
             with open(path, "a") as f:

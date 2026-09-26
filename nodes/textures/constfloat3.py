@@ -1,7 +1,7 @@
 import bpy
 import math
 from bpy.props import FloatVectorProperty, BoolProperty, EnumProperty, StringProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from mathutils import Color
 from ... import icons
 from ...utils import node as utils_node
@@ -29,7 +29,7 @@ def srgb_to_linear(color):
     return Color([channel_srgb_to_linear(c) for c in color])
 
 
-class LuxCoreNodeTexConstfloat3(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexConstfloat3(SuperLuxCoreNodeTexture, bpy.types.Node):
     """
     Constant color.
     Note that we do not offer a direct hex code input,
@@ -70,7 +70,7 @@ class LuxCoreNodeTexConstfloat3(LuxCoreNodeTexture, bpy.types.Node):
     input_mode: EnumProperty(name="Input Mode", items=input_mode_items, default="RGB")
 
     def init(self, context):
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         col = layout.column(align=True)
@@ -98,10 +98,10 @@ class LuxCoreNodeTexConstfloat3(LuxCoreNodeTexture, bpy.types.Node):
 
         layout.prop(self, "value")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "constfloat3",
             "value": list(self.value),
         }
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

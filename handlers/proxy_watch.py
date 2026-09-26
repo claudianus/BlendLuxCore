@@ -14,7 +14,7 @@ _INTERVAL = 2.0
 
 def _scan():
     for obj in bpy.data.objects:
-        path = getattr(obj.luxcore, "proxy_filepath", "")
+        path = getattr(obj.superluxcore, "proxy_filepath", "")
         if not path:
             continue
         apath = bpy.path.abspath(path)

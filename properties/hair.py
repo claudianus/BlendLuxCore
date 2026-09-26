@@ -9,12 +9,12 @@ from bpy.props import (
     FloatVectorProperty,
 )
 from bpy.types import PropertyGroup
-from .image_user import LuxCoreImageUser
+from .image_user import SuperLuxCoreImageUser
 from .light import GAMMA_DESCRIPTION
 
 
 # def init():
-#    bpy.types.ParticleSettings.luxcore = PointerProperty(type=LuxCoreParticlesProps)
+#    bpy.types.ParticleSettings.superluxcore = PointerProperty(type=SuperLuxCoreParticlesProps)
 
 
 TESSEL_ITEMS = [
@@ -92,9 +92,9 @@ VERTEX_COL_MULTIPLIERS_DESC = (
 )
 
 
-class LuxCoreHair(PropertyGroup):
+class SuperLuxCoreHair(PropertyGroup):
     """
-    LuxCore Hair Rendering settings
+    SuperLuxCore Hair Rendering settings
     """
 
     hair_size: FloatProperty(
@@ -204,7 +204,7 @@ class LuxCoreHair(PropertyGroup):
         description="UV Map to use. If empty, the active UV Map is used",
     )
     image: PointerProperty(name="Image", type=bpy.types.Image)
-    image_user: PointerProperty(type=LuxCoreImageUser)
+    image_user: PointerProperty(type=SuperLuxCoreImageUser)
     gamma: FloatProperty(
         name="Gamma", default=2.2, min=0, description=GAMMA_DESCRIPTION
     )
@@ -249,17 +249,17 @@ class LuxCoreHair(PropertyGroup):
     )
 
 
-class LuxCoreParticlesProps(PropertyGroup):
-    hair: PointerProperty(type=LuxCoreHair)
+class SuperLuxCoreParticlesProps(PropertyGroup):
+    hair: PointerProperty(type=SuperLuxCoreHair)
 
     @classmethod
     def register(cls):
-        bpy.types.ParticleSettings.luxcore = PointerProperty(
-            name="LuxCore Particle Settings",
-            description="LuxCore particle settings",
+        bpy.types.ParticleSettings.superluxcore = PointerProperty(
+            name="SuperLuxCore Particle Settings",
+            description="SuperLuxCore particle settings",
             type=cls,
         )
 
     @classmethod
     def unregister(cls):
-        del bpy.types.ParticleSettings.luxcore
+        del bpy.types.ParticleSettings.superluxcore

@@ -4,10 +4,10 @@ import math
 import numpy as np
 from .. import utils
 from ..utils import node as utils_node
-import pyluxcore
+import pysuperluxcore
 from .image import ImageExporter
 from time import time
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 
 
 def find_psys_modifier(obj, psys):
@@ -142,14 +142,14 @@ def warn_about_missing_uvs(obj, node_tree):
     # TODO once we have a triplanar option for imagemaps, ignore imagemaps with
     #  triplanar in this check because they have no problems with missing UVs
     has_imagemaps = utils_node.has_nodes(
-        node_tree, "LuxCoreNodeTexImagemap", True
+        node_tree, "SuperLuxCoreNodeTexImagemap", True
     )
     if has_imagemaps and not utils_node.has_valid_uv_map(obj):
         msg = (
             "Image textures used, but no UVs defined. "
             "In case of bumpmaps this can lead to artifacts"
         )
-        LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+        SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
 
 
 def convert_hair(
@@ -158,7 +158,7 @@ def convert_hair(
     obj_key,
     psys,
     depsgraph,
-    luxcore_scene,
+    superluxcore_scene,
     scene_props,
     is_viewport_render,
     is_for_duplication,
@@ -178,7 +178,7 @@ def convert_hair(
         if engine:
             engine.update_stats("Exporting...", msg)
 
-        settings = psys.settings.luxcore.hair
+        settings = psys.settings.superluxcore.hair
         strand_diameter = settings.hair_size
         root_width = settings.root_width / 100
         tip_width = settings.tip_width / 100
@@ -255,7 +255,7 @@ def convert_hair(
                             obj.name,
                             psys.name,
                         )
-                        LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+                        SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
                 elif settings.export_color == "vertex_color":
                     colors = convert_colors(
                         obj,
@@ -316,7 +316,7 @@ def convert_hair(
         else:
             transformation = None
 
-        success = luxcore_scene.DefineBlenderStrands(
+        success = superluxcore_scene.DefineBlenderStrands(
             lux_shape_name,
             points_per_strand,
             points,
@@ -375,7 +375,7 @@ def convert_hair(
         return lux_shape_name, strand_sig
     except Exception as error:
         msg = "[%s: %s] %s" % (obj.name, psys.name, error)
-        LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+        SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
         if str(error).strip() != "Error: Object was not yet evaluated":
             import traceback
 
@@ -395,15 +395,15 @@ def set_hair_props(
 ):
     prefix = "scene.objects." + lux_obj + "."
 
-    scene_props.Set(pyluxcore.Property(prefix + "material", lux_mat))
-    scene_props.Set(pyluxcore.Property(prefix + "shape", lux_shape))
+    scene_props.Set(pysuperluxcore.Property(prefix + "material", lux_mat))
+    scene_props.Set(pysuperluxcore.Property(prefix + "shape", lux_shape))
     scene_props.Set(
-        pyluxcore.Property(prefix + "camerainvisible", not visible_to_camera)
+        pysuperluxcore.Property(prefix + "camerainvisible", not visible_to_camera)
     )
 
     if is_for_duplication:
         scene_props.Set(
-            pyluxcore.Property(
+            pysuperluxcore.Property(
                 prefix + "transformation",
                 utils.luxutils.matrix_to_list(instance_matrix_world),
             )
@@ -412,14 +412,14 @@ def set_hair_props(
         # We don't actually need to transform anything, just set an identity matrix so the mesh is instanced
         identity_matrix = utils.luxutils.matrix_to_list(Matrix.Identity(4))
         scene_props.Set(
-            pyluxcore.Property(prefix + "transformation", identity_matrix)
+            pysuperluxcore.Property(prefix + "transformation", identity_matrix)
         )
 
 
 def make_hair_shape_name(obj_key, psys):
     # Can't use the memory address of the psys as key because it changes
     # when the psys is updated (e.g. because some hair moves)
-    return obj_key + "_" + utils.sanitize_luxcore_name(psys.name)
+    return obj_key + "_" + utils.sanitize_superluxcore_name(psys.name)
 
 
 def get_hair_material_index(psys):
@@ -461,7 +461,7 @@ def convert_hair_curves(
     depsgraph,
     obj,
     obj_key,
-    luxcore_scene,
+    superluxcore_scene,
     is_for_duplication,
     matrix_world=None,
 ):
@@ -476,7 +476,7 @@ def convert_hair_curves(
 
     colors = np.empty(shape=0, dtype=np.float32)
     uvs = np.empty(shape=0, dtype=np.float32)
-    settings = obj.luxcore.hair
+    settings = obj.superluxcore.hair
 
     strand_diameter = settings.hair_size
     root_width = settings.root_width / 100
@@ -484,7 +484,7 @@ def convert_hair_curves(
     width_offset = settings.width_offset / 100
 
     # Hair curves can have a per-point "radius" attribute that scales the
-    # strand thickness. LuxCore only supports a global strand diameter with
+    # strand thickness. SuperLuxCore only supports a global strand diameter with
     # a root->tip taper, so the mean root radius is folded into the diameter
     # and the mean tip radius into tip_width.
     radius_attribute = obj.data.attributes.get("radius")
@@ -519,7 +519,7 @@ def convert_hair_curves(
 
     if export_color != "none" or uvs_needed:
         if obj.parent is None:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 "Hair curves without emitter (parentless curves): "
                 "skipping UV/color export",
                 obj_name=obj.name,
@@ -542,7 +542,7 @@ def convert_hair_curves(
                             obj.name,
                             obj.data.name,
                         )
-                        LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+                        SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
             finally:
                 obj.parent.to_mesh_clear()
         #     elif settings.export_color == "vertex_color":
@@ -571,14 +571,14 @@ def convert_hair_curves(
         image_filename = ""
 
     if is_for_duplication or matrix_world is None:
-        # The transformation is set on the LuxCore object instead
+        # The transformation is set on the SuperLuxCore object instead
         # (see object_cache._convert_obj)
         transformation = None
     else:
         # Non-instanced hair curves in final renders: bake the object
         # transformation into the strand points, like the mesh export does
         transformation = utils.luxutils.matrix_to_list(matrix_world)
-    success = luxcore_scene.DefineBlenderCurveStrands(
+    success = superluxcore_scene.DefineBlenderCurveStrands(
         lux_shape_name,
         points_per_strand,
         points,
@@ -608,11 +608,11 @@ def convert_hair_curves(
     if exporter.stats:
         exporter.stats.export_time_hair.value += time_elapsed
     # The raw strand layout (per-strand counts in input order) is the
-    # signature motion-blur step samples must match — LuxCore filters
+    # signature motion-blur step samples must match — SuperLuxCore filters
     # invalid points internally and maps motion steps back through the
     # recorded source indices. space_matrix is the transform the
     # binding applied to the stored strand points: none when the
-    # transform lives on the LuxCore object, matrix_world when it was
+    # transform lives on the SuperLuxCore object, matrix_world when it was
     # baked into the points.
     strand_sig = {
         "kind": "curves",

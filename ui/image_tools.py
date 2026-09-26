@@ -1,47 +1,47 @@
 from bpy.types import Panel
 from .. import icons
 from ..utils import ui as utils_ui
-from ..engine.base import LuxCoreRenderEngine, template_refresh_button
-from ..properties.denoiser import LuxCoreDenoiser
-from ..properties.display import LuxCoreDisplaySettings
+from ..engine.base import SuperLuxCoreRenderEngine, template_refresh_button
+from ..properties.denoiser import SuperLuxCoreDenoiser
+from ..properties.display import SuperLuxCoreDisplaySettings
 
 
-class LuxCoreImagePanel:
+class SuperLuxCoreImagePanel:
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "LuxCore"
+    bl_category = "SuperLuxCore"
 
     @classmethod
     def poll(cls, context):
         image = context.space_data.image
-        return context.scene.render.engine == "LUXCORE" and image and image.type == "RENDER_RESULT"
+        return context.scene.render.engine == "SUPERLUXCORE" and image and image.type == "RENDER_RESULT"
 
 
-class LUXCORE_IMAGE_PT_display(Panel, LuxCoreImagePanel):
+class SUPERLUXCORE_IMAGE_PT_display(Panel, SuperLuxCoreImagePanel):
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'UI'
     bl_label = "Display"
-    bl_category = "LuxCore"
+    bl_category = "SuperLuxCore"
     bl_order = 1
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
 
-        display = scene.luxcore.display
-        config = scene.luxcore.config
+        display = scene.superluxcore.display
+        config = scene.superluxcore.config
 
         row = layout.row()
-        row.enabled = LuxCoreRenderEngine.final_running and not LuxCoreDisplaySettings.stop_requested
-        row.operator("luxcore.stop_render", text="Stop", icon=icons.STOP)
+        row.enabled = SuperLuxCoreRenderEngine.final_running and not SuperLuxCoreDisplaySettings.stop_requested
+        row.operator("superluxcore.stop_render", text="Stop", icon=icons.STOP)
 
-        text = "Resume" if LuxCoreDisplaySettings.paused else "Pause"
-        icon = icons.START if LuxCoreDisplaySettings.paused else icons.PAUSE
+        text = "Resume" if SuperLuxCoreDisplaySettings.paused else "Pause"
+        icon = icons.START if SuperLuxCoreDisplaySettings.paused else icons.PAUSE
         row = layout.row()
-        row.enabled = LuxCoreRenderEngine.final_running
-        row.operator("luxcore.toggle_pause", text=text, icon=icon)
+        row.enabled = SuperLuxCoreRenderEngine.final_running
+        row.operator("superluxcore.toggle_pause", text=text, icon=icon)
 
-        template_refresh_button(LuxCoreDisplaySettings.refresh, "luxcore.request_display_refresh",
+        template_refresh_button(SuperLuxCoreDisplaySettings.refresh, "superluxcore.request_display_refresh",
                                 layout, "Refreshing film...")
         layout.prop(display, "interval")
 
@@ -53,7 +53,7 @@ class LUXCORE_IMAGE_PT_display(Panel, LuxCoreImagePanel):
             layout.prop(display, "show_passcounts")
 
 
-class LUXCORE_IMAGE_PT_denoiser(Panel, LuxCoreImagePanel):
+class SUPERLUXCORE_IMAGE_PT_denoiser(Panel, SuperLuxCoreImagePanel):
     bl_label = "Denoiser"
     bl_order = 2
 
@@ -61,14 +61,14 @@ class LUXCORE_IMAGE_PT_denoiser(Panel, LuxCoreImagePanel):
         layout = self.layout
         image = context.space_data.image
 
-        config = context.scene.luxcore.config
-        denoiser = context.scene.luxcore.denoiser
+        config = context.scene.superluxcore.config
+        denoiser = context.scene.superluxcore.denoiser
 
         layout.use_property_split = True
         layout.use_property_decorate = False
 
         col = layout.column(align=True)
-        col.enabled = denoiser.enabled and not LuxCoreRenderEngine.final_running
+        col.enabled = denoiser.enabled and not SuperLuxCoreRenderEngine.final_running
         col.prop(denoiser, "type", expand=False)
 
         if denoiser.type == "OIDN":
@@ -81,7 +81,7 @@ class LUXCORE_IMAGE_PT_denoiser(Panel, LuxCoreImagePanel):
         sub = layout.column(align=True)
         # The user should not be able to request a refresh when denoiser is disabled
         sub.enabled = denoiser.enabled
-        template_refresh_button(LuxCoreDenoiser.refresh, "luxcore.request_denoiser_refresh",
+        template_refresh_button(SuperLuxCoreDenoiser.refresh, "superluxcore.request_denoiser_refresh",
                                 sub, "Running denoiser...")
 
         col = layout.column()
@@ -91,14 +91,14 @@ class LUXCORE_IMAGE_PT_denoiser(Panel, LuxCoreImagePanel):
             col.template_image_layers(image, iuser)
 
 
-class LUXCORE_IMAGE_PT_statistics(Panel, LuxCoreImagePanel):
+class SUPERLUXCORE_IMAGE_PT_statistics(Panel, SuperLuxCoreImagePanel):
     bl_label = "Statistics"
     bl_order = 3
 
     def draw(self, context):
         layout = self.layout
         image = context.space_data.image
-        statistics_collection = context.scene.luxcore.statistics
+        statistics_collection = context.scene.superluxcore.statistics
         active_index = image.render_slots.active_index
 
         if len(context.scene.view_layers) > 1:
@@ -155,7 +155,7 @@ class LUXCORE_IMAGE_PT_statistics(Panel, LuxCoreImagePanel):
                 col.label(text=str(stat))
 
     def draw_stat_comparison(self, context, stats, other_stats, layout):
-        statistics_collection = context.scene.luxcore.statistics
+        statistics_collection = context.scene.superluxcore.statistics
 
         stat_lists = self.stat_lists_by_category(stats)
         other_stat_lists = self.stat_lists_by_category(other_stats)

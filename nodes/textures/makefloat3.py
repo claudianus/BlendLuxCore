@@ -1,18 +1,18 @@
 import bpy
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 
 
-class LuxCoreNodeTexMakeFloat3(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexMakeFloat3(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Combine RGB"
     bl_width_default = 130
 
     def init(self, context):
-        self.add_input("LuxCoreSocketFloat0to1", "R", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "G", 0)
-        self.add_input("LuxCoreSocketFloat0to1", "B", 0)
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.add_input("SuperLuxCoreSocketFloat0to1", "R", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "G", 0)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "B", 0)
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "makefloat3",
             "texture1": self.inputs[0].export(exporter, depsgraph, props),
@@ -20,4 +20,4 @@ class LuxCoreNodeTexMakeFloat3(LuxCoreNodeTexture, bpy.types.Node):
             "texture3": self.inputs[2].export(exporter, depsgraph, props),
         }
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

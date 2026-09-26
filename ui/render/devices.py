@@ -6,8 +6,8 @@ from ...icons import icon_manager
 
 
 def _show_openCL_device_warning(context):
-    config = context.scene.luxcore.config
-    devices = context.scene.luxcore.devices
+    config = context.scene.superluxcore.config
+    devices = context.scene.superluxcore.devices
 
     gpu_devices = devices.get_gpu_devices(context)
     # We don't show OpenCL CPU devices, we just need them to check if there are other devices
@@ -29,8 +29,8 @@ def _show_openCL_device_warning(context):
     )
 
 
-class LUXCORE_RENDER_PT_devices(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_devices(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Devices"
     bl_order = 85
     bl_options = {"DEFAULT_CLOSED"}
@@ -46,16 +46,16 @@ class LUXCORE_RENDER_PT_devices(RenderButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
 
         if config.engine == "PATH" and config.device == "OCL":
             if not utils.luxutils.is_opencl_build():
-                # pyluxcore was compiled without OpenCL support
+                # pysuperluxcore was compiled without OpenCL support
                 layout.label(
-                    text="No OpenCL support in this BlendLuxCore version",
+                    text="No OpenCL support in this SuperLuxCore version",
                     icon_value=icon_manager.get_icon_id("device"),
                 )
         else:
@@ -72,19 +72,19 @@ class LUXCORE_RENDER_PT_devices(RenderButtonsPanel, Panel):
             sub.prop(context.scene.render, "threads")
 
 
-class LUXCORE_RENDER_PT_gpu_devices(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_gpu_devices(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "GPU Devices"
-    bl_parent_id = "LUXCORE_RENDER_PT_devices"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_devices"
 
     @classmethod
     def poll(cls, context):
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         if simple.enabled and not simple.show_advanced:
             return False
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         return (
-            context.scene.render.engine == "LUXCORE"
+            context.scene.render.engine == "SUPERLUXCORE"
             and config.engine == "PATH"
             and config.device == "OCL"
         )
@@ -98,7 +98,7 @@ class LUXCORE_RENDER_PT_gpu_devices(RenderButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
-        devices = context.scene.luxcore.devices
+        devices = context.scene.superluxcore.devices
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -106,7 +106,7 @@ class LUXCORE_RENDER_PT_gpu_devices(RenderButtonsPanel, Panel):
         if not devices.devices:
             layout.label(text="No devices available.", icon=icons.WARNING)
 
-        layout.operator("luxcore.update_opencl_devices")
+        layout.operator("superluxcore.update_opencl_devices")
 
         if devices.devices:
             if _show_openCL_device_warning(context):
@@ -118,32 +118,32 @@ class LUXCORE_RENDER_PT_gpu_devices(RenderButtonsPanel, Panel):
                 layout.prop(device, "enabled", text=device.name)
 
 
-class LUXCORE_RENDER_PT_cpu_devices(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_cpu_devices(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "CPU Devices"
-    bl_parent_id = "LUXCORE_RENDER_PT_devices"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_devices"
     bl_options = {"DEFAULT_CLOSED"}
 
     @classmethod
     def poll(cls, context):
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         if simple.enabled and not simple.show_advanced:
             return False
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         return (
-            context.scene.render.engine == "LUXCORE"
+            context.scene.render.engine == "SUPERLUXCORE"
             and config.engine == "PATH"
             and config.device == "OCL"
         )
 
     def draw_header(self, context):
-        opencl = context.scene.luxcore.devices
+        opencl = context.scene.superluxcore.devices
         layout = self.layout
         layout.prop(opencl, "use_native_cpu", text="")
 
     def draw(self, context):
         layout = self.layout
-        opencl = context.scene.luxcore.devices
+        opencl = context.scene.superluxcore.devices
 
         layout.enabled = opencl.use_native_cpu
 

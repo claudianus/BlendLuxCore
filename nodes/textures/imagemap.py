@@ -24,7 +24,7 @@ NORMAL_MAP_DESC = (
 NORMAL_SCALE_DESC = "Height multiplier, used to adjust the baked-in height of the normal map"
 
 
-class LuxCoreNodeTexImagemap(base.LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexImagemap(base.SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Imagemap"
     bl_width_default = 200
 
@@ -38,7 +38,7 @@ class LuxCoreNodeTexImagemap(base.LuxCoreNodeTexture, bpy.types.Node):
         utils.node.force_viewport_update(self, context)
 
     image: PointerProperty(name="Image", type=bpy.types.Image, update=update_image)
-    image_user: PointerProperty(update=utils.node.force_viewport_update, type=properties.image_user.LuxCoreImageUser)
+    image_user: PointerProperty(update=utils.node.force_viewport_update, type=properties.image_user.SuperLuxCoreImageUser)
 
     channel_items = [
         ("default", "Default Channels", "Use the image channels as they are in the file", 0),
@@ -122,11 +122,11 @@ class LuxCoreNodeTexImagemap(base.LuxCoreNodeTexture, bpy.types.Node):
     def init(self, context):
         self.show_thumbnail = utils.get_addon_preferences(bpy.context).image_node_thumb_default
 
-        self.add_input("LuxCoreSocketMapping2D", "2D Mapping")
+        self.add_input("SuperLuxCoreSocketMapping2D", "2D Mapping")
 
-        self.outputs.new("LuxCoreSocketColor", "Color")
-        self.outputs.new("LuxCoreSocketFloatUnbounded", "Alpha")
-        self.outputs.new("LuxCoreSocketBump", "Bump")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketFloatUnbounded", "Alpha")
+        self.outputs.new("SuperLuxCoreSocketBump", "Bump")
         self.outputs["Bump"].enabled = False
 
     def draw_label(self):
@@ -174,7 +174,7 @@ class LuxCoreNodeTexImagemap(base.LuxCoreNodeTexture, bpy.types.Node):
                 and context.object and not utils.node.has_valid_uv_map(context.object)):
             col.label(text="No UVs, use box projection!", icon=icons.WARNING)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.image is None:
             if self.is_normal_map:
                 return [0.5, 0.5, 1.0]
@@ -188,7 +188,7 @@ class LuxCoreNodeTexImagemap(base.LuxCoreNodeTexture, bpy.types.Node):
             filepath = export.image.ImageExporter.export(self.image, self.image_user, exporter.scene)
         except OSError as error:
             msg = 'Node "%s" in tree "%s": %s' % (self.name, self.id_data.name, error)
-            utils.errorlog.LuxCoreErrorLog.add_warning(msg)
+            utils.errorlog.SuperLuxCoreErrorLog.add_warning(msg)
             return [1, 0, 1]
 
         definitions = {
@@ -213,30 +213,30 @@ class LuxCoreNodeTexImagemap(base.LuxCoreNodeTexture, bpy.types.Node):
                 "gain": self.brightness,
             })
 
-        luxcore_name = self.create_props(props, definitions, luxcore_name)
+        superluxcore_name = self.create_props(props, definitions, superluxcore_name)
         
         if self.projection == "box":
-            tex_name = luxcore_name + "_triplanar"
+            tex_name = superluxcore_name + "_triplanar"
             helper_prefix = "scene.textures." + tex_name + "."
             helper_defs = {
                 "type": "triplanar",
-                "texture1": luxcore_name,
-                "texture2": luxcore_name,
-                "texture3": luxcore_name,
+                "texture1": superluxcore_name,
+                "texture2": superluxcore_name,
+                "texture3": superluxcore_name,
                 "mapping.type": "localmapping3d",
             }
             props.Set(utils.luxutils.create_props(helper_prefix, helper_defs))
-            luxcore_name = tex_name
+            superluxcore_name = tex_name
 
         if self.is_normal_map:
-            tex_name = luxcore_name + "_normalmap"
+            tex_name = superluxcore_name + "_normalmap"
             helper_prefix = "scene.textures." + tex_name + "."
             helper_defs = {
                 "type": "normalmap",
-                "texture": luxcore_name,
+                "texture": superluxcore_name,
                 "scale": self.normal_map_scale,
             }
             props.Set(utils.luxutils.create_props(helper_prefix, helper_defs))
-            luxcore_name = tex_name
+            superluxcore_name = tex_name
         
-        return luxcore_name
+        return superluxcore_name

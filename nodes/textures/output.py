@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import BoolProperty
-from ..output import LuxCoreNodeOutput, update_active
+from ..output import SuperLuxCoreNodeOutput, update_active
 from ... import utils
 
 
-class LuxCoreNodeTexOutput(bpy.types.Node, LuxCoreNodeOutput):
+class SuperLuxCoreNodeTexOutput(bpy.types.Node, SuperLuxCoreNodeOutput):
     """
     Texture output node.
     This is where the export starts (if the output is active).
@@ -16,20 +16,20 @@ class LuxCoreNodeTexOutput(bpy.types.Node, LuxCoreNodeOutput):
     active: BoolProperty(name="Active", default=True, update=update_active)
 
     def init(self, context):
-        self.inputs.new("LuxCoreSocketColor", "Color")
+        self.inputs.new("SuperLuxCoreSocketColor", "Color")
         self.inputs["Color"].needs_link = True
         super().init(context)
 
-    def export(self, exporter, depsgraph, props, luxcore_name):
+    def export(self, exporter, depsgraph, props, superluxcore_name):
         # Invalidate node cache
         # TODO have one global properties object so this is no longer necessary
         exporter.node_cache.clear()
 
-        color = self.inputs["Color"].export(exporter, depsgraph, props, luxcore_name)
+        color = self.inputs["Color"].export(exporter, depsgraph, props, superluxcore_name)
 
         if not self.inputs["Color"].is_linked:
             # We need a helper texture
-            helper_prefix = "scene.textures." + luxcore_name + "."
+            helper_prefix = "scene.textures." + superluxcore_name + "."
             helper_defs = {
                 "type": "constfloat3",
                 "value": color,

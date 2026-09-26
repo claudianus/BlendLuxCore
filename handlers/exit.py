@@ -1,16 +1,16 @@
 _needs_reload = "bpy" in locals()
 import bpy
 
-from .. import export, draw, pyluxcore
+from .. import export, draw, pysuperluxcore
 from ..export.image import ImageExporter
-import pyluxcore
+import pysuperluxcore
 
 if _needs_reload:
     import importlib
     modules = (
         export,
         draw,
-        pyluxcore,
+        pysuperluxcore,
     )
     for module in modules:
         importlib.reload(module)
@@ -19,7 +19,7 @@ if _needs_reload:
 def handler():
     ImageExporter.cleanup()
 
-    # Workaround for a bug in LuxCore:
+    # Workaround for a bug in SuperLuxCore:
     # We have to uninstall the log handler to prevent a crash.
-    # https://github.com/LuxCoreRender/LuxCore/issues/29
-    pyluxcore.SetLogHandler(None)
+    # https://github.com/LuxCoreRender/SuperLuxCore/issues/29
+    pysuperluxcore.SetLogHandler(None)

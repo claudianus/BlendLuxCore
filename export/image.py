@@ -11,7 +11,7 @@ class ImageExporter:
     """
 
     temp_images = {}
-    # Images handed to LuxCore during the current/last export. LuxCore
+    # Images handed to SuperLuxCore during the current/last export. SuperLuxCore
     # loads them from files itself, so Blender's decoded pixel buffers
     # can be released for the duration of the render.
     used_images = set()
@@ -103,7 +103,7 @@ class ImageExporter:
             )
         if not result:
             # Every unpack failed: returning None here would poison the
-            # LuxCore properties with a null filepath downstream. Fail
+            # SuperLuxCore properties with a null filepath downstream. Fail
             # loudly instead (callers already handle OSError).
             raise OSError(
                 f"Could not unpack image '{image.name}': "

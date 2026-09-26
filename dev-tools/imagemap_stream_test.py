@@ -18,8 +18,8 @@ for c in [os.path.expanduser("~/Library/Application Support/Blender/5.2/extensio
         pylux_dir = c
 if pylux_dir:
     sys.path.insert(0, pylux_dir)
-import pyluxcore
-pyluxcore.Init()
+import pysuperluxcore
+pysuperluxcore.Init()
 
 TD = tempfile.mkdtemp(prefix="imgstream")
 IMG = os.path.join(TD, "big.png")
@@ -48,19 +48,19 @@ def make_image():
     print(f"image: {IMG} ({len(png)/1e6:.1f} MB png, {W}x{H}x3 = {W*H*3/1e6:.0f} MB raw)")
 
 def build_scene(policy, minsize=0):
-    props = pyluxcore.Properties()
-    props.Set(pyluxcore.Property("scene.camera.lookat.orig", [0, 0.001, 2.5]))
-    props.Set(pyluxcore.Property("scene.camera.lookat.target", [0, 0, 0]))
-    props.Set(pyluxcore.Property("scene.camera.fieldofview", [45]))
-    props.Set(pyluxcore.Property("scene.camera.screenwindow", [0.0, 1.0, 0.0, 1.0]))
-    props.Set(pyluxcore.Property("scene.lights.sky2.gain", [0.5, 0.5, 0.5]))
-    props.Set(pyluxcore.Property("scene.lights.sky2.turbidity", [2.2]))
-    props.Set(pyluxcore.Property("scene.textures.tex.type", "imagemap"))
-    props.Set(pyluxcore.Property("scene.textures.tex.file", [IMG]))
-    props.Set(pyluxcore.Property("scene.textures.tex.gamma", [2.2]))
-    props.Set(pyluxcore.Property("scene.materials.mat.type", "matte"))
-    props.Set(pyluxcore.Property("scene.materials.mat.kd", "tex"))
-    props.Set(pyluxcore.Property("scene.objects.quad.material", "mat"))
+    props = pysuperluxcore.Properties()
+    props.Set(pysuperluxcore.Property("scene.camera.lookat.orig", [0, 0.001, 2.5]))
+    props.Set(pysuperluxcore.Property("scene.camera.lookat.target", [0, 0, 0]))
+    props.Set(pysuperluxcore.Property("scene.camera.fieldofview", [45]))
+    props.Set(pysuperluxcore.Property("scene.camera.screenwindow", [0.0, 1.0, 0.0, 1.0]))
+    props.Set(pysuperluxcore.Property("scene.lights.sky2.gain", [0.5, 0.5, 0.5]))
+    props.Set(pysuperluxcore.Property("scene.lights.sky2.turbidity", [2.2]))
+    props.Set(pysuperluxcore.Property("scene.textures.tex.type", "imagemap"))
+    props.Set(pysuperluxcore.Property("scene.textures.tex.file", [IMG]))
+    props.Set(pysuperluxcore.Property("scene.textures.tex.gamma", [2.2]))
+    props.Set(pysuperluxcore.Property("scene.materials.mat.type", "matte"))
+    props.Set(pysuperluxcore.Property("scene.materials.mat.kd", "tex"))
+    props.Set(pysuperluxcore.Property("scene.objects.quad.material", "mat"))
     quad = os.path.join(TD, "quad.ply")
     with open(quad, "w") as f:
         f.write("""ply
@@ -81,27 +81,27 @@ end_header
 3 0 1 2
 3 0 2 3
 """)
-    props.Set(pyluxcore.Property("scene.objects.quad.ply", [quad]))
-    props.Set(pyluxcore.Property("scene.objects.quad.transformation",
+    props.Set(pysuperluxcore.Property("scene.objects.quad.ply", [quad]))
+    props.Set(pysuperluxcore.Property("scene.objects.quad.transformation",
         [0.5,0,0,0, 0,0.5,0,0, 0,0,0.5,0, 0,0,0,1]))
-    props.Set(pyluxcore.Property("film.width", [1280]))
-    props.Set(pyluxcore.Property("film.height", [720]))
-    props.Set(pyluxcore.Property("film.outputs.0.type", "RGB_IMAGEPIPELINE"))
-    props.Set(pyluxcore.Property("film.outputs.0.filename", [os.path.join(TD, f"out_{policy}_{minsize}.png")]))
-    props.Set(pyluxcore.Property("batch.haltspp", [8]))
-    props.Set(pyluxcore.Property("path.pathdepth.total", [4]))
-    rp = pyluxcore.Properties()
-    rp.Set(pyluxcore.Property("scene.images.resizepolicy.type", [policy]))
+    props.Set(pysuperluxcore.Property("film.width", [1280]))
+    props.Set(pysuperluxcore.Property("film.height", [720]))
+    props.Set(pysuperluxcore.Property("film.outputs.0.type", "RGB_IMAGEPIPELINE"))
+    props.Set(pysuperluxcore.Property("film.outputs.0.filename", [os.path.join(TD, f"out_{policy}_{minsize}.png")]))
+    props.Set(pysuperluxcore.Property("batch.haltspp", [8]))
+    props.Set(pysuperluxcore.Property("path.pathdepth.total", [4]))
+    rp = pysuperluxcore.Properties()
+    rp.Set(pysuperluxcore.Property("scene.images.resizepolicy.type", [policy]))
     if minsize:
-        rp.Set(pyluxcore.Property("scene.images.resizepolicy.minsize", [minsize]))
-        rp.Set(pyluxcore.Property("scene.images.resizepolicy.scale", [minsize / 8192.0]))
-    scene = pyluxcore.Scene(rp)
+        rp.Set(pysuperluxcore.Property("scene.images.resizepolicy.minsize", [minsize]))
+        rp.Set(pysuperluxcore.Property("scene.images.resizepolicy.scale", [minsize / 8192.0]))
+    scene = pysuperluxcore.Scene(rp)
     scene.Parse(props)
-    return pyluxcore.RenderConfig(props, scene)
+    return pysuperluxcore.RenderConfig(props, scene)
 
 def run(label, policy, minsize=0):
     rc = build_scene(policy, minsize)
-    rs = pyluxcore.RenderSession(rc)
+    rs = pysuperluxcore.RenderSession(rc)
     rs.Start()
     t0 = time.time()
     while not rs.HasDone() and time.time() - t0 < 90:
@@ -129,25 +129,25 @@ def main():
         elif mode.startswith("parse_"):
             # parse-only: isolate imagemap decode RSS (no engine/kernel JIT)
             pol = mode.split("_")[1]
-            props = pyluxcore.Properties()
-            props.Set(pyluxcore.Property("scene.textures.tex.type", "imagemap"))
-            props.Set(pyluxcore.Property("scene.textures.tex.file", [IMG]))
-            props.Set(pyluxcore.Property("scene.textures.tex.gamma", [2.2]))
-            props.Set(pyluxcore.Property("scene.materials.mat.type", "matte"))
-            props.Set(pyluxcore.Property("scene.materials.mat.kd", "tex"))
+            props = pysuperluxcore.Properties()
+            props.Set(pysuperluxcore.Property("scene.textures.tex.type", "imagemap"))
+            props.Set(pysuperluxcore.Property("scene.textures.tex.file", [IMG]))
+            props.Set(pysuperluxcore.Property("scene.textures.tex.gamma", [2.2]))
+            props.Set(pysuperluxcore.Property("scene.materials.mat.type", "matte"))
+            props.Set(pysuperluxcore.Property("scene.materials.mat.kd", "tex"))
             quad = os.path.join(TD, "quad.ply")
             if not os.path.exists(quad):
                 with open(quad, "w") as f:
                     f.write("ply\nformat ascii 1.0\nelement vertex 4\nproperty float x\nproperty float y\nproperty float z\nproperty float s\nproperty float t\nelement face 2\nproperty list uchar int vertex_indices\nend_header\n-1.0 -1.0 0.0 0.0 0.0\n1.0 -1.0 0.0 1.0 0.0\n1.0 1.0 0.0 1.0 1.0\n-1.0 1.0 0.0 0.0 1.0\n3 0 1 2\n3 0 2 3\n")
-            props.Set(pyluxcore.Property("scene.objects.quad.material", "mat"))
-            props.Set(pyluxcore.Property("scene.objects.quad.ply", [quad]))
-            props.Set(pyluxcore.Property("scene.camera.lookat.orig", [0, 0.001, 2.5]))
-            props.Set(pyluxcore.Property("scene.camera.lookat.target", [0, 0, 0]))
-            rp = pyluxcore.Properties()
-            rp.Set(pyluxcore.Property("scene.images.resizepolicy.type", [pol.upper()]))
+            props.Set(pysuperluxcore.Property("scene.objects.quad.material", "mat"))
+            props.Set(pysuperluxcore.Property("scene.objects.quad.ply", [quad]))
+            props.Set(pysuperluxcore.Property("scene.camera.lookat.orig", [0, 0.001, 2.5]))
+            props.Set(pysuperluxcore.Property("scene.camera.lookat.target", [0, 0, 0]))
+            rp = pysuperluxcore.Properties()
+            rp.Set(pysuperluxcore.Property("scene.images.resizepolicy.type", [pol.upper()]))
             if pol == "fixed":
-                rp.Set(pyluxcore.Property("scene.images.resizepolicy.minsize", [256]))
-                rp.Set(pyluxcore.Property("scene.images.resizepolicy.scale", [256 / 8192.0]))
+                rp.Set(pysuperluxcore.Property("scene.images.resizepolicy.minsize", [256]))
+                rp.Set(pysuperluxcore.Property("scene.images.resizepolicy.scale", [256 / 8192.0]))
             import threading, subprocess as sp
             peak = [0]; stop = threading.Event()
             pid = os.getpid()
@@ -161,7 +161,7 @@ def main():
                     stop.wait(0.02)
             t = threading.Thread(target=sampler); t.start()
             rss0 = int(sp.check_output(["ps", "-o", "rss=", "-p", str(pid)]).strip())
-            scene = pyluxcore.Scene(rp)
+            scene = pysuperluxcore.Scene(rp)
             scene.Parse(props)
             import time
             time.sleep(1.5)

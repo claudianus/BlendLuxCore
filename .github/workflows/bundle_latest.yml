@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-name: BlendLuxCore Create Latest Release
+name: SuperLuxCore Create Latest Release
 
 on:
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
       - name: Get Bundle
         uses: actions/download-artifact@v4
         with:
-          name: "BlendLuxCore"
+          name: "SuperLuxCore"
           path: "${{ github.workspace }}/download/"
 
       - name: Update the "latest" tag
@@ -63,7 +63,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          files: "${{ github.workspace }}/download/BlendLuxCore-*.zip"
+          files: "${{ github.workspace }}/download/SuperLuxCore-*.zip"
           draft: false
           prerelease: true
           body: "This is the result of automatic compilation of the latest commits.\n\nPlease note that this release may be unstable and is not recommended for production use."

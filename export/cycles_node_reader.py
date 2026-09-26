@@ -1,8 +1,8 @@
 import bpy
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from ..utils import node as utils_node
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from . import named_attributes
 from .image import ImageExporter
 import math
@@ -13,19 +13,19 @@ ERROR_VALUE = 0
 MISSING_IMAGE_COLOR = [1, 0, 1]
 # Neutral fallbacks for unsupported outputs; never silently return black
 
-# Node types with no LuxCore equivalent — the generic fallback path uses
+# Node types with no SuperLuxCore equivalent — the generic fallback path uses
 # these to emit a specific reason instead of a bare "unsupported" warning.
 _UNSUPPORTED_NODE_NOTES = {
-    "ShaderNodeScript": "OSL scripts cannot be executed by LuxCore",
+    "ShaderNodeScript": "OSL scripts cannot be executed by SuperLuxCore",
     "ShaderNodeShaderToRGB": "shader-to-color requires an Eevee-style raster pass",
-    "ShaderNodeOutputAOV": "custom AOVs are written via LuxCore film outputs, not material nodes",
-    "ShaderNodeOutputLineStyle": "Freestyle line-style output has no LuxCore equivalent",
-    "ShaderNodeLightFalloff": "light falloff is configured on LuxCore light definitions",
-    "ShaderNodeCameraData": "view vector/depth is not available to LuxCore textures",
-    "ShaderNodeRaycast": "scene raycast queries are not available to LuxCore textures",
-    "ShaderNodeRadialTiling": "no polar/radial tiling texture in LuxCore",
-    "ShaderNodeTexIES": "IES profiles live on LuxCore light definitions, not material textures",
-    "ShaderNodeTexSky": "sky models exist as LuxCore lights (sky2/sun), not material textures",
+    "ShaderNodeOutputAOV": "custom AOVs are written via SuperLuxCore film outputs, not material nodes",
+    "ShaderNodeOutputLineStyle": "Freestyle line-style output has no SuperLuxCore equivalent",
+    "ShaderNodeLightFalloff": "light falloff is configured on SuperLuxCore light definitions",
+    "ShaderNodeCameraData": "view vector/depth is not available to SuperLuxCore textures",
+    "ShaderNodeRaycast": "scene raycast queries are not available to SuperLuxCore textures",
+    "ShaderNodeRadialTiling": "no polar/radial tiling texture in SuperLuxCore",
+    "ShaderNodeTexIES": "IES profiles live on SuperLuxCore light definitions, not material textures",
+    "ShaderNodeTexSky": "sky models exist as SuperLuxCore lights (sky2/sun), not material textures",
     "ShaderNodeSqueeze": "Freestyle squeeze value has no shading meaning",
     "ShaderNodeUVAlongStroke": "Freestyle stroke UVs have no shading meaning",
     "ShaderNodeBackground": "Background is a world-shader node; use Emission in materials",
@@ -34,10 +34,10 @@ FALLBACK_COLOR = [0.5, 0.5, 0.5]
 FALLBACK_FLOAT = 0.5
 FALLBACK_VECTOR = [0.0, 0.0, 0.0]
 
-# ShaderNodeLightPath output socket -> LuxCore "rayinfo" texture channel.
+# ShaderNodeLightPath output socket -> SuperLuxCore "rayinfo" texture channel.
 # The engine fills HitPoint with the context of the incoming ray during
 # Scene::Intersect() (ray flags, generating BSDF event, path depth
-# counters, segment length). See LuxCore slg/textures/hitpoint/rayinfo.h.
+# counters, segment length). See SuperLuxCore slg/textures/hitpoint/rayinfo.h.
 _LIGHT_PATH_CHANNELS = {
     "Is Camera Ray": "iscameraray",
     "Is Shadow Ray": "isshadowray",
@@ -52,7 +52,7 @@ _LIGHT_PATH_CHANNELS = {
     "Ray Depth": "raydepth",
     "Diffuse Depth": "diffusedepth",
     "Glossy Depth": "glossydepth",
-    # Cycles counts transparent BSDF crossings; LuxCore increments the
+    # Cycles counts transparent BSDF crossings; SuperLuxCore increments the
     # path transparentDepth while stepping through pass-through materials
     "Transparent Depth": "transparentdepth",
     "Transmission Depth": "transmissiondepth",
@@ -65,52 +65,52 @@ math_operation_map = {
 }
 
 
-def convert(material, props, luxcore_name, obj_name=""):
+def convert(material, props, superluxcore_name, obj_name=""):
     # print("Converting Cycles node tree of material", material.name_full)
     output = material.node_tree.get_output_node("CYCLES")
     if output is None:
-        return black(luxcore_name)
+        return black(superluxcore_name)
 
     link = utils_node.get_link(output.inputs["Surface"])
     volume_link = utils_node.get_link(output.inputs["Volume"]) if "Volume" in output.inputs else None
 
     # Note: the Displacement output is not handled here — it is a mesh-level
-    # effect exported by the object cache as a LuxCore "displacement" shape
+    # effect exported by the object cache as a SuperLuxCore "displacement" shape
     # (see get_displacement_link / export_displacement below).
 
     if link is None and volume_link is None:
-        return black(luxcore_name)
+        return black(superluxcore_name)
 
     if link is not None:
-        result = _node(link.from_node, link.from_socket, props, material, luxcore_name, obj_name)
+        result = _node(link.from_node, link.from_socket, props, material, superluxcore_name, obj_name)
         if result == ERROR_VALUE:
-            return black(luxcore_name)
+            return black(superluxcore_name)
 
-        assert result == luxcore_name
+        assert result == superluxcore_name
     else:
         # Volume-only material: an invisible surface carrying the interior volume
-        props.Set(utils.luxutils.create_props("scene.materials." + luxcore_name + ".", {
+        props.Set(utils.luxutils.create_props("scene.materials." + superluxcore_name + ".", {
             "type": "null",
         }))
 
     if volume_link is not None:
         volume_defs = _volume(volume_link.from_node, volume_link.from_socket,
-                              props, material, luxcore_name, obj_name)
+                              props, material, superluxcore_name, obj_name)
         if volume_defs is not None:
-            volume_name = luxcore_name + "_volume"
+            volume_name = superluxcore_name + "_volume"
             props.Set(utils.luxutils.create_props("scene.volumes." + volume_name + ".", volume_defs))
-            props.Set(pyluxcore.Property(
-                "scene.materials." + luxcore_name + ".volume.interior", volume_name))
+            props.Set(pysuperluxcore.Property(
+                "scene.materials." + superluxcore_name + ".volume.interior", volume_name))
         # If None, _volume already logged a warning
 
-    return luxcore_name, props
+    return superluxcore_name, props
 
 
 def get_displacement_link(material):
     """
     Returns the link feeding the Cycles output's Displacement socket, or
     None. Used by the object cache to decide whether to wrap the mesh in a
-    LuxCore "displacement" shape.
+    SuperLuxCore "displacement" shape.
     """
     node_tree = getattr(material, "node_tree", None)
     if node_tree is None:
@@ -127,14 +127,14 @@ def get_displacement_link(material):
 def export_displacement(link, props, material, obj_name):
     """
     Exports the textures driving a Cycles Displacement/Vector Displacement
-    node into props and returns the parameters for a LuxCore "displacement"
+    node into props and returns the parameters for a SuperLuxCore "displacement"
     shape, or None when the link is not a supported displacement node.
     """
     node = link.from_node
 
     if node.bl_idname == "ShaderNodeDisplacement":
         if getattr(node, "space", "OBJECT") != "OBJECT":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 'Displacement node "%s": world space is not supported, '
                 "object space is used instead" % node.name, obj_name=obj_name)
         height = _socket(node.inputs["Height"], props, material, obj_name, None)
@@ -142,7 +142,7 @@ def export_displacement(link, props, material, obj_name):
             return None
         scale = _scalar_or_warn(node.inputs["Scale"], 1.0, node, obj_name)
         midlevel = _scalar_or_warn(node.inputs["Midlevel"], 0.5, node, obj_name)
-        # LuxCore: disp = (map * scale + offset) * N
+        # SuperLuxCore: disp = (map * scale + offset) * N
         # Cycles:  disp = (height - midlevel) * scale * N
         return {
             "map": height,
@@ -153,7 +153,7 @@ def export_displacement(link, props, material, obj_name):
 
     if node.bl_idname == "ShaderNodeVectorDisplacement":
         if getattr(node, "space", "OBJECT") != "OBJECT":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 'Vector Displacement node "%s": world space is not supported, '
                 "object space is used instead" % node.name, obj_name=obj_name)
         vector = _socket(node.inputs["Vector"], props, material, obj_name, None)
@@ -175,7 +175,7 @@ def export_displacement(link, props, material, obj_name):
 def _scalar_or_warn(socket, fallback, node, obj_name):
     """ Reads a scalar socket; warns and falls back when it is textured. """
     if socket.is_linked:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Node "%s": textured "%s" input is not supported for '
             "displacement, using default value" % (node.name, socket.name),
             obj_name=obj_name)
@@ -183,13 +183,13 @@ def _scalar_or_warn(socket, fallback, node, obj_name):
     return socket.default_value
 
 
-def black(luxcore_name="__BLACK__"):
-    props = pyluxcore.Properties()
+def black(superluxcore_name="__BLACK__"):
+    props = pysuperluxcore.Properties()
     props.SetFromString("""
     scene.materials.{mat_name}.type = matte
     scene.materials.{mat_name}.kd = 0
-    """.format(mat_name=luxcore_name))
-    return luxcore_name, props
+    """.format(mat_name=superluxcore_name))
+    return superluxcore_name, props
 
 
 def _warn_unsupported(node, reason, fallback, obj_name=""):
@@ -198,14 +198,14 @@ def _warn_unsupported(node, reason, fallback, obj_name=""):
     neutral fallback so the material still renders plausibly instead of
     silently turning black.
     """
-    LuxCoreErrorLog.add_warning(
+    SuperLuxCoreErrorLog.add_warning(
         f'Node "{node.name}" ({node.bl_idname}): {reason}', obj_name=obj_name)
     return fallback
 
 
 def _tex_helper(props, name, definitions):
     """Emit a scene.textures.* definition under the given name, return the name."""
-    tex_name = utils.sanitize_luxcore_name(name)
+    tex_name = utils.sanitize_superluxcore_name(name)
     props.Set(utils.luxutils.create_props("scene.textures." + tex_name + ".", definitions))
     return tex_name
 
@@ -528,20 +528,20 @@ def _vtransform_matrix(cfrom, cto, obj_name):
     return m_to.inverted_safe() @ m_from
 
 
-def _blend_rgb(node, blend_type, fac, tex1, tex2, luxcore_name, props, obj_name):
+def _blend_rgb(node, blend_type, fac, tex1, tex2, superluxcore_name, props, obj_name):
     """
     Shared implementation for ShaderNodeMixRGB and the RGBA variant of the
     unified ShaderNodeMix node.
-    Returns (definitions, luxcore_name, early_result); when early_result is not
+    Returns (definitions, superluxcore_name, early_result); when early_result is not
     None the caller returns it directly.
     """
-    # TODO (in LuxCore):
+    # TODO (in SuperLuxCore):
     #  "DARKEN", "BURN", "LIGHTEN", "SCREEN", "DODGE", "OVERLAY", "SOFT_LIGHT",
     #  "LINEAR_LIGHT", "DIFFERENCE", "HUE", "SATURATION", "COLOR", "VALUE"
     definitions = {}
 
     if fac == 0:
-        return None, luxcore_name, tex1
+        return None, superluxcore_name, tex1
 
     if blend_type in {"MIX", "MULTIPLY", "ADD", "SUBTRACT", "DIVIDE"}:
         if blend_type == "MULTIPLY":
@@ -555,10 +555,10 @@ def _blend_rgb(node, blend_type, fac, tex1, tex2, luxcore_name, props, obj_name)
         if blend_type == "MIX":
             definitions["amount"] = fac
             if fac == 1:
-                return None, luxcore_name, tex2
+                return None, superluxcore_name, tex2
     else:
         # Never silently black: warn and degrade to a plain mix
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             f'Node "{node.name}": unsupported blend mode "{blend_type}", '
             'falling back to "mix"', obj_name=obj_name)
         definitions = {
@@ -567,20 +567,20 @@ def _blend_rgb(node, blend_type, fac, tex1, tex2, luxcore_name, props, obj_name)
             "texture2": tex2,
             "amount": fac,
         }
-        return definitions, luxcore_name, None
+        return definitions, superluxcore_name, None
 
     if (_is_textured(fac) or (fac > 0 and fac < 1)) and blend_type != "MIX":
         # Here we need to insert a helper texture *after* the current texture
-        props.Set(utils.luxutils.create_props("scene.textures." + luxcore_name + ".", definitions))
+        props.Set(utils.luxutils.create_props("scene.textures." + superluxcore_name + ".", definitions))
         definitions = {
             "type": "mix",
             "texture1": tex1,
-            "texture2": luxcore_name,
+            "texture2": superluxcore_name,
             "amount": fac,
         }
-        luxcore_name = luxcore_name + "fac"
+        superluxcore_name = superluxcore_name + "fac"
 
-    return definitions, luxcore_name, None
+    return definitions, superluxcore_name, None
 
 
 def _mapping_node_values(mapping_node, obj_name):
@@ -593,7 +593,7 @@ def _mapping_node_values(mapping_node, obj_name):
         if socket is None:
             return fallback
         if socket.is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Mapping node "{mapping_node.name}": linked "{name}" input is not '
                 "supported, using its constant default value", obj_name=obj_name)
         try:
@@ -685,7 +685,7 @@ def _vector_mapping_defs(vector_socket, is_2d, flip_v, props, material, obj_name
     if source.bl_idname == "ShaderNodeUVMap":
         index = _uv_layer_index(obj_name, getattr(source, "uv_map", ""))
         if index is None:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'UV map "{getattr(source, "uv_map", "")}" of node "{source.name}" '
                 "could not be resolved, using the default UV layer",
                 obj_name=obj_name)
@@ -699,20 +699,20 @@ def _vector_mapping_defs(vector_socket, is_2d, flip_v, props, material, obj_name
         if source_socket.name == "UV":
             return {}  # the default UV mapping already matches
         if source_socket.name == "Generated":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 "Generated texture coordinates are approximated by the UV mapping "
-                "(no bounding-box normalization in LuxCore)", obj_name=obj_name)
+                "(no bounding-box normalization in SuperLuxCore)", obj_name=obj_name)
             return {}
         if source_socket.name == "Object" and not is_2d:
             # LocalMapping3D evaluates the hit point in object space
             return {"mapping.type": "localmapping3d"}
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             f'Texture coordinate output "{source_socket.name}" of node '
             f'"{source.name}" is approximated by the default UV mapping',
             obj_name=obj_name)
         return {}
 
-    LuxCoreErrorLog.add_warning(
+    SuperLuxCoreErrorLog.add_warning(
         f'Node "{source.name}" cannot drive a texture Vector input; '
         "the default UV mapping is used", obj_name=obj_name)
     return {}
@@ -726,14 +726,14 @@ def _evaluate_curve(curve_map, curve_mapping, position):
         return curve_map.evaluate(position)
 
 
-def _socket(socket, props, material, obj_name, group_node, luxcore_name=None):
+def _socket(socket, props, material, obj_name, group_node, superluxcore_name=None):
     link = utils_node.get_link(socket)
     if link:
-        # Pass luxcore_name through so pass-through nodes can re-emit the
+        # Pass superluxcore_name through so pass-through nodes can re-emit the
         # upstream subtree under the requested name (convert() relies on the
         # top-level node returning the name it was given)
         return _node(link.from_node, link.from_socket, props, material,
-                     luxcore_name, obj_name, group_node)
+                     superluxcore_name, obj_name, group_node)
 
     if not hasattr(socket, "default_value"):
         return ERROR_VALUE
@@ -746,7 +746,7 @@ def _socket(socket, props, material, obj_name, group_node, luxcore_name=None):
 
 
 def _principled_openpbr(node, base_color, metallic, transmission,
-                        coat_weight, props, material, luxcore_name,
+                        coat_weight, props, material, superluxcore_name,
                         obj_name, group_node_stack):
     """
     Principled v2 -> OpenPBR material definitions. Principled is OpenPBR's
@@ -780,7 +780,7 @@ def _principled_openpbr(node, base_color, metallic, transmission,
     level = s("Specular IOR Level", 0.5)
     if _is_textured(level) or abs(float(level) - 0.5) > 1e-4:
         definitions["specularweight"] = _tex_binary(
-            "scale", level, 2.0, luxcore_name + "_speclvl", props)
+            "scale", level, 2.0, superluxcore_name + "_speclvl", props)
 
     # Specular Tint (v2 color socket, default white = no tint): maps
     # directly onto OpenPBR's specular_color F0 tint
@@ -824,7 +824,7 @@ def _principled_openpbr(node, base_color, metallic, transmission,
     if _is_textured(tf_thickness) or float(tf_thickness) != 0.0:
         definitions["filmweight"] = 1.0
         definitions["filmthickness"] = _tex_binary(
-            "scale", tf_thickness, 0.001, luxcore_name + "_filmum", props)
+            "scale", tf_thickness, 0.001, superluxcore_name + "_filmum", props)
         definitions["filmior"] = s("Thin Film IOR", 1.33)
 
     # Honest warnings for inputs openpbr cannot express
@@ -847,7 +847,7 @@ def _principled_openpbr(node, base_color, metallic, transmission,
 def _principled_thin_film(node, definitions, props, material, obj_name,
                           group_node_stack, with_amount):
     """
-    Principled v2 Thin Film Thickness/IOR -> LuxCore thin-film interference
+    Principled v2 Thin Film Thickness/IOR -> SuperLuxCore thin-film interference
     params. Disney uses filmamount + filmthickness + filmior; glass-family
     materials only have filmthickness/filmior (thickness > 0 enables it).
     """
@@ -873,7 +873,7 @@ def _principled_thin_film(node, definitions, props, material, obj_name,
 
 def _principled_disney_warnings(node, transmission, thin_wall_on, obj_name):
     """
-    Emit warnings for Principled v2 inputs that LuxCore's Disney material
+    Emit warnings for Principled v2 inputs that SuperLuxCore's Disney material
     cannot express. Each warning only fires when the feature is actually
     used (weight active + input linked/non-default) to avoid noise on
     untouched sockets.
@@ -883,7 +883,7 @@ def _principled_disney_warnings(node, transmission, thin_wall_on, obj_name):
     if _socket_active(node.inputs.get("Sheen Weight")):
         if _socket_nondefault(node.inputs.get("Sheen Roughness"), 0.5):
             _warn_unsupported(
-                node, "Sheen Roughness is not supported by LuxCore's Disney "
+                node, "Sheen Roughness is not supported by SuperLuxCore's Disney "
                 "material (the sheen lobe has no roughness); ignored",
                 None, obj_name)
         sheen_tint_socket = node.inputs.get("Sheen Tint")
@@ -909,7 +909,7 @@ def _principled_disney_warnings(node, transmission, thin_wall_on, obj_name):
     # roughness, there is no separate parameter
     if _socket_nondefault(node.inputs.get("Diffuse Roughness"), 0.0):
         _warn_unsupported(
-            node, "Diffuse Roughness is not supported by LuxCore's Disney "
+            node, "Diffuse Roughness is not supported by SuperLuxCore's Disney "
             "material (the specular Roughness drives the diffuse lobe); "
             "ignored", None, obj_name)
 
@@ -920,7 +920,7 @@ def _principled_disney_warnings(node, transmission, thin_wall_on, obj_name):
             or _socket_nondefault(node.inputs.get("Tangent"), (0.0, 0.0, 0.0))):
         _warn_unsupported(
             node, "anisotropy direction (Anisotropic Rotation, Tangent) is "
-            "not supported by LuxCore's Disney material; the anisotropy "
+            "not supported by SuperLuxCore's Disney material; the anisotropy "
             "follows the shading frame", None, obj_name)
 
     # Subsurface: Disney's subsurface is the weight-only diffuse-profile
@@ -956,18 +956,18 @@ def _principled_disney_warnings(node, transmission, thin_wall_on, obj_name):
     transmission_active = _is_textured(transmission) or transmission != 0
     if thin_wall_on and transmission_active:
         _warn_unsupported(
-            node, "Thin Wall is not supported by LuxCore's Disney material; "
+            node, "Thin Wall is not supported by SuperLuxCore's Disney material; "
             "transmission refracts as a solid volume (total internal "
             "reflection and interior volumes apply)", None, obj_name)
 
 
-def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", group_node_stack=None):
-    if luxcore_name is None:
-        luxcore_name = str(node.as_pointer()) + output_socket.name
+def _node(node, output_socket, props, material, superluxcore_name=None, obj_name="", group_node_stack=None):
+    if superluxcore_name is None:
+        superluxcore_name = str(node.as_pointer()) + output_socket.name
         if group_node_stack:
             for n in group_node_stack:
-                luxcore_name += str(n.as_pointer())
-        luxcore_name = utils.sanitize_luxcore_name(luxcore_name)
+                superluxcore_name += str(n.as_pointer())
+        superluxcore_name = utils.sanitize_superluxcore_name(superluxcore_name)
 
     if node.bl_idname == "ShaderNodeBsdfPrincipled":
         prefix = "scene.materials."
@@ -1007,7 +1007,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             # It's effectively glass instead of a disney material.
             # Don't use mix for performance reasons.
             roughness = _squared_roughness_to_linear(node.inputs["Roughness"], props, material,
-                                                     luxcore_name, obj_name, group_node_stack)
+                                                     superluxcore_name, obj_name, group_node_stack)
             # Glass materials have no built-in coat lobe, so any active coat
             # needs the glossycoating wrap (even with default coat params).
             use_coating = coat_active
@@ -1046,13 +1046,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             # filmthickness > 0; there is no filmamount on these materials)
             _principled_thin_film(node, definitions, props, material, obj_name,
                                   group_node_stack, with_amount=False)
-        elif getattr(material.luxcore, "principled_target", "openpbr") == "openpbr":
+        elif getattr(material.superluxcore, "principled_target", "openpbr") == "openpbr":
             # OpenPBR is Principled's native model: direct mapping, and the
             # coat is a built-in lobe so no glossycoating wrap is needed.
             use_coating = False
             definitions = _principled_openpbr(
                 node, base_color, metallic, transmission, coat_weight,
-                props, material, luxcore_name, obj_name, group_node_stack)
+                props, material, superluxcore_name, obj_name, group_node_stack)
         else:
             use_coating = coat_active and coat_extra
             definitions = {
@@ -1066,7 +1066,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "metallic": metallic,
                 "specular": _socket(node.inputs["Specular IOR Level"], props, material, obj_name, group_node_stack),
                 "speculartint": _socket(node.inputs["Specular Tint"], props, material, obj_name, group_node_stack),
-                # Both LuxCore and Cycles use squared roughness here, no need to convert
+                # Both SuperLuxCore and Cycles use squared roughness here, no need to convert
                 "roughness": _socket(node.inputs["Roughness"], props, material, obj_name, group_node_stack),
                 "anisotropic": _socket(node.inputs["Anisotropic"], props, material, obj_name, group_node_stack),
                 "sheen": _socket(node.inputs["Sheen Weight"], props, material, obj_name, group_node_stack),
@@ -1075,7 +1075,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 # clearcoat lobe is disabled so the coat is not applied twice.
                 "clearcoat": 0.0 if use_coating else coat_weight,
                 # Disney clearcoatgloss = 1 - coat_roughness
-                "clearcoatgloss": 1.0 if use_coating else (_tex_helper(props, luxcore_name + "coatgloss", {
+                "clearcoatgloss": 1.0 if use_coating else (_tex_helper(props, superluxcore_name + "coatgloss", {
                     "type": "subtract",
                     "texture1": 1.0,
                     "texture2": _socket(node.inputs["Coat Roughness"], props, material, obj_name, group_node_stack),
@@ -1115,7 +1115,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         elif emission_strength == 0 or emission_strength == 0.0:
             emission = emission_strength
         else:
-            emission = _tex_helper(props, luxcore_name + "emission_col", {
+            emission = _tex_helper(props, superluxcore_name + "emission_col", {
                 "type": "scale",
                 "texture1": emission_strength,
                 "texture2": emission_color,
@@ -1126,12 +1126,12 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if use_coating:
             # Wrap the base in a real dielectric coat layer (glossycoating):
             #   index = Coat IOR, ks = Coat Weight scales the coat Fresnel F0
-            #   (LuxCore multiplies ks by ((ior-1)/(ior+1))^2, exactly the
+            #   (SuperLuxCore multiplies ks by ((ior-1)/(ior+1))^2, exactly the
             #   Cycles coat F0), uroughness/vroughness = Coat Roughness
-            #   (Cycles squared -> LuxCore linear), bumptex = Coat Normal
+            #   (Cycles squared -> SuperLuxCore linear), bumptex = Coat Normal
             #   (the coating evaluates with its own bumped frame while the
             #   base keeps the regular Normal input).
-            base_name = utils.sanitize_luxcore_name(luxcore_name + "_coatbase")
+            base_name = utils.sanitize_superluxcore_name(superluxcore_name + "_coatbase")
             base_definitions = dict(definitions)
             # Emission/transparency/normal live on the substrate — the
             # coating delegates passthrough transparency and (when it has no
@@ -1146,7 +1146,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
             coat_roughness = _squared_roughness_to_linear(
                 node.inputs["Coat Roughness"], props, material,
-                luxcore_name + "_coat", obj_name, group_node_stack)
+                superluxcore_name + "_coat", obj_name, group_node_stack)
             coat_ior = _socket(coat_ior_socket, props, material, obj_name,
                                group_node_stack) if coat_ior_socket is not None else 1.5
             definitions = {
@@ -1164,7 +1164,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                     coat_normal_socket, props, material, obj_name, group_node_stack)
             if _socket_nondefault(coat_tint_socket, (1.0, 1.0, 1.0)):
                 # Cycles Coat Tint is volumetric absorption inside the coat:
-                # transmittance = pow(tint, weight / cosNT). LuxCore computes
+                # transmittance = pow(tint, weight / cosNT). SuperLuxCore computes
                 # exp(-ka * d * (1/cosi + 1/coso)), so ka = -ln(tint) and
                 # d = weight/2 reproduce tint^weight at perpendicular
                 # incidence (the angle Cycles normalizes to).
@@ -1172,10 +1172,10 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                                     group_node_stack)
                 definitions["ka"] = _tex_binary(
                     "scale",
-                    _v3_mathfunc("ln", coat_tint, luxcore_name + "_coatln", props),
-                    -1.0, luxcore_name + "_coatka", props)
+                    _v3_mathfunc("ln", coat_tint, superluxcore_name + "_coatln", props),
+                    -1.0, superluxcore_name + "_coatka", props)
                 definitions["d"] = _tex_binary(
-                    "scale", coat_weight, 0.5, luxcore_name + "_coatd", props)
+                    "scale", coat_weight, 0.5, superluxcore_name + "_coatd", props)
         else:
             definitions.update({
                 "emission": emission,
@@ -1213,18 +1213,18 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         # re-emitted under this node's name to keep the name invariant
         if link1 is None:
             return _socket(node.inputs[1], props, material, obj_name,
-                           group_node_stack, luxcore_name)
+                           group_node_stack, superluxcore_name)
         if link2 is None:
             return _socket(node.inputs[0], props, material, obj_name,
-                           group_node_stack, luxcore_name)
+                           group_node_stack, superluxcore_name)
 
         # Adding a Transparent BSDF is adding nothing -> pass the other side (exact)
         if link1.from_node.bl_idname == "ShaderNodeBsdfTransparent":
             return _socket(node.inputs[1], props, material, obj_name,
-                           group_node_stack, luxcore_name)
+                           group_node_stack, superluxcore_name)
         if link2.from_node.bl_idname == "ShaderNodeBsdfTransparent":
             return _socket(node.inputs[0], props, material, obj_name,
-                           group_node_stack, luxcore_name)
+                           group_node_stack, superluxcore_name)
 
         def emission_of(emission_node):
             # Recreate the emission texture the Emission branch below produces
@@ -1245,7 +1245,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             # Exact: a non-scattering material emitting the sum of both emissions
             emission = _tex_binary("add", emission_of(link1.from_node),
                                    emission_of(link2.from_node),
-                                   luxcore_name + "emission_add", props)
+                                   superluxcore_name + "emission_add", props)
             definitions = {
                 "type": "matte",
                 "kd": [0, 0, 0],
@@ -1255,15 +1255,15 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "emission.efficency": 0,
             }
         elif is_emission1 or is_emission2:
-            # LuxCore has no additive material type; exact approach for the common
+            # SuperLuxCore has no additive material type; exact approach for the common
             # "Emission + surface shader" case: attach the emission to the other
             # material's emission slot
             emission_link = link1 if is_emission1 else link2
             base_socket = node.inputs[1] if is_emission1 else node.inputs[0]
             base_name = _socket(base_socket, props, material, obj_name,
-                                group_node_stack, luxcore_name)
+                                group_node_stack, superluxcore_name)
             if base_name == ERROR_VALUE or not isinstance(base_name, str):
-                base_name, mat_props = black(luxcore_name)
+                base_name, mat_props = black(superluxcore_name)
                 props.Set(mat_props)
 
             emission_key = "scene.materials." + base_name + ".emission"
@@ -1289,10 +1289,10 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 return base_name
 
         if not is_emission1 and not is_emission2:
-            # Approximation: LuxCore materials cannot be added; a 50/50 mix halves
+            # Approximation: SuperLuxCore materials cannot be added; a 50/50 mix halves
             # the combined energy of both closures but keeps them visible
             _warn_unsupported(
-                node, "LuxCore materials cannot be added; approximated by a 50/50 "
+                node, "SuperLuxCore materials cannot be added; approximated by a 50/50 "
                 "mix (energy is halved)", None, obj_name)
 
         if (is_emission1 != is_emission2 and already_has_emission) or \
@@ -1323,7 +1323,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.materials."
 
         # Implicitly create a fresnelcolor texture with unique name
-        tex_name = luxcore_name + "fresnel_helper"
+        tex_name = superluxcore_name + "fresnel_helper"
         helper_prefix = "scene.textures." + tex_name + "."
         helper_defs = {
             "type": "fresnelcolor",
@@ -1332,7 +1332,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         props.Set(utils.luxutils.create_props(helper_prefix, helper_defs))
 
         roughness = _squared_roughness_to_linear(node.inputs["Roughness"], props, material,
-                                                 luxcore_name, obj_name, group_node_stack)
+                                                 superluxcore_name, obj_name, group_node_stack)
 
         definitions = {
             "type": "metal2",
@@ -1355,7 +1355,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             try:
                 filepath = ImageExporter.export_cycles_node_reader(node.image)
             except OSError as error:
-                LuxCoreErrorLog.add_warning(error, obj_name=obj_name)
+                SuperLuxCoreErrorLog.add_warning(error, obj_name=obj_name)
                 return MISSING_IMAGE_COLOR
 
             definitions = {
@@ -1387,7 +1387,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.materials."
         color = _socket(node.inputs["Color"], props, material, obj_name, group_node_stack)
         roughness = _squared_roughness_to_linear(node.inputs["Roughness"], props, material,
-                                                 luxcore_name, obj_name, group_node_stack)
+                                                 superluxcore_name, obj_name, group_node_stack)
 
         definitions = {
             "type": "glass" if roughness == 0 else "roughglass",
@@ -1404,7 +1404,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.materials."
         color = _socket(node.inputs["Color"], props, material, obj_name, group_node_stack)
         roughness = _squared_roughness_to_linear(node.inputs["Roughness"], props, material,
-                                                 luxcore_name, obj_name, group_node_stack)
+                                                 superluxcore_name, obj_name, group_node_stack)
 
         definitions = {
             "type": "glass" if roughness == 0 else "roughglass",
@@ -1421,7 +1421,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.materials."
 
         # Implicitly create a fresnelcolor texture with unique name
-        tex_name = luxcore_name + "fresnel_helper"
+        tex_name = superluxcore_name + "fresnel_helper"
         helper_prefix = "scene.textures." + tex_name + "."
         helper_defs = {
             "type": "fresnelcolor",
@@ -1431,7 +1431,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         # TODO emulate actual anisotropy and rotation somehow ...
         roughness = _squared_roughness_to_linear(node.inputs["Roughness"], props, material,
-                                                 luxcore_name, obj_name, group_node_stack)
+                                                 superluxcore_name, obj_name, group_node_stack)
 
         definitions = {
             "type": "metal2",
@@ -1457,12 +1457,12 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         # vroughness shrinks with anisotropy (directional streaks); a scalar
         # anisotropy can't compose with a textured roughness — warn then
         if isinstance(anisotropy, str):
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Metallic node "{node.name}": textured anisotropy is not '
                 "supported, isotropic roughness is used", obj_name=obj_name)
             vroughness = roughness
         elif isinstance(roughness, str):
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Metallic node "{node.name}": anisotropy with a textured '
                 "roughness is approximated", obj_name=obj_name)
             vroughness = roughness
@@ -1473,7 +1473,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 node.inputs.get("Edge Tint") is not None and \
                 (node.inputs["Edge Tint"].is_linked or
                  list(node.inputs["Edge Tint"].default_value)[:3] != [0, 0, 0]):
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Metallic node "{node.name}": Edge Tint (F82) is not '
                 "supported by the conductor model", obj_name=obj_name)
 
@@ -1489,8 +1489,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             # F82 mode (default): derive n,k from the Base Color reflectance
             base_color = _socket(node.inputs["Base Color"], props, material,
                                  obj_name, group_node_stack)
-            n_tex = luxcore_name + "approxn"
-            k_tex = luxcore_name + "approxk"
+            n_tex = superluxcore_name + "approxn"
+            k_tex = superluxcore_name + "approxk"
             props.Set(utils.luxutils.create_props(
                 "scene.textures." + n_tex + ".",
                 {"type": "fresnelapproxn", "texture": base_color}))
@@ -1507,7 +1507,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if node.inputs.get("Rotation") is not None and \
                 (node.inputs["Rotation"].is_linked or
                  node.inputs["Rotation"].default_value != 0.0):
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Metallic node "{node.name}": anisotropy rotation is not '
                 "supported", obj_name=obj_name)
         if node.inputs.get("Normal") is not None:
@@ -1516,24 +1516,24 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if node.inputs.get("Thin Film Thickness") is not None and \
                 (node.inputs["Thin Film Thickness"].is_linked or
                  node.inputs["Thin Film Thickness"].default_value != 0.0):
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Metallic node "{node.name}": thin film on conductors is not '
                 "supported by metal2", obj_name=obj_name)
     elif node.bl_idname == "ShaderNodeBsdfHairPrincipled":
         prefix = "scene.materials."
 
-        # Cycles' Principled Hair maps onto LuxCore's Marschner "hairmat".
+        # Cycles' Principled Hair maps onto SuperLuxCore's Marschner "hairmat".
         def _sock(name, fallback):
             s = node.inputs.get(name)
             return _socket(s, props, material, obj_name, group_node_stack) \
                 if s is not None else fallback
 
-        # Cycles' Offset is radians; LuxCore's alpha is degrees.
+        # Cycles' Offset is radians; SuperLuxCore's alpha is degrees.
         offset_sock = node.inputs.get("Offset")
         offset = _socket(offset_sock, props, material, obj_name, group_node_stack) \
             if offset_sock is not None else 0.0
         if offset_sock is not None and offset_sock.is_linked and offset != ERROR_VALUE:
-            alpha = luxcore_name + "offset_to_deg"
+            alpha = superluxcore_name + "offset_to_deg"
             props.Set(utils.luxutils.create_props("scene.textures." + alpha + ".", {
                 "type": "scale",
                 "texture1": offset,
@@ -1545,13 +1545,21 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         definitions = {
             "type": "hairmat",
             "eta": _sock("IOR", 1.55),
+            "alpha": alpha,
+        }
+        # Blender's Principled Hair exposes a model enum: CHIANG (near-field
+        # Marschner lobes) maps to beta_m/beta_n, HUANG (microfacet, EGSR'22)
+        # maps to roughness/aspectratio.
+        if getattr(node, "model", "CHIANG") == "HUANG":
+            definitions["model"] = "huang"
+            definitions["roughness"] = _sock("Roughness", 0.3)
+            definitions["aspectratio"] = _sock("Aspect Ratio", 0.85)
+        else:
             # Roughness/Radial Roughness -> beta_m/beta_n. Both are 0..1 and
             # drive the same longitudinal/azimuthal roughness axes; the exact
             # parameterizations differ so this is a first-order match.
-            "beta_m": _sock("Roughness", 0.3),
-            "beta_n": _sock("Radial Roughness", 0.3),
-            "alpha": alpha,
-        }
+            definitions["beta_m"] = _sock("Roughness", 0.3)
+            definitions["beta_n"] = _sock("Radial Roughness", 0.3)
         # Color parameterization is mutually exclusive in both engines.
         if node.parametrization == "ABSORPTION":
             definitions["sigma_a"] = _sock("Absorption Coefficient", [0.0, 0.0, 0.0])
@@ -1571,7 +1579,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 definitions["eumelanin"] = qty * (1.0 - redness)
                 definitions["pheomelanin"] = qty * redness
             else:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     'Principled Hair node "%s": textured Melanin inputs are '
                     "approximated by constant melanin concentrations" % node.name,
                     obj_name=obj_name)
@@ -1612,13 +1620,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         tex1 = _socket(node.inputs["Color1"], props, material, obj_name, group_node_stack)
         tex2 = _socket(node.inputs["Color2"], props, material, obj_name, group_node_stack)
 
-        definitions, luxcore_name, early = _blend_rgb(
-            node, node.blend_type, fac, tex1, tex2, luxcore_name, props, obj_name)
+        definitions, superluxcore_name, early = _blend_rgb(
+            node, node.blend_type, fac, tex1, tex2, superluxcore_name, props, obj_name)
         if early is not None:
             return early
     elif node.bl_idname == "ShaderNodeMath":
-        # Trig/exp/log ops are backed by LuxCore's native "mathfunc"
-        # texture (requires a pyluxcore build with MATHFUNC_TEX).
+        # Trig/exp/log ops are backed by SuperLuxCore's native "mathfunc"
+        # texture (requires a pysuperluxcore build with MATHFUNC_TEX).
 
         prefix = "scene.textures."
         definitions = {}
@@ -1627,7 +1635,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         tex2 = _socket(node.inputs[1], props, material, obj_name, group_node_stack)
 
         # In Cycles, the inputs are converted to float values (e.g. averaged in case of RGB input).
-        # The following LuxCore textures would perform RGB operations if we didn't convert the inputs to floats.
+        # The following SuperLuxCore textures would perform RGB operations if we didn't convert the inputs to floats.
         if node.operation in {"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "ABSOLUTE"}:
             tex1 = _convert_to_float(tex1, props)
             tex2 = _convert_to_float(tex2, props)
@@ -1655,97 +1663,97 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             definitions["texture"] = tex1
             definitions["modulo"] = tex2
         elif node.operation == "SQRT":
-            return _tex_binary("power", tex1, 0.5, luxcore_name + "_sqrt",
+            return _tex_binary("power", tex1, 0.5, superluxcore_name + "_sqrt",
                                props)
         elif node.operation == "EXPONENT":
-            return _tex_mathfunc("exp", tex1, None, luxcore_name, props)
+            return _tex_mathfunc("exp", tex1, None, superluxcore_name, props)
         elif node.operation in {"MINIMUM", "MAXIMUM"}:
-            lt = _tex_lessthan(tex1, tex2, luxcore_name + "_lt", props)
+            lt = _tex_lessthan(tex1, tex2, superluxcore_name + "_lt", props)
             if node.operation == "MINIMUM":
                 diff = _tex_binary("subtract", tex1, tex2,
-                                   luxcore_name + "_df", props)
+                                   superluxcore_name + "_df", props)
                 sel = _tex_binary("scale", diff, lt,
-                                  luxcore_name + "_sl", props)
+                                  superluxcore_name + "_sl", props)
                 return _tex_binary("add", tex2, sel,
-                                   luxcore_name + "_min", props)
+                                   superluxcore_name + "_min", props)
             else:
                 diff = _tex_binary("subtract", tex2, tex1,
-                                   luxcore_name + "_df", props)
+                                   superluxcore_name + "_df", props)
                 sel = _tex_binary("scale", diff, lt,
-                                  luxcore_name + "_sl", props)
+                                  superluxcore_name + "_sl", props)
                 return _tex_binary("add", tex1, sel,
-                                   luxcore_name + "_max", props)
+                                   superluxcore_name + "_max", props)
         elif node.operation == "FLOOR":
             # floor(x) = round_nearest(x - 0.5); differs from floor only at
             # exact half-integers, where both agree anyway
             shifted = _tex_binary("subtract", tex1, 0.5,
-                                  luxcore_name + "_sh", props)
+                                  superluxcore_name + "_sh", props)
             return _tex_unary("rounding", shifted, 1.0,
-                              luxcore_name + "_floor", props)
+                              superluxcore_name + "_floor", props)
         elif node.operation == "CEIL":
             # ceil(x) = -floor(-x)
-            neg = _tex_binary("scale", tex1, -1.0, luxcore_name + "_neg",
+            neg = _tex_binary("scale", tex1, -1.0, superluxcore_name + "_neg",
                               props)
             shifted = _tex_binary("subtract", neg, 0.5,
-                                  luxcore_name + "_sh", props)
+                                  superluxcore_name + "_sh", props)
             rounded = _tex_unary("rounding", shifted, 1.0,
-                                 luxcore_name + "_r", props)
+                                 superluxcore_name + "_r", props)
             return _tex_binary("scale", rounded, -1.0,
-                               luxcore_name + "_ceil", props)
+                               superluxcore_name + "_ceil", props)
         elif node.operation == "TRUNC":
             # trunc(x) = sign(x) * floor(|x|)
-            lt0 = _tex_lessthan(tex1, 0.0, luxcore_name + "_lt0", props)
+            lt0 = _tex_lessthan(tex1, 0.0, superluxcore_name + "_lt0", props)
             sgn = _tex_binary("subtract",
                               _tex_binary("scale", lt0, 2.0,
-                                          luxcore_name + "_lt2", props),
-                              1.0, luxcore_name + "_sgn", props)
-            absv = _tex_unary("abs", tex1, None, luxcore_name + "_abs", props)
+                                          superluxcore_name + "_lt2", props),
+                              1.0, superluxcore_name + "_sgn", props)
+            absv = _tex_unary("abs", tex1, None, superluxcore_name + "_abs", props)
             shifted = _tex_binary("subtract", absv, 0.5,
-                                  luxcore_name + "_sh", props)
+                                  superluxcore_name + "_sh", props)
             fl = _tex_unary("rounding", shifted, 1.0,
-                            luxcore_name + "_fl", props)
-            return _tex_binary("scale", fl, sgn, luxcore_name + "_tr", props)
+                            superluxcore_name + "_fl", props)
+            return _tex_binary("scale", fl, sgn, superluxcore_name + "_tr", props)
         elif node.operation == "FRACT":
             # fract(x) = x - floor(x)
             shifted = _tex_binary("subtract", tex1, 0.5,
-                                  luxcore_name + "_sh", props)
+                                  superluxcore_name + "_sh", props)
             fl = _tex_unary("rounding", shifted, 1.0,
-                            luxcore_name + "_fl", props)
+                            superluxcore_name + "_fl", props)
             return _tex_binary("subtract", tex1, fl,
-                               luxcore_name + "_fract", props)
+                               superluxcore_name + "_fract", props)
         elif node.operation == "RADIANS":
             return _tex_binary("scale", tex1, 0.017453292519943295,
-                               luxcore_name + "_rad", props)
+                               superluxcore_name + "_rad", props)
         elif node.operation == "DEGREES":
             return _tex_binary("scale", tex1, 57.29577951308232,
-                               luxcore_name + "_deg", props)
+                               superluxcore_name + "_deg", props)
         elif node.operation == "COMPARE":
             # compare(a, b, eps) = 1 if |a-b| <= eps else 0;
             # = gt(eps, |a-b|) using lessthan swapped
             tex3 = _socket(node.inputs[2], props, material, obj_name,
                            group_node_stack)
             diff = _tex_binary("subtract", tex1, tex2,
-                               luxcore_name + "_df", props)
-            absd = _tex_unary("abs", diff, None, luxcore_name + "_ad", props)
-            return _tex_lessthan(absd, tex3, luxcore_name + "_cmp", props)
+                               superluxcore_name + "_df", props)
+            absd = _tex_unary("abs", diff, None, superluxcore_name + "_ad", props)
+            return _tex_lessthan(absd, tex3, superluxcore_name + "_cmp", props)
         elif node.operation == "PINGPONG":
             # pingpong(x, s) = s - |mod(x, 2s) - s|
-            two_s = _tex_binary("scale", tex2, 2.0, luxcore_name + "_2s",
+            two_s = _tex_binary("scale", tex2, 2.0, superluxcore_name + "_2s",
                                 props)
             mod = _tex_unary("modulo", tex1, two_s,
-                             luxcore_name + "_mod", props)
+                             superluxcore_name + "_mod", props)
             dev = _tex_unary("abs",
                              _tex_binary("subtract", mod, tex2,
-                                         luxcore_name + "_sub", props),
-                             None, luxcore_name + "_dev", props)
+                                         superluxcore_name + "_sub", props),
+                             None, superluxcore_name + "_dev", props)
             return _tex_binary("subtract", tex2, dev,
-                               luxcore_name + "_pp", props)
+                               superluxcore_name + "_pp", props)
         elif node.operation in _MATHFUNC_UNARY_OPS:
             return _tex_mathfunc(_MATHFUNC_UNARY_OPS[node.operation],
-                                 tex1, None, luxcore_name, props)
+                                 tex1, None, superluxcore_name, props)
         elif node.operation in _MATHFUNC_BINARY_OPS:
             return _tex_mathfunc(_MATHFUNC_BINARY_OPS[node.operation],
-                                 tex1, tex2, luxcore_name, props)
+                                 tex1, tex2, superluxcore_name, props)
         elif node.operation in {"SMOOTH_MIN", "SMOOTH_MAX"}:
             # Polynomial smooth-min/max: h = clamp(0.5 + 0.5*(b-a)/k, 0, 1);
             # smin = mix(b, a, h) - k*h*(1-h), smax = -smin(-a, -b).
@@ -1754,46 +1762,46 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                            group_node_stack)
             if node.operation == "SMOOTH_MAX":
                 na = _tex_binary("scale", tex1, -1.0,
-                                 luxcore_name + "_na", props)
+                                 superluxcore_name + "_na", props)
                 nb = _tex_binary("scale", tex2, -1.0,
-                                 luxcore_name + "_nb", props)
-                smin = _smooth_min(na, nb, tex3, luxcore_name + "_sm",
+                                 superluxcore_name + "_nb", props)
+                smin = _smooth_min(na, nb, tex3, superluxcore_name + "_sm",
                                    props)
                 return _tex_binary("scale", smin, -1.0,
-                                   luxcore_name + "_smax", props)
-            return _smooth_min(tex1, tex2, tex3, luxcore_name + "_smin",
+                                   superluxcore_name + "_smax", props)
+            return _smooth_min(tex1, tex2, tex3, superluxcore_name + "_smin",
                                props)
         elif node.operation == "LOGARITHM":
             # log_b(x) = ln(x) / ln(b); Cycles' second input is the base
-            num = _tex_mathfunc("ln", tex1, None, luxcore_name + "_num",
+            num = _tex_mathfunc("ln", tex1, None, superluxcore_name + "_num",
                                 props)
-            den = _tex_mathfunc("ln", tex2, None, luxcore_name + "_den",
+            den = _tex_mathfunc("ln", tex2, None, superluxcore_name + "_den",
                                 props)
-            return _tex_binary("divide", num, den, luxcore_name + "_log",
+            return _tex_binary("divide", num, den, superluxcore_name + "_log",
                                props)
         elif node.operation == "SIGN":
-            lt0 = _tex_lessthan(tex1, 0.0, luxcore_name + "_lt0", props)
-            gt0 = _tex_greaterthan(tex1, 0.0, luxcore_name + "_gt0", props)
+            lt0 = _tex_lessthan(tex1, 0.0, superluxcore_name + "_lt0", props)
+            gt0 = _tex_greaterthan(tex1, 0.0, superluxcore_name + "_gt0", props)
             return _tex_binary("subtract", gt0, lt0,
-                               luxcore_name + "_sign", props)
+                               superluxcore_name + "_sign", props)
         elif node.operation == "MULTIPLY_ADD":
             tex3 = _socket(node.inputs[2], props, material, obj_name,
                            group_node_stack)
-            prod = _tex_binary("scale", tex1, tex2, luxcore_name + "_mp",
+            prod = _tex_binary("scale", tex1, tex2, superluxcore_name + "_mp",
                                props)
-            return _tex_binary("add", prod, tex3, luxcore_name + "_ma",
+            return _tex_binary("add", prod, tex3, superluxcore_name + "_ma",
                                props)
         elif node.operation == "WRAP":
             # wrap(x, min, max) = min + mod(x - min, max - min)
             rng = _tex_binary("subtract",
                               _socket(node.inputs[2], props, material,
                                       obj_name, group_node_stack),
-                              tex2, luxcore_name + "_rng", props)
+                              tex2, superluxcore_name + "_rng", props)
             shifted = _tex_binary("subtract", tex1, tex2,
-                                  luxcore_name + "_sh", props)
+                                  superluxcore_name + "_sh", props)
             mod = _tex_unary("modulo", shifted, rng,
-                             luxcore_name + "_mod", props)
-            return _tex_binary("add", tex2, mod, luxcore_name + "_wr", props)
+                             superluxcore_name + "_mod", props)
+            return _tex_binary("add", tex2, mod, superluxcore_name + "_wr", props)
         elif node.operation == "SNAP":
             # snap(x, s) = round(x / s) * s — nearest multiple like
             # VectorMath SNAP (Blender floors; documented difference)
@@ -1847,11 +1855,11 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         _group_node_stack.append(node)
         
         # I call _node instead of _socket here because I need to pass the
-        # luxcore_name in case the node group is the first node in the tree
-        return _node(link.from_node, link.from_socket, props, material, luxcore_name, obj_name, _group_node_stack)
+        # superluxcore_name in case the node group is the first node in the tree
+        return _node(link.from_node, link.from_socket, props, material, superluxcore_name, obj_name, _group_node_stack)
     elif node.bl_idname == "NodeGroupInput":
         return _socket(group_node_stack[-1].inputs[output_socket.name], props,
-                       material, obj_name, group_node_stack[:-1], luxcore_name)
+                       material, obj_name, group_node_stack[:-1], superluxcore_name)
     elif node.bl_idname == "ShaderNodeEmission":
         prefix = "scene.materials."
 
@@ -1859,7 +1867,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         # According to the Blender manual, strength is in Watts/m² when the node is used on meshes.
         strength = _socket(node.inputs["Strength"], props, material, obj_name, group_node_stack)
 
-        emission_col = luxcore_name + "emission_col"
+        emission_col = superluxcore_name + "emission_col"
         helper_prefix = "scene.textures." + emission_col + "."
         helper_defs = {
             "type": "scale",
@@ -1900,7 +1908,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         elif ramp.interpolation == "LINEAR":
             interpolation = "linear"
         else:
-            # TODO: not all interpolation modes are supported by LuxCore
+            # TODO: not all interpolation modes are supported by SuperLuxCore
             interpolation = "cubic"
 
         definitions = {
@@ -1956,14 +1964,14 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         if _is_textured(fac) or (fac > 0 and fac < 1):
             # Here we need to insert a helper texture *after* the current texture
-            props.Set(utils.luxutils.create_props(prefix + luxcore_name + ".", definitions))
+            props.Set(utils.luxutils.create_props(prefix + superluxcore_name + ".", definitions))
             definitions = {
                 "type": "mix",
                 "texture1": tex,
-                "texture2": luxcore_name,
+                "texture2": superluxcore_name,
                 "amount": fac,
             }
-            luxcore_name = luxcore_name + "fac"
+            superluxcore_name = superluxcore_name + "fac"
     elif node.bl_idname in {"ShaderNodeSeparateRGB", "ShaderNodeSeparateXYZ",
                             "ShaderNodeSeparateColor"}:
         prefix = "scene.textures."
@@ -2059,19 +2067,19 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "mapping.uvdelta": [0, 1],
             }
         
-            # Define the LuxCore texture node
-            props.Set(utils.luxutils.create_props(prefix + luxcore_name + ".", definitions))
-            return luxcore_name
+            # Define the SuperLuxCore texture node
+            props.Set(utils.luxutils.create_props(prefix + superluxcore_name + ".", definitions))
+            return superluxcore_name
         else:
             # Only image textures carry their own gamma; anything else
             # falls through with stale definitions (or UnboundLocalError).
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 "Gamma node without image input is not supported", obj_name=obj_name)
             return ERROR_VALUE
 
     elif node.bl_idname == "ShaderNodeNormalMap":
         if node.space != "TANGENT":
-            LuxCoreErrorLog.add_warning(f"Unsupported normal map space: {node.space}", obj_name=obj_name)
+            SuperLuxCoreErrorLog.add_warning(f"Unsupported normal map space: {node.space}", obj_name=obj_name)
             return ERROR_VALUE
 
         prefix = "scene.textures."
@@ -2085,20 +2093,20 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if strength_socket.is_linked:
             # Use scale texture because normalmap scale can't be textured
             # Here we need to insert a helper texture *after* the current texture
-            props.Set(utils.luxutils.create_props(prefix + luxcore_name + ".", definitions))
+            props.Set(utils.luxutils.create_props(prefix + superluxcore_name + ".", definitions))
             definitions = {
                 "type": "scale",
-                "texture1": luxcore_name,
+                "texture1": superluxcore_name,
                 "texture2": _socket(strength_socket, props, material, obj_name, group_node_stack),
             }
-            luxcore_name = luxcore_name + "strength"
+            superluxcore_name = superluxcore_name + "strength"
         else:
             definitions["scale"] = strength_socket.default_value
     elif node.bl_idname == "ShaderNodeBump":
         if node.inputs["Distance"].is_linked:
-            LuxCoreErrorLog.add_warning("Bump node Distance socket is not supported", obj_name=obj_name)
+            SuperLuxCoreErrorLog.add_warning("Bump node Distance socket is not supported", obj_name=obj_name)
         if node.inputs["Normal"].is_linked:
-            LuxCoreErrorLog.add_warning("Bump node Normal socket is not supported", obj_name=obj_name)
+            SuperLuxCoreErrorLog.add_warning("Bump node Normal socket is not supported", obj_name=obj_name)
 
         prefix = "scene.textures."
 
@@ -2109,13 +2117,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         }
 
         if node.invert:
-            props.Set(utils.luxutils.create_props(prefix + luxcore_name + ".", definitions))
+            props.Set(utils.luxutils.create_props(prefix + superluxcore_name + ".", definitions))
             definitions = {
                 "type": "scale",
-                "texture1": luxcore_name,
+                "texture1": superluxcore_name,
                 "texture2": -1,
             }
-            luxcore_name = luxcore_name + "invert"
+            superluxcore_name = superluxcore_name + "invert"
     elif node.bl_idname == "ShaderNodeNewGeometry":
         prefix = "scene.textures."
         definitions = {}
@@ -2123,13 +2131,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         # TODO: when support for pointiness and random per island is added, we have to:
         #  - make sure the necessary shapes are added during object export
         #  - make sure the mesh is re-exported when one of these outputs is used the first time during viewport render, 
-        #    otherwise we crash LuxCore in case of random per island, or the feature doesn't work in case of pointiness
+        #    otherwise we crash SuperLuxCore in case of random per island, or the feature doesn't work in case of pointiness
         if output_socket.name == "Position":
             definitions["type"] = "position"
         elif output_socket.name == "Normal":
             definitions["type"] = "shadingnormal"
         else:
-            LuxCoreErrorLog.add_warning(f"Unsupported Geometry output socket: {output_socket.name}", obj_name=obj_name)
+            SuperLuxCoreErrorLog.add_warning(f"Unsupported Geometry output socket: {output_socket.name}", obj_name=obj_name)
             return ERROR_VALUE
     elif node.bl_idname == "ShaderNodeObjectInfo":
         prefix = "scene.textures."
@@ -2143,7 +2151,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         elif output_socket.name == "Random":
             definitions["type"] = "objectidnormalized"
         else:
-            LuxCoreErrorLog.add_warning(f"Unsupported Object Info output socket: {output_socket.name}", obj_name=obj_name)
+            SuperLuxCoreErrorLog.add_warning(f"Unsupported Object Info output socket: {output_socket.name}", obj_name=obj_name)
             return ERROR_VALUE
     elif node.bl_idname == "ShaderNodeHairInfo":
         prefix = "scene.textures."
@@ -2166,7 +2174,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             definitions["type"] = "constfloat1"
             definitions["value"] = 1.0
         else:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f"Unsupported Hair Info output socket: {output_socket.name}",
                 obj_name=obj_name)
             return ERROR_VALUE
@@ -2175,7 +2183,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         definitions = {}
 
         # Particle instances are exported as duplicated objects, each carrying
-        # its Blender random_id as the LuxCore object id (see object_cache.py).
+        # its Blender random_id as the SuperLuxCore object id (see object_cache.py).
         # hitPoint.objectID is therefore unique per particle.
         if output_socket.name == "Index":
             # Unique id per particle instance (deterministic, not sequential).
@@ -2185,8 +2193,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             definitions["type"] = "objectidnormalized"
         else:
             # Age/Lifetime/Location/Size/Velocity/Angular Velocity require
-            # particle simulation state that is not exported to LuxCore.
-            LuxCoreErrorLog.add_warning(
+            # particle simulation state that is not exported to SuperLuxCore.
+            SuperLuxCoreErrorLog.add_warning(
                 f"Unsupported Particle Info output socket: {output_socket.name}",
                 obj_name=obj_name)
             return ERROR_VALUE
@@ -2205,7 +2213,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         if temperature_socket.is_linked:
             # A linked temperature (e.g. a density grid or attribute) drives the
-            # per-point Planckian eval on the LuxCore side.
+            # per-point Planckian eval on the SuperLuxCore side.
             temperature = _socket(temperature_socket, props, material, obj_name, group_node_stack)
             temperature = _convert_to_float(temperature, props)
         else:
@@ -2218,13 +2226,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         }
     elif node.bl_idname == "ShaderNodeMapRange":
         if node.interpolation_type != "LINEAR":
-            LuxCoreErrorLog.add_warning(f"In material {material.name}: Unsupported map range interpolation type: " + node.interpolation_type,
+            SuperLuxCoreErrorLog.add_warning(f"In material {material.name}: Unsupported map range interpolation type: " + node.interpolation_type,
                                         obj_name=obj_name)
             return ERROR_VALUE
 
         if not node.clamp:
-            # TODO: LuxCore's remap texture always clamps, at the moment
-            LuxCoreErrorLog.add_warning(f"In material {material.name}: map range node will be clamped", obj_name=obj_name)
+            # TODO: SuperLuxCore's remap texture always clamps, at the moment
+            SuperLuxCoreErrorLog.add_warning(f"In material {material.name}: map range node will be clamped", obj_name=obj_name)
 
         prefix = "scene.textures."
 
@@ -2242,7 +2250,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
     elif node.bl_idname == "ShaderNodeSubsurfaceScattering":
         prefix = "scene.materials."
 
-        # Approximation: LuxCore has no BSSRDF material; the Disney subsurface
+        # Approximation: SuperLuxCore has no BSSRDF material; the Disney subsurface
         # parameter gives a plausible diffuse-translucent blend. The mean free
         # path (Radius), IOR and anisotropy inputs cannot be mapped.
         scale = _socket(node.inputs["Scale"], props, material, obj_name, group_node_stack)
@@ -2256,7 +2264,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if roughness == ERROR_VALUE:
             roughness = 0.5
 
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             f'Subsurface Scattering node "{node.name}" is approximated by the Disney '
             "subsurface parameter (no radius/anisotropy)", obj_name=obj_name)
 
@@ -2273,13 +2281,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
     elif node.bl_idname == "ShaderNodeBsdfVelvet":
         prefix = "scene.materials."
 
-        # Approximation: LuxCore's velvet has no sigma input; sigma is folded
+        # Approximation: SuperLuxCore's velvet has no sigma input; sigma is folded
         # into the thickness parameter
         sigma = _socket(node.inputs["Sigma"], props, material, obj_name, group_node_stack)
         if sigma == ERROR_VALUE:
             sigma = 0.5
         thickness = sigma * 0.2 if not _is_textured(sigma) else \
-            _tex_binary("scale", sigma, 0.2, luxcore_name + "_thickness", props)
+            _tex_binary("scale", sigma, 0.2, superluxcore_name + "_thickness", props)
 
         definitions = {
             "type": "velvet",
@@ -2294,7 +2302,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         # Approximation: Disney sheen is a diffuse-like retro-reflective lobe;
         # it cannot reproduce a standalone sheen closure exactly
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             f'Sheen node "{node.name}" is approximated by a Disney material',
             obj_name=obj_name)
 
@@ -2316,8 +2324,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
     elif node.bl_idname == "ShaderNodeBsdfToon":
         prefix = "scene.materials."
 
-        # Approximation: no toon closure in LuxCore; matte keeps the base color
-        LuxCoreErrorLog.add_warning(
+        # Approximation: no toon closure in SuperLuxCore; matte keeps the base color
+        SuperLuxCoreErrorLog.add_warning(
             f'Toon BSDF node "{node.name}" is approximated by a matte material',
             obj_name=obj_name)
 
@@ -2332,7 +2340,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.textures."
 
         if node.inputs["Normal"].is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Fresnel node "{node.name}": the Normal input is not supported',
                 obj_name=obj_name)
 
@@ -2341,21 +2349,21 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if ior == ERROR_VALUE:
             ior = 1.45
 
-        # LuxCore has no texture evaluating the angular Fresnel term (the
+        # SuperLuxCore has no texture evaluating the angular Fresnel term (the
         # fresnel* texture types only carry conductor n/k data for materials).
         # Approximation: the Schlick F0 normal-incidence reflectance
         # ((ior - 1) / (ior + 1))^2, exact for rays perpendicular to the surface.
         _warn_unsupported(
-            node, "no angular Fresnel texture in LuxCore; using the "
+            node, "no angular Fresnel texture in SuperLuxCore; using the "
             "normal-incidence reflectance (Schlick F0)", None, obj_name)
 
         if _is_textured(ior):
             # Build F0 = ((ior - 1) / (ior + 1))^2 as a helper texture chain
-            n_minus_1 = _tex_helper(props, luxcore_name + "_f0sub", {
+            n_minus_1 = _tex_helper(props, superluxcore_name + "_f0sub", {
                 "type": "subtract", "texture1": ior, "texture2": 1})
-            n_plus_1 = _tex_helper(props, luxcore_name + "_f0add", {
+            n_plus_1 = _tex_helper(props, superluxcore_name + "_f0add", {
                 "type": "add", "texture1": ior, "texture2": 1})
-            ratio = _tex_helper(props, luxcore_name + "_f0div", {
+            ratio = _tex_helper(props, superluxcore_name + "_f0div", {
                 "type": "divide", "texture1": n_minus_1, "texture2": n_plus_1})
             definitions = {"type": "power", "base": ratio, "exponent": 2}
         else:
@@ -2364,24 +2372,24 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.textures."
 
         if node.inputs["Normal"].is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Layer Weight node "{node.name}": the Normal input is not supported',
                 obj_name=obj_name)
 
         if output_socket.name == "Fresnel":
-            # Approximation: no angular falloff texture in LuxCore; use the
+            # Approximation: no angular falloff texture in SuperLuxCore; use the
             # normal-incidence dielectric reflectance of Cycles' fixed IOR 1.45
             return _warn_unsupported(
                 node, "'Fresnel' output approximated by normal-incidence "
                 "reflectance (IOR 1.45)", 0.0334, obj_name)
         else:
-            # "Facing": no per-ray falloff information is available to LuxCore
+            # "Facing": no per-ray falloff information is available to SuperLuxCore
             # textures, so use a constant mid value
             return _warn_unsupported(
                 node, "'Facing' output is not supported (no angular falloff "
                 "texture); using 0.5", FALLBACK_FLOAT, obj_name)
     elif node.bl_idname == "ShaderNodeLightPath":
-        # The LuxCore "rayinfo" texture exposes the context of the ray that
+        # The SuperLuxCore "rayinfo" texture exposes the context of the ray that
         # generated the current hit point (stored in HitPoint by
         # Scene::Intersect()). All Light Path outputs are supported.
         channel = _LIGHT_PATH_CHANNELS.get(output_socket.name)
@@ -2437,8 +2445,8 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         tex2 = _socket(socket_b, props, material, obj_name, group_node_stack)
 
         if data_type == "RGBA":
-            definitions, luxcore_name, early = _blend_rgb(
-                node, node.blend_type, fac, tex1, tex2, luxcore_name, props, obj_name)
+            definitions, superluxcore_name, early = _blend_rgb(
+                node, node.blend_type, fac, tex1, tex2, superluxcore_name, props, obj_name)
             if early is not None:
                 return early
         elif data_type in {"FLOAT", "VECTOR"}:
@@ -2458,14 +2466,14 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         if getattr(node, "clamp", False):
             # Clamp the mix result (mirrors the use_clamp handling below)
-            props.Set(utils.luxutils.create_props(prefix + luxcore_name + ".", definitions))
+            props.Set(utils.luxutils.create_props(prefix + superluxcore_name + ".", definitions))
             definitions = {
                 "type": "clamp",
-                "texture": luxcore_name,
+                "texture": superluxcore_name,
                 "min": 0,
                 "max": 1,
             }
-            luxcore_name = luxcore_name + "clamp"
+            superluxcore_name = superluxcore_name + "clamp"
     elif node.bl_idname == "ShaderNodeVectorMath":
         prefix = "scene.textures."
         operation = node.operation
@@ -2474,7 +2482,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         vector1 = _socket(node.inputs[0], props, material, obj_name, group_node_stack)
         vector2 = _socket(node.inputs[1], props, material, obj_name, group_node_stack)
 
-        # Elementwise Spectrum ops double as vector math ops in LuxCore
+        # Elementwise Spectrum ops double as vector math ops in SuperLuxCore
         direct_ops = {
             "ADD": "add",
             "SUBTRACT": "subtract",
@@ -2506,21 +2514,21 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             }
         elif operation == "LENGTH":
             # |v| = sqrt(v . v)
-            squared = _tex_helper(props, luxcore_name + "_sq", {
+            squared = _tex_helper(props, superluxcore_name + "_sq", {
                 "type": "dotproduct", "texture1": vector1, "texture2": vector1})
             definitions = {"type": "power", "base": squared, "exponent": 0.5}
         elif operation == "DISTANCE":
             # |a - b| = sqrt((a - b) . (a - b))
-            diff = _tex_helper(props, luxcore_name + "_diff", {
+            diff = _tex_helper(props, superluxcore_name + "_diff", {
                 "type": "subtract", "texture1": vector1, "texture2": vector2})
-            squared = _tex_helper(props, luxcore_name + "_sq", {
+            squared = _tex_helper(props, superluxcore_name + "_sq", {
                 "type": "dotproduct", "texture1": diff, "texture2": diff})
             definitions = {"type": "power", "base": squared, "exponent": 0.5}
         elif operation == "NORMALIZE":
             # v / |v|; the scalar length broadcasts to all 3 channels
-            squared = _tex_helper(props, luxcore_name + "_sq", {
+            squared = _tex_helper(props, superluxcore_name + "_sq", {
                 "type": "dotproduct", "texture1": vector1, "texture2": vector1})
-            length = _tex_helper(props, luxcore_name + "_len", {
+            length = _tex_helper(props, superluxcore_name + "_len", {
                 "type": "power", "base": squared, "exponent": 0.5})
             definitions = {
                 "type": "divide",
@@ -2528,42 +2536,42 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "texture2": length,
             }
         elif operation == "CROSS_PRODUCT":
-            a = [_split_chan(vector1, i, luxcore_name + f"_a{i}", props)
+            a = [_split_chan(vector1, i, superluxcore_name + f"_a{i}", props)
                  for i in range(3)]
-            b = [_split_chan(vector2, i, luxcore_name + f"_b{i}", props)
+            b = [_split_chan(vector2, i, superluxcore_name + f"_b{i}", props)
                  for i in range(3)]
 
             def _mul(t1, t2, tag):
-                return _tex_binary("scale", t1, t2, luxcore_name + tag, props)
+                return _tex_binary("scale", t1, t2, superluxcore_name + tag, props)
 
             cross = [
                 _tex_binary("subtract", _mul(a[1], b[2], "_x0p"),
-                            _mul(a[2], b[1], "_x0m"), luxcore_name + "_cx", props),
+                            _mul(a[2], b[1], "_x0m"), superluxcore_name + "_cx", props),
                 _tex_binary("subtract", _mul(a[2], b[0], "_x1p"),
-                            _mul(a[0], b[2], "_x1m"), luxcore_name + "_cy", props),
+                            _mul(a[0], b[2], "_x1m"), superluxcore_name + "_cy", props),
                 _tex_binary("subtract", _mul(a[0], b[1], "_x2p"),
-                            _mul(a[1], b[0], "_x2m"), luxcore_name + "_cz", props),
+                            _mul(a[1], b[0], "_x2m"), superluxcore_name + "_cz", props),
             ]
             return _combine3(cross[0], cross[1], cross[2],
-                             luxcore_name + "_cross", props)
+                             superluxcore_name + "_cross", props)
         elif operation == "REFLECT":
             # r = i - 2 (i . n) n
             dot = _tex_binary("dotproduct", vector1, vector2,
-                              luxcore_name + "_dot", props)
-            two_dot = _tex_binary("scale", dot, 2.0, luxcore_name + "_2d", props)
+                              superluxcore_name + "_dot", props)
+            two_dot = _tex_binary("scale", dot, 2.0, superluxcore_name + "_2d", props)
             scaled_n = _tex_binary("scale", vector2, two_dot,
-                                   luxcore_name + "_sn", props)
+                                   superluxcore_name + "_sn", props)
             return _tex_binary("subtract", vector1, scaled_n,
-                               luxcore_name + "_refl", props)
+                               superluxcore_name + "_refl", props)
         elif operation == "PROJECT":
             # proj of a onto b = b * (a . b) / (b . b)
             dot = _tex_binary("dotproduct", vector1, vector2,
-                              luxcore_name + "_dot", props)
+                              superluxcore_name + "_dot", props)
             len2 = _tex_binary("dotproduct", vector2, vector2,
-                               luxcore_name + "_len2", props)
-            frac = _tex_binary("divide", dot, len2, luxcore_name + "_fr", props)
+                               superluxcore_name + "_len2", props)
+            frac = _tex_binary("divide", dot, len2, superluxcore_name + "_fr", props)
             return _tex_binary("scale", vector2, frac,
-                               luxcore_name + "_proj", props)
+                               superluxcore_name + "_proj", props)
         elif operation == "FACEFORWARD":
             # Blender: returns n if dot(i, nref) < 0 else -n, i.e.
             # n * (2*lt(dot,0) - 1). Inputs: Vector, Incident, Reference.
@@ -2572,39 +2580,39 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             reference = _socket(node.inputs[2], props, material, obj_name,
                                 group_node_stack)
             dot = _tex_binary("dotproduct", incident, reference,
-                              luxcore_name + "_dot", props)
-            lt = _tex_lessthan(dot, 0.0, luxcore_name + "_lt", props)
+                              superluxcore_name + "_dot", props)
+            lt = _tex_lessthan(dot, 0.0, superluxcore_name + "_lt", props)
             sign = _tex_binary("subtract",
                                _tex_binary("scale", lt, 2.0,
-                                           luxcore_name + "_lt2", props),
-                               1.0, luxcore_name + "_sgn", props)
+                                           superluxcore_name + "_lt2", props),
+                               1.0, superluxcore_name + "_sgn", props)
             return _tex_binary("scale", vector1, sign,
-                               luxcore_name + "_ff", props)
+                               superluxcore_name + "_ff", props)
         elif operation == "MULTIPLY_ADD":
             # a * b + c (elementwise)
             vector3 = _socket(node.inputs[2], props, material, obj_name,
                               group_node_stack)
             prod = _tex_binary("scale", vector1, vector2,
-                               luxcore_name + "_mp", props)
+                               superluxcore_name + "_mp", props)
             return _tex_binary("add", prod, vector3,
-                               luxcore_name + "_madd", props)
+                               superluxcore_name + "_madd", props)
         elif operation in {"MINIMUM", "MAXIMUM"}:
             # min(a,b) = b + lt(a,b)*(a-b);  max(a,b) = a + lt(a,b)*(b-a)
-            lt = _tex_lessthan(vector1, vector2, luxcore_name + "_lt", props)
+            lt = _tex_lessthan(vector1, vector2, superluxcore_name + "_lt", props)
             if operation == "MINIMUM":
                 diff = _tex_binary("subtract", vector1, vector2,
-                                   luxcore_name + "_df", props)
-                sel = _tex_binary("scale", diff, lt, luxcore_name + "_sl", props)
+                                   superluxcore_name + "_df", props)
+                sel = _tex_binary("scale", diff, lt, superluxcore_name + "_sl", props)
                 return _tex_binary("add", vector2, sel,
-                                   luxcore_name + "_min", props)
+                                   superluxcore_name + "_min", props)
             else:
                 diff = _tex_binary("subtract", vector2, vector1,
-                                   luxcore_name + "_df", props)
-                sel = _tex_binary("scale", diff, lt, luxcore_name + "_sl", props)
+                                   superluxcore_name + "_df", props)
+                sel = _tex_binary("scale", diff, lt, superluxcore_name + "_sl", props)
                 return _tex_binary("add", vector1, sel,
-                                   luxcore_name + "_max", props)
+                                   superluxcore_name + "_max", props)
         elif operation == "SNAP":
-            # Approximation: LuxCore's rounding texture snaps to the nearest
+            # Approximation: SuperLuxCore's rounding texture snaps to the nearest
             # multiple of the increment; Blender's SNAP floors to it. The
             # difference is at most half an increment per component.
             _warn_unsupported(
@@ -2619,7 +2627,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             # Elementwise trig via mathfunc (matches Cycles' per-component
             # semantics); constants fold to plain vectors
             op = {"SINE": "sin", "COSINE": "cos", "TANGENT": "tan"}[operation]
-            return _v3_mathfunc(op, vector1, luxcore_name, props)
+            return _v3_mathfunc(op, vector1, superluxcore_name, props)
         else:
             # Unsupported ops (WRAP, FLOORMOD, DIVIDE modes, REFRACT, ...):
             # pass through instead of blacking out
@@ -2641,7 +2649,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             definitions = {"type": "shadingnormal"}
         elif coord == "Object":
             if getattr(node, "object", None) is not None:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f'Texture Coordinate node "{node.name}": coordinates relative to '
                     "another object are not supported, using own object space",
                     obj_name=obj_name)
@@ -2649,7 +2657,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             # Cycles' Object output (for the shading object)
             definitions = {"type": "position"}
         elif coord == "Generated":
-            # Approximation: no bounding-box normalized coordinates in LuxCore;
+            # Approximation: no bounding-box normalized coordinates in SuperLuxCore;
             # UV coordinates are the closest match for typical 2D usage (z = 0)
             _warn_unsupported(
                 node, "'Generated' coordinates are approximated by the UV map "
@@ -2657,7 +2665,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             definitions = {"type": "uv"}
         elif coord == "Reflection":
             # Approximation: the reflected view direction is not available to
-            # LuxCore textures; the shading normal is the closest varying field
+            # SuperLuxCore textures; the shading normal is the closest varying field
             _warn_unsupported(
                 node, "'Reflection' direction is approximated by the shading "
                 "normal", None, obj_name)
@@ -2679,7 +2687,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if uv_map:
             index = _uv_layer_index(obj_name, uv_map)
             if index is None:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f'UV map "{uv_map}" of node "{node.name}" could not be resolved '
                     f'on object "{obj_name}", using the default UV layer',
                     obj_name=obj_name)
@@ -2692,12 +2700,12 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 node, "Mapping node without a Vector input; returning a zero "
                 "vector", FALLBACK_VECTOR, obj_name)
 
-        # LuxCore has no standalone "mapping" texture: each texture carries its
+        # SuperLuxCore has no standalone "mapping" texture: each texture carries its
         # own "mapping.*" block. Re-emit the upstream node under this node's name
         # and attach the transform to it (works for texture types that parse a
         # mapping block, e.g. uv, imagemap and the procedural textures).
         result = _node(link.from_node, link.from_socket, props, material,
-                       luxcore_name, obj_name, group_node_stack)
+                       superluxcore_name, obj_name, group_node_stack)
         if result == ERROR_VALUE or not _is_textured(result):
             return _warn_unsupported(
                 node, "cannot map a non-texture input; returning a zero vector",
@@ -2743,7 +2751,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         else:
             return normal
     elif node.bl_idname == "ShaderNodeTangent":
-        # No tangent texture in LuxCore (hitPoint.dpdu/dpdv is not exposed)
+        # No tangent texture in SuperLuxCore (hitPoint.dpdu/dpdv is not exposed)
         return _warn_unsupported(
             node, "Tangent node is not supported; returning a zero vector",
             FALLBACK_VECTOR, obj_name)
@@ -2752,11 +2760,11 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         # Bump-only rounded edges; requires the edgedetectoraov shape wrapper
         # (requested by needs_edge_detector_shape when this node is present)
         if node.inputs["Normal"].is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Bevel node "{node.name}": the Normal input is not '
                 "supported, the shading normal is used", obj_name=obj_name)
         if node.inputs["Radius"].is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Bevel node "{node.name}": a texture-linked Radius is not '
                 "supported, using the constant default", obj_name=obj_name)
         definitions = {
@@ -2764,7 +2772,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             "radius": node.inputs["Radius"].default_value,
         }
     elif node.bl_idname == "ShaderNodeAmbientOcclusion":
-        # No AO texture in LuxCore; approximate "fully lit"
+        # No AO texture in SuperLuxCore; approximate "fully lit"
         if output_socket.name == "AO":
             return _warn_unsupported(
                 node, "Ambient Occlusion is not supported; returning 1 "
@@ -2780,7 +2788,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.textures."
 
         if node.use_pixel_size:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Wireframe node "{node.name}": pixel size mode is not supported',
                 obj_name=obj_name)
 
@@ -2879,13 +2887,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.textures."
 
         if node.voronoi_dimensions != "3D":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Voronoi node "{node.name}": {node.voronoi_dimensions} mode is '
                 "approximated by 3D (extra inputs ignored)", obj_name=obj_name)
 
         scale_socket = node.inputs["Scale"]
         if scale_socket.is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Voronoi node "{node.name}": textured scale is not supported',
                 obj_name=obj_name)
             noisesize = 0.25
@@ -2901,7 +2909,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             weights = (-1.0, 1.0, 0.0, 0.0)
         else:
             if node.feature in {"SMOOTH_F1", "N_SPHERE_RADIUS"}:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f'Voronoi node "{node.name}": feature "{node.feature}" is '
                     "approximated by plain F1", obj_name=obj_name)
             weights = (1.0, 0.0, 0.0, 0.0)
@@ -2941,7 +2949,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         if output_socket.name == "Color":
             # Approximation: blender_voronoi is monochrome; the distance value
             # stands in for the per-cell random color
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Voronoi node "{node.name}": the Color output is approximated by '
                 "the monochrome distance texture", obj_name=obj_name)
     elif node.bl_idname == "ShaderNodeTexNoise":
@@ -2951,13 +2959,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         # a distortion amount like Cycles' Noise. Divergences: monochrome result
         # (Color == Fac) and no roughness/lacunarity parameters.
         if node.noise_dimensions != "3D":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Noise node "{node.name}": {node.noise_dimensions} mode is '
                 "approximated by 3D (extra inputs ignored)", obj_name=obj_name)
 
         scale_socket = node.inputs["Scale"]
         if scale_socket.is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Noise node "{node.name}": textured scale is not supported',
                 obj_name=obj_name)
             noisesize = 0.25
@@ -2972,7 +2980,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         distortion = 0.0 if distortion_socket.is_linked else \
             distortion_socket.default_value
         if distortion_socket.is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Noise node "{node.name}": textured distortion is not supported',
                 obj_name=obj_name)
 
@@ -2991,10 +2999,10 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         prefix = "scene.textures."
 
         # Deterministic hash of a 3D vector seed -> Value + Color.
-        # The same whitenoise texture serves both outputs (LuxCore selects
+        # The same whitenoise texture serves both outputs (SuperLuxCore selects
         # float/spectrum evaluation by usage).
         if node.noise_dimensions != "3D":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'White Noise node "{node.name}": {node.noise_dimensions} mode '
                 "is approximated by 3D (extra inputs ignored)",
                 obj_name=obj_name)
@@ -3016,18 +3024,18 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
     elif node.bl_idname == "ShaderNodeTexGabor":
         prefix = "scene.textures."
 
-        # LuxCore gabornoise implements Lagae 2009 sparse Gabor
+        # SuperLuxCore gabornoise implements Lagae 2009 sparse Gabor
         # convolution (2D), normalized after Tavernier 2019, with phasor
         # phase/intensity outputs (Tricard 2019).
         if node.gabor_type != "2D":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Gabor node "{node.name}": 3D mode is approximated by 2D '
                 "evaluation of xy", obj_name=obj_name)
 
         def _fin(name, default):
             sk = node.inputs[name]
             if sk.is_linked:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f'Gabor node "{node.name}": linked {name} input is not '
                     "supported, using its default", obj_name=obj_name)
             return sk.default_value if not sk.is_linked else default
@@ -3063,7 +3071,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             if s is None:
                 return default
             if s.is_linked:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f'Brick node "{node.name}": textured "{name}" is not '
                     "supported, using its default", obj_name=obj_name)
                 return default
@@ -3071,21 +3079,21 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         if node.inputs.get("Mortar Smooth") is not None and \
                 _finput("Mortar Smooth", 0.0) != 0.0:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Brick node "{node.name}": mortar smoothing is not supported',
                 obj_name=obj_name)
         if getattr(node, "squash", 0.0) != 0.0:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Brick node "{node.name}": squash is not supported',
                 obj_name=obj_name)
 
         # Color2 is approximated as the per-brick modulation texture
-        # (LuxCore modulates each brick by brickmodtex; Cycles alternates
+        # (SuperLuxCore modulates each brick by brickmodtex; Cycles alternates
         # deterministically) — the pattern is preserved, the alternation
         # is randomized instead.
         color2_socket = node.inputs.get("Color2")
         if color2_socket is not None:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Brick node "{node.name}": Color2 is approximated as random '
                 "per-brick modulation", obj_name=obj_name)
 
@@ -3111,7 +3119,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             group_node_stack))
 
         if output_socket.name == "Fac":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Brick node "{node.name}": the Fac output is approximated by '
                 "the brick color texture", obj_name=obj_name)
     elif node.bl_idname == "ShaderNodeTexWave":
@@ -3127,7 +3135,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         distortion = 0.0
         if distortion_socket is not None:
             if distortion_socket.is_linked:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f'Wave node "{node.name}": textured distortion is not supported',
                     obj_name=obj_name)
             else:
@@ -3142,7 +3150,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         scale_socket = node.inputs["Scale"]
         if scale_socket.is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Wave node "{node.name}": textured scale is not supported',
                 obj_name=obj_name)
             noisesize = 0.25
@@ -3150,7 +3158,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             noisesize = 1.0 / max(scale_socket.default_value, 1e-6)
 
         if node.wave_type == "RINGS" and node.rings_direction == "SPHERICAL":
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Wave node "{node.name}": spherical rings are approximated by '
                 "planar rings along Z", obj_name=obj_name)
 
@@ -3174,7 +3182,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         elif link is not None and not (
                 link.from_node.bl_idname == "ShaderNodeTexCoord"
                 and link.from_socket.name in {"UV", "Generated", "Object"}):
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Wave node "{node.name}": unsupported Vector input source is '
                 "ignored", obj_name=obj_name)
 
@@ -3229,7 +3237,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         scale_socket = node.inputs["Scale"]
         scale = scale_socket.default_value if not scale_socket.is_linked else 1.0
         if scale_socket.is_linked:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Magic node "{node.name}": textured scale is not supported',
                 obj_name=obj_name)
         transform = Matrix.Diagonal(Vector((scale, scale, scale))).to_4x4()
@@ -3269,7 +3277,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                                  group_node_stack), obj_name)
 
         if is_rgb_curve:
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'RGB Curves node "{node.name}": only the combined curve is used '
                 "(per-channel curves are approximated)", obj_name=obj_name)
 
@@ -3292,7 +3300,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         fac_socket = node.inputs.get("Factor")
         if fac_socket is not None and \
                 (fac_socket.is_linked or fac_socket.default_value != 1.0):
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Vector Curves node "{node.name}": the Factor input is not '
                 "supported", obj_name=obj_name)
 
@@ -3307,12 +3315,12 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 samples = [max(-4.0, min(4.0, _evaluate_curve(
                     curve_map, node.mapping, i / 8))) for i in range(9)]
 
-                split_name = luxcore_name + channel_names[channel]
+                split_name = superluxcore_name + channel_names[channel]
                 props.Set(utils.luxutils.create_props(
                     prefix + split_name + ".",
                     {"type": "splitfloat3", "texture": vector,
                      "channel": channel}))
-                band_name = luxcore_name + channel_names[channel] + "_curve"
+                band_name = superluxcore_name + channel_names[channel] + "_curve"
                 band_defs = {
                     "type": "band", "amount": split_name,
                     "offsets": len(samples), "interpolation": "linear",
@@ -3340,13 +3348,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             try:
                 filepath = ImageExporter.export_cycles_node_reader(node.image)
             except OSError as error:
-                LuxCoreErrorLog.add_warning(error, obj_name=obj_name)
+                SuperLuxCoreErrorLog.add_warning(error, obj_name=obj_name)
                 return MISSING_IMAGE_COLOR
 
-            # Approximation: LuxCore imagemaps have no equirectangular or
+            # Approximation: SuperLuxCore imagemaps have no equirectangular or
             # mirror-ball projection, so the environment image is sampled
             # through the regular UV mapping (works for Generated/UV coords)
-            LuxCoreErrorLog.add_warning(
+            SuperLuxCoreErrorLog.add_warning(
                 f'Environment Texture node "{node.name}": '
                 f'"{getattr(node, "projection", "EQUIRECTANGULAR")}" projection '
                 "is approximated by the UV mapping", obj_name=obj_name)
@@ -3376,7 +3384,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         wl = _socket(wl_socket, props, material, obj_name, group_node_stack) \
             if wl_socket is not None else 550.0
 
-        amount = _tex_helper(props, luxcore_name + "_wl_remap", {
+        amount = _tex_helper(props, superluxcore_name + "_wl_remap", {
             "type": "remap",
             "value": wl,
             "sourcemin": 380.0,
@@ -3410,7 +3418,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             definitions[f"value{i}"] = rgb
     elif node.bl_idname == "ShaderNodeClamp":
         # Legacy clamp node (removed in Blender 4.0 where it is upgraded to
-        # Map Range); maps exactly onto the LuxCore clamp texture
+        # Map Range); maps exactly onto the SuperLuxCore clamp texture
         prefix = "scene.textures."
         definitions = {
             "type": "clamp",
@@ -3428,7 +3436,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                          group_node_stack)
         rtype = getattr(node, "rotation_type", "AXIS_ANGLE")
 
-        # LuxCore has no vector-rotate texture, but a rotation about a
+        # SuperLuxCore has no vector-rotate texture, but a rotation about a
         # constant axis/euler is just a constant 3x3 matrix, which composes
         # out of splitfloat3/scale/add/makefloat3 (see _const_mat_mul_vec).
         rot_mat = None
@@ -3464,13 +3472,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
         # v' = R (v - center) + center
         shifted = vector if _is_zero(center) else _tex_binary(
-            "subtract", vector, center, luxcore_name + "_sh", props)
+            "subtract", vector, center, superluxcore_name + "_sh", props)
         rotated = _const_mat_mul_vec([list(r) for r in rot_mat], shifted,
-                                     luxcore_name + "_rot", props)
+                                     superluxcore_name + "_rot", props)
         if _is_zero(center):
             return rotated
         return _tex_binary("add", rotated, center,
-                           luxcore_name + "_rotc", props)
+                           superluxcore_name + "_rotc", props)
     elif node.bl_idname == "ShaderNodeVectorTransform":
         vector = _socket(node.inputs["Vector"], props, material, obj_name,
                          group_node_stack)
@@ -3499,10 +3507,10 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             trans = [mat[0][3], mat[1][3], mat[2][3]] if vtype == "POINT" else None
 
         transformed = _const_mat_mul_vec([list(r) for r in lin], vector,
-                                         luxcore_name + "_xf", props)
+                                         superluxcore_name + "_xf", props)
         if trans is not None and any(t != 0 for t in trans):
             return _tex_binary("add", transformed, trans,
-                               luxcore_name + "_xft", props)
+                               superluxcore_name + "_xft", props)
         return transformed
     elif node.bl_idname == "ShaderNodeBsdfHair":
         # Legacy Cycles hair BSDF (pre-Principled). Map onto the Marschner
@@ -3519,7 +3527,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                          group_node_stack) if offset_sock is not None else 0.0
         if offset_sock is not None and offset_sock.is_linked \
                 and offset != ERROR_VALUE:
-            alpha = luxcore_name + "offset_to_deg"
+            alpha = superluxcore_name + "offset_to_deg"
             props.Set(utils.luxutils.create_props(
                 "scene.textures." + alpha + ".", {
                     "type": "scale",
@@ -3543,11 +3551,11 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             "color": _hair_sock("Color", [0.5, 0.5, 0.5]),
         }
     elif node.bl_idname == "ShaderNodeBsdfRayPortal":
-        # No portal BSDF in LuxCore; transparent is the closest match (rays
+        # No portal BSDF in SuperLuxCore; transparent is the closest match (rays
         # continue through the surface unaltered)
         prefix = "scene.materials."
         _warn_unsupported(
-            node, "Ray Portal BSDF has no LuxCore equivalent; approximated "
+            node, "Ray Portal BSDF has no SuperLuxCore equivalent; approximated "
             "by transparent", None, obj_name)
         definitions = {
             "type": "transparent",
@@ -3569,7 +3577,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 if s is not None else fallback
 
         spec = _eevee_sock("Specular", 0.0)
-        ks = _tex_binary("scale", spec, 0.08, luxcore_name + "_f0", props) \
+        ks = _tex_binary("scale", spec, 0.08, superluxcore_name + "_f0", props) \
             if spec != 0 else [0.0, 0.0, 0.0]
         roughness = _eevee_sock("Roughness", 0.0)
         definitions = {
@@ -3598,7 +3606,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         else:  # Radius
             return _warn_unsupported(
                 node, "'Radius' has no per-instance texture channel in "
-                "LuxCore; using 1.0", 1.0, obj_name)
+                "SuperLuxCore; using 1.0", 1.0, obj_name)
     elif node.bl_idname == "ShaderNodeSqueeze":
         # Sigmoid: out = 1 / (1 + exp(-(v - c) * w))
         v = _socket(node.inputs["Value"], props, material, obj_name,
@@ -3614,15 +3622,15 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 return 1.0 / (1.0 + math.exp(-(_s(v) - _s(c)) * _s(w)))
             except OverflowError:
                 return 0.0
-        d = _tex_binary("subtract", v, c, luxcore_name + "_d", props)
-        x = _tex_binary("scale", d, w, luxcore_name + "_x", props)
-        nx = _tex_binary("scale", x, -1.0, luxcore_name + "_nx", props)
-        e = _tex_mathfunc("exp", nx, None, luxcore_name + "_e", props)
-        den = _tex_binary("add", 1.0, e, luxcore_name + "_den", props)
-        return _tex_binary("divide", 1.0, den, luxcore_name, props)
+        d = _tex_binary("subtract", v, c, superluxcore_name + "_d", props)
+        x = _tex_binary("scale", d, w, superluxcore_name + "_x", props)
+        nx = _tex_binary("scale", x, -1.0, superluxcore_name + "_nx", props)
+        e = _tex_mathfunc("exp", nx, None, superluxcore_name + "_e", props)
+        den = _tex_binary("add", 1.0, e, superluxcore_name + "_den", props)
+        return _tex_binary("divide", 1.0, den, superluxcore_name, props)
     else:
         note = _UNSUPPORTED_NODE_NOTES.get(node.bl_idname)
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             f"Unsupported node type: {node.name}"
             + (f" ({node.bl_idname}): {note}" if note else ""),
             obj_name=obj_name)
@@ -3634,7 +3642,7 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             if links:
                 link = links[0]
                 print("current node", node.name, "failed, testing next node:", link.from_node.name)
-                return _node(link.from_node, link.from_socket, props, material, luxcore_name, obj_name, group_node_stack)
+                return _node(link.from_node, link.from_socket, props, material, superluxcore_name, obj_name, group_node_stack)
 
         # Return a neutral fallback matching the output type instead of a
         # black/error result so unsupported nodes don't silently break renders
@@ -3656,24 +3664,24 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
 
     if node.bl_idname in {"ShaderNodeMixRGB", "ShaderNodeMath"} and node.use_clamp:
         # Here we need to insert a helper texture *after* the current texture
-        props.Set(utils.luxutils.create_props(prefix + luxcore_name + ".", definitions))
+        props.Set(utils.luxutils.create_props(prefix + superluxcore_name + ".", definitions))
         definitions = {
             "type": "clamp",
-            "texture": luxcore_name,
+            "texture": superluxcore_name,
             "min": 0,
             "max": 1,
         }
-        luxcore_name = luxcore_name + "clamp"
+        superluxcore_name = superluxcore_name + "clamp"
 
-    props.Set(utils.luxutils.create_props(prefix + luxcore_name + ".", definitions))
-    return luxcore_name
+    props.Set(utils.luxutils.create_props(prefix + superluxcore_name + ".", definitions))
+    return superluxcore_name
 
 
-def _squared_roughness_to_linear(socket, props, material, luxcore_name, obj_name, group_node):
+def _squared_roughness_to_linear(socket, props, material, superluxcore_name, obj_name, group_node):
     roughness = _socket(socket, props, material, obj_name, group_node)
     if socket.is_linked and roughness != ERROR_VALUE:
         # Implicitly create a math texture with unique name
-        tex_name = luxcore_name + "roughness_converter"
+        tex_name = superluxcore_name + "roughness_converter"
         helper_prefix = "scene.textures." + tex_name + "."
         helper_defs = {
             "type": "power",
@@ -3718,7 +3726,7 @@ def _is_zero(value):
 
 
 def _volume_asymmetry(anisotropy):
-    """LuxCore expects a 3-channel asymmetry; broadcast a scalar anisotropy."""
+    """SuperLuxCore expects a 3-channel asymmetry; broadcast a scalar anisotropy."""
     if anisotropy is ERROR_VALUE:
         return [0, 0, 0]
     if _is_textured(anisotropy) or isinstance(anisotropy, (list, tuple)):
@@ -3742,7 +3750,7 @@ def _volume(node, output_socket, props, material, name_base, obj_name,
         return fallback if value is ERROR_VALUE else value
 
     if node.bl_idname == "ShaderNodeVolumeAbsorption":
-        # Pure absorption maps exactly onto a LuxCore "clear" volume
+        # Pure absorption maps exactly onto a SuperLuxCore "clear" volume
         density = coeff("Density", 1.0)
         color = coeff("Color", FALLBACK_COLOR)
         return {
@@ -3765,7 +3773,7 @@ def _volume(node, output_socket, props, material, name_base, obj_name,
 
     if node.bl_idname == "ShaderNodeEmission":
         # Emission in the Volume socket is volume emission; a clear volume
-        # carries it (LuxCore volumes have a dedicated emission channel)
+        # carries it (SuperLuxCore volumes have a dedicated emission channel)
         return {
             "type": "clear",
             "absorption": 0,
@@ -3780,7 +3788,7 @@ def _volume(node, output_socket, props, material, name_base, obj_name,
         for blackbody_input in ("Blackbody Tint", "Temperature"):
             blackbody_socket = node.inputs.get(blackbody_input)
             if blackbody_socket is not None and blackbody_socket.is_linked:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f'Principled Volume node "{node.name}": blackbody emission '
                     "inputs are not supported", obj_name=obj_name)
                 break
@@ -3827,13 +3835,13 @@ def _volume(node, output_socket, props, material, name_base, obj_name,
             sock = node.inputs.get(unsupported)
             if sock is not None and \
                     (sock.is_linked or sock.default_value != 0.0):
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f'Volume Coefficients node "{node.name}": "{unsupported}" '
                     "is not supported", obj_name=obj_name)
         return definitions
 
     if node.bl_idname in {"ShaderNodeAddShader", "ShaderNodeMixShader"}:
-        # LuxCore allows only one interior volume per material, so merge the
+        # SuperLuxCore allows only one interior volume per material, so merge the
         # children coefficient-wise. Add sums the coefficients (physically
         # correct for overlapping volumes); Mix interpolates them.
         is_add = node.bl_idname == "ShaderNodeAddShader"

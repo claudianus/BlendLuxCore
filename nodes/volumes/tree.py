@@ -2,103 +2,103 @@ import bpy
 from nodeitems_utils import NodeCategory, NodeItem, NodeItemCustom
 from ... import icons
 from ..nodeitems import Separator
-from ..base import LuxCoreNodeTree
+from ..base import SuperLuxCoreNodeTree
 
 
-class LuxCoreVolumeNodeTree(bpy.types.NodeTree, LuxCoreNodeTree):
-    bl_idname = "luxcore_volume_nodes"
-    bl_label = "LuxCore Volume Nodes"
+class SuperLuxCoreVolumeNodeTree(bpy.types.NodeTree, SuperLuxCoreNodeTree):
+    bl_idname = "superluxcore_volume_nodes"
+    bl_label = "SuperLuxCore Volume Nodes"
     bl_icon = icons.NTREE_VOLUME
 
 
-class LuxCoreNodeCategoryVolume(NodeCategory):
+class SuperLuxCoreNodeCategoryVolume(NodeCategory):
     @classmethod
     def poll(cls, context):
-        return context.space_data.tree_type == "luxcore_volume_nodes"
+        return context.space_data.tree_type == "superluxcore_volume_nodes"
 
 
 # Here we define the menu structure the user sees when he
 # presses Shift+A in the node editor to add a new node
-luxcore_node_categories_volume = [
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_VOLUME", "Volume", items=[
-        NodeItem("LuxCoreNodeVolClear", label="Clear"),
-        NodeItem("LuxCoreNodeVolHomogeneous", label="Homogeneous"),
-        NodeItem("LuxCoreNodeVolHeterogeneous", label="Heterogeneous"),
+superluxcore_node_categories_volume = [
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_VOLUME", "Volume", items=[
+        NodeItem("SuperLuxCoreNodeVolClear", label="Clear"),
+        NodeItem("SuperLuxCoreNodeVolHomogeneous", label="Homogeneous"),
+        NodeItem("SuperLuxCoreNodeVolHeterogeneous", label="Heterogeneous"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_TEXTURE", "Texture", items=[
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_TEXTURE", "Texture", items=[
         # Note: 2D textures make no sense for volumes
-        NodeItem("LuxCoreNodeTexBrick", label="Brick"),
-        NodeItem("LuxCoreNodeTexCheckerboard3D", label="3D Checkerboard"),
-        NodeItem("LuxCoreNodeTexfBM", label="fBM"),
-        NodeItem("LuxCoreNodeTexMarble", label="Marble"),
-        NodeItem("LuxCoreNodeTexWindy", label="Windy"),
-        NodeItem("LuxCoreNodeTexWrinkled", label="Wrinkled"),
-        NodeItem("LuxCoreNodeTexSmoke", label="Smoke Data"),
-        NodeItem("LuxCoreNodeTexOpenVDB", label="OpenVDB File"),
+        NodeItem("SuperLuxCoreNodeTexBrick", label="Brick"),
+        NodeItem("SuperLuxCoreNodeTexCheckerboard3D", label="3D Checkerboard"),
+        NodeItem("SuperLuxCoreNodeTexfBM", label="fBM"),
+        NodeItem("SuperLuxCoreNodeTexMarble", label="Marble"),
+        NodeItem("SuperLuxCoreNodeTexWindy", label="Windy"),
+        NodeItem("SuperLuxCoreNodeTexWrinkled", label="Wrinkled"),
+        NodeItem("SuperLuxCoreNodeTexSmoke", label="Smoke Data"),
+        NodeItem("SuperLuxCoreNodeTexOpenVDB", label="OpenVDB File"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_BLENDERTEXTURE", "Texture (Blender)", items=[
-        NodeItem("LuxCoreNodeTexBlenderBlend", label="Blend"),
-        NodeItem("LuxCoreNodeTexBlenderClouds", label="Clouds"),
-        NodeItem("LuxCoreNodeTexBlenderDistortedNoise", label="Distorted Noise"),
-        NodeItem("LuxCoreNodeTexBlenderMagic", label="Magic"),
-        NodeItem("LuxCoreNodeTexBlenderMarble", label="Marble"),
-        NodeItem("LuxCoreNodeTexBlenderMusgrave", label="Musgrave"),
-        NodeItem("LuxCoreNodeTexBlenderNoise", label="Fully Random Noise"),
-        NodeItem("LuxCoreNodeTexBlenderStucci", label="Stucci"),
-        NodeItem("LuxCoreNodeTexBlenderWood", label="Wood"),
-        NodeItem("LuxCoreNodeTexBlenderVoronoi", label="Voronoi"),
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_BLENDERTEXTURE", "Texture (Blender)", items=[
+        NodeItem("SuperLuxCoreNodeTexBlenderBlend", label="Blend"),
+        NodeItem("SuperLuxCoreNodeTexBlenderClouds", label="Clouds"),
+        NodeItem("SuperLuxCoreNodeTexBlenderDistortedNoise", label="Distorted Noise"),
+        NodeItem("SuperLuxCoreNodeTexBlenderMagic", label="Magic"),
+        NodeItem("SuperLuxCoreNodeTexBlenderMarble", label="Marble"),
+        NodeItem("SuperLuxCoreNodeTexBlenderMusgrave", label="Musgrave"),
+        NodeItem("SuperLuxCoreNodeTexBlenderNoise", label="Fully Random Noise"),
+        NodeItem("SuperLuxCoreNodeTexBlenderStucci", label="Stucci"),
+        NodeItem("SuperLuxCoreNodeTexBlenderWood", label="Wood"),
+        NodeItem("SuperLuxCoreNodeTexBlenderVoronoi", label="Voronoi"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_MATH", "Math", items=[
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_MATH", "Math", items=[
         # Note: 2D textures make no sense for volumes
-        NodeItem("LuxCoreNodeTexMath", label="Math"),
-        NodeItem("LuxCoreNodeTexColorMix", label="Color Math"),
-        NodeItem("LuxCoreNodeTexVectorMath", label="Vector Math"),
-        NodeItem("LuxCoreNodeTexDotProduct", label="Dot Product"),
-        NodeItem("LuxCoreNodeTexSplitFloat3", label="Split RGB"),
-        NodeItem("LuxCoreNodeTexMakeFloat3", label="Combine RGB"),
-        NodeItem("LuxCoreNodeTexRemap", label="Remap"),
+        NodeItem("SuperLuxCoreNodeTexMath", label="Math"),
+        NodeItem("SuperLuxCoreNodeTexColorMix", label="Color Math"),
+        NodeItem("SuperLuxCoreNodeTexVectorMath", label="Vector Math"),
+        NodeItem("SuperLuxCoreNodeTexDotProduct", label="Dot Product"),
+        NodeItem("SuperLuxCoreNodeTexSplitFloat3", label="Split RGB"),
+        NodeItem("SuperLuxCoreNodeTexMakeFloat3", label="Combine RGB"),
+        NodeItem("SuperLuxCoreNodeTexRemap", label="Remap"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_UTILS", "Utils", items=[
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_UTILS", "Utils", items=[
         # Note: 2D textures make no sense for volumes
-        NodeItem("LuxCoreNodeTexBand", label="ColorRamp"),
-        NodeItem("LuxCoreNodeTexDistort", label="Distort"),
-        NodeItem("LuxCoreNodeTexHSV", label="HSV"),
-        NodeItem("LuxCoreNodeTexBrightContrast", label="Brightness/Contrast"),
-        NodeItem("LuxCoreNodeTexInvert", label="Invert"),
-        NodeItem("LuxCoreNodeTexColorAtDepth", label="Color at depth"),
+        NodeItem("SuperLuxCoreNodeTexBand", label="ColorRamp"),
+        NodeItem("SuperLuxCoreNodeTexDistort", label="Distort"),
+        NodeItem("SuperLuxCoreNodeTexHSV", label="HSV"),
+        NodeItem("SuperLuxCoreNodeTexBrightContrast", label="Brightness/Contrast"),
+        NodeItem("SuperLuxCoreNodeTexInvert", label="Invert"),
+        NodeItem("SuperLuxCoreNodeTexColorAtDepth", label="Color at depth"),
         Separator(),
-        NodeItem("LuxCoreNodeTexConstfloat1", label="Constant Value"),
-        NodeItem("LuxCoreNodeTexConstfloat3", label="Constant Color"),
-        NodeItem("LuxCoreNodeTexIORPreset", label="IOR Preset"),
+        NodeItem("SuperLuxCoreNodeTexConstfloat1", label="Constant Value"),
+        NodeItem("SuperLuxCoreNodeTexConstfloat3", label="Constant Color"),
+        NodeItem("SuperLuxCoreNodeTexIORPreset", label="IOR Preset"),
         Separator(),
-        NodeItem("LuxCoreNodeTexHitpointInfo", label="Hitpoint Info"),
-        NodeItem("LuxCoreNodeTexRandom", label="Random"),
+        NodeItem("SuperLuxCoreNodeTexHitpointInfo", label="Hitpoint Info"),
+        NodeItem("SuperLuxCoreNodeTexRandom", label="Random"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_MAPPING", "Mapping", items=[
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_MAPPING", "Mapping", items=[
         # Note: 2D mapping makes no sense for volumes
-        NodeItem("LuxCoreNodeTexMapping3D", label="3D Mapping"),
+        NodeItem("SuperLuxCoreNodeTexMapping3D", label="3D Mapping"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_LIGHT", "Light", items=[
-        NodeItem("LuxCoreNodeTexLampSpectrum", label="Lamp Spectrum"),
-        NodeItem("LuxCoreNodeTexBlackbody", label="Blackbody Temperature"),
-        NodeItem("LuxCoreNodeTexIrregularData", label="Irregular Data"),
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_LIGHT", "Light", items=[
+        NodeItem("SuperLuxCoreNodeTexLampSpectrum", label="Lamp Spectrum"),
+        NodeItem("SuperLuxCoreNodeTexBlackbody", label="Blackbody Temperature"),
+        NodeItem("SuperLuxCoreNodeTexIrregularData", label="Irregular Data"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_POINTER", "Pointer", items=[
-        NodeItem("LuxCoreNodeTreePointer", label="Pointer"),
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_POINTER", "Pointer", items=[
+        NodeItem("SuperLuxCoreNodeTreePointer", label="Pointer"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_OUTPUT", "Output", items=[
-        NodeItem("LuxCoreNodeVolOutput", label="Output"),
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_OUTPUT", "Output", items=[
+        NodeItem("SuperLuxCoreNodeVolOutput", label="Output"),
     ]),
 
-    LuxCoreNodeCategoryVolume("LUXCORE_VOLUME_LAYOUT", "Layout", items=[
+    SuperLuxCoreNodeCategoryVolume("SUPERLUXCORE_VOLUME_LAYOUT", "Layout", items=[
         NodeItem("NodeFrame", label="Frame"),
         NodeItem("NodeReroute", label="Reroute"),
     ]),

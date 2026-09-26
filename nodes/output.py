@@ -1,5 +1,5 @@
 import bpy
-from .base import LuxCoreNode
+from .base import SuperLuxCoreNode
 from .. import utils
 from ..utils import node as utils_node
 
@@ -30,7 +30,7 @@ def update_active(output_node, context):
     utils_node.update_opengl_materials(None, context)
 
 
-class LuxCoreNodeOutput(LuxCoreNode):
+class SuperLuxCoreNodeOutput(SuperLuxCoreNode):
     """
     Output classes for material, texture and volume node trees are derived from this class.
     Only one output node should be active at any time (this class handles that).
@@ -68,7 +68,7 @@ class LuxCoreNodeOutput(LuxCoreNode):
             # we don't need to check the others
             break
 
-    def export(self, exporter, depsgraph, props, luxcore_name):
+    def export(self, exporter, depsgraph, props, superluxcore_name):
         raise NotImplementedError("Subclasses have to override this method!")
 
     def set_active(self, active):

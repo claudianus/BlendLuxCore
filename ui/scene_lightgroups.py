@@ -13,14 +13,14 @@ def settings_toggle_icon(enabled):
     return icons.EXPANDABLE_OPENED if enabled else icons.EXPANDABLE_CLOSED
 
 
-class LUXCORE_SCENE_PT_lightgroups(SceneButtonsPanel, Panel):
-    bl_label = "LuxCore Light Groups"
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_SCENE_PT_lightgroups(SceneButtonsPanel, Panel):
+    bl_label = "SuperLuxCore Light Groups"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
 
     @classmethod
     def poll(cls, context):
         engine = context.scene.render.engine
-        return engine == "LUXCORE"
+        return engine == "SUPERLUXCORE"
 
     def draw_header(self, context):
         layout = self.layout
@@ -28,12 +28,12 @@ class LUXCORE_SCENE_PT_lightgroups(SceneButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
-        groups = context.scene.luxcore.lightgroups
+        groups = context.scene.superluxcore.lightgroups
 
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        layout.operator("luxcore.create_lightgroup_nodes", icon=icons.COMPOSITOR)
+        layout.operator("superluxcore.create_lightgroup_nodes", icon=icons.COMPOSITOR)
 
         self.draw_lightgroup(layout, groups.default, -1,
                              is_default_group=True)
@@ -42,7 +42,7 @@ class LUXCORE_SCENE_PT_lightgroups(SceneButtonsPanel, Panel):
             self.draw_lightgroup(layout, group, i)
 
         if len(groups.custom) < MAX_CUSTOM_LIGHTGROUPS:
-            layout.operator("luxcore.add_lightgroup", icon=icons.ADD)
+            layout.operator("superluxcore.add_lightgroup", icon=icons.ADD)
 
     @staticmethod
     def draw_lightgroup(layout, group, index, is_default_group=False):
@@ -53,7 +53,7 @@ class LUXCORE_SCENE_PT_lightgroups(SceneButtonsPanel, Panel):
         
         if not is_default_group:
             col = row.column()
-            op = col.operator("luxcore.select_objects_in_lightgroup", icon=icons.OBJECT, text="")
+            op = col.operator("superluxcore.select_objects_in_lightgroup", icon=icons.OBJECT, text="")
             op.index = index
 
         col = row.column()
@@ -66,6 +66,6 @@ class LUXCORE_SCENE_PT_lightgroups(SceneButtonsPanel, Panel):
 
         # Can't delete the default lightgroup
         if not is_default_group:
-            op = row.operator("luxcore.remove_lightgroup",
+            op = row.operator("superluxcore.remove_lightgroup",
                               text="", icon=icons.CLEAR, emboss=False)
             op.index = index

@@ -11,7 +11,7 @@ def draw_persistent_file_ui(context, layout, settings):
     layout.use_property_split = True
     layout.use_property_decorate = False
 
-    engine_is_bidir = context.scene.luxcore.config.engine == "BIDIR"
+    engine_is_bidir = context.scene.superluxcore.config.engine == "BIDIR"
     layout.active = settings.enabled and not engine_is_bidir
 
     file_abspath = utils.get_abspath(settings.file_path, library=context.scene.library)
@@ -37,18 +37,18 @@ def draw_persistent_file_ui(context, layout, settings):
     col.label(text=cache_status)
 
 
-class LUXCORE_RENDER_PT_caches(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Caches"
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 80
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
@@ -59,25 +59,25 @@ class LUXCORE_RENDER_PT_caches(RenderButtonsPanel, Panel):
         pass
 
 
-class LUXCORE_RENDER_PT_caches_photongi(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_photongi(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "PhotonGI Cache"
-    bl_parent_id = "LUXCORE_RENDER_PT_caches"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
-        self.layout.prop(context.scene.luxcore.config.photongi, "enabled", text="")
+        self.layout.prop(context.scene.superluxcore.config.photongi, "enabled", text="")
 
     def draw(self, context):
-        photongi = context.scene.luxcore.config.photongi
+        photongi = context.scene.superluxcore.config.photongi
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -100,33 +100,33 @@ class LUXCORE_RENDER_PT_caches_photongi(RenderButtonsPanel, Panel):
             col.label(text="Can't show this cache (disabled)", icon=icons.WARNING)
 
 
-class LUXCORE_RENDER_PT_caches_photongi_indirect(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_photongi_indirect(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = " "  # Label is drawn manually in draw_header() so we can make it inactive
-    bl_parent_id = "LUXCORE_RENDER_PT_caches_photongi"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches_photongi"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
-        self.layout.active = context.scene.luxcore.config.photongi.enabled and context.scene.luxcore.config.engine == "PATH"
+        self.layout.active = context.scene.superluxcore.config.photongi.enabled and context.scene.superluxcore.config.engine == "PATH"
         row = self.layout.row(align=True)
-        row.prop(context.scene.luxcore.config.photongi, "indirect_enabled", text="")
+        row.prop(context.scene.superluxcore.config.photongi, "indirect_enabled", text="")
         row.label(text="Indirect Light Cache")
 
     def draw(self, context):
-        photongi = context.scene.luxcore.config.photongi
+        photongi = context.scene.superluxcore.config.photongi
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        engine_is_bidir = context.scene.luxcore.config.engine == "BIDIR"
+        engine_is_bidir = context.scene.superluxcore.config.engine == "BIDIR"
         if engine_is_bidir:
             layout.label(text="Not supported by Bidir", icon=icons.INFO)
 
@@ -144,28 +144,28 @@ class LUXCORE_RENDER_PT_caches_photongi_indirect(RenderButtonsPanel, Panel):
             col.prop(photongi, "indirect_lookup_radius")
 
 
-class LUXCORE_RENDER_PT_caches_photongi_caustic(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_photongi_caustic(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = " "  # Label is drawn manually in draw_header() so we can make it inactive
-    bl_parent_id = "LUXCORE_RENDER_PT_caches_photongi"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches_photongi"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
-        self.layout.active = context.scene.luxcore.config.photongi.enabled
+        self.layout.active = context.scene.superluxcore.config.photongi.enabled
         row = self.layout.row(align=True)
-        row.prop(context.scene.luxcore.config.photongi, "caustic_enabled", text="")
+        row.prop(context.scene.superluxcore.config.photongi, "caustic_enabled", text="")
         row.label(text="Caustic Light Cache")
 
     def draw(self, context):
-        photongi = context.scene.luxcore.config.photongi
+        photongi = context.scene.superluxcore.config.photongi
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -197,47 +197,47 @@ class LUXCORE_RENDER_PT_caches_photongi_caustic(RenderButtonsPanel, Panel):
             sub.label(text=f"Min radius reached after {steps} steps ({steps * photongi.caustic_updatespp} samples)")
 
 
-class LUXCORE_RENDER_PT_caches_photongi_persistence(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_photongi_persistence(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = " "  # Label is drawn manually in draw_header() so we can make it inactive
-    bl_parent_id = "LUXCORE_RENDER_PT_caches_photongi"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches_photongi"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
-        return (not simple.enabled) or simple.show_advanced and context.scene.luxcore.config.engine == "PATH"
+        simple = context.scene.superluxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced and context.scene.superluxcore.config.engine == "PATH"
 
     def draw_header(self, context):
-        self.layout.active = context.scene.luxcore.config.photongi.enabled
+        self.layout.active = context.scene.superluxcore.config.photongi.enabled
         self.layout.label(text="Persistence")
 
     def draw(self, context):
-        draw_persistent_file_ui(context, self.layout, context.scene.luxcore.config.photongi)
+        draw_persistent_file_ui(context, self.layout, context.scene.superluxcore.config.photongi)
 
 
-class LUXCORE_RENDER_PT_caches_envlight(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_envlight(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Environment Light Cache"
-    bl_parent_id = "LUXCORE_RENDER_PT_caches"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
-        self.layout.prop(context.scene.luxcore.config.envlight_cache, "enabled", text="")
+        self.layout.prop(context.scene.superluxcore.config.envlight_cache, "enabled", text="")
 
     def draw(self, context):
-        envlight_cache = context.scene.luxcore.config.envlight_cache
+        envlight_cache = context.scene.superluxcore.config.envlight_cache
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -245,47 +245,47 @@ class LUXCORE_RENDER_PT_caches_envlight(RenderButtonsPanel, Panel):
         layout.prop(envlight_cache, "quality")
 
 
-class LUXCORE_RENDER_PT_caches_envlight_persistence(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_envlight_persistence(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = " "  # Label is drawn manually in draw_header() so we can make it inactive
-    bl_parent_id = "LUXCORE_RENDER_PT_caches_envlight"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches_envlight"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
-        return (not simple.enabled) or simple.show_advanced and context.scene.luxcore.config.engine == "PATH"
+        simple = context.scene.superluxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced and context.scene.superluxcore.config.engine == "PATH"
 
     def draw_header(self, context):
-        self.layout.active = context.scene.luxcore.config.envlight_cache.enabled
+        self.layout.active = context.scene.superluxcore.config.envlight_cache.enabled
         self.layout.label(text="Persistence")
 
     def draw(self, context):
-        draw_persistent_file_ui(context, self.layout, context.scene.luxcore.config.envlight_cache)
+        draw_persistent_file_ui(context, self.layout, context.scene.superluxcore.config.envlight_cache)
 
 
-class LUXCORE_RENDER_PT_caches_DLSC(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_DLSC(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Direct Light Sampling Cache"
-    bl_parent_id = "LUXCORE_RENDER_PT_caches"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
-        self.layout.prop(context.scene.luxcore.config.dls_cache, "enabled", text="")
+        self.layout.prop(context.scene.superluxcore.config.dls_cache, "enabled", text="")
 
     def draw(self, context):
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         dls_cache = config.dls_cache
         layout = self.layout
         layout.use_property_split = True
@@ -299,28 +299,28 @@ class LUXCORE_RENDER_PT_caches_DLSC(RenderButtonsPanel, Panel):
         col.prop(dls_cache, "entry_warmupsamples")
 
 
-class LUXCORE_RENDER_PT_caches_DLSC_advanced(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_DLSC_advanced(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Advanced"
-    bl_parent_id = "LUXCORE_RENDER_PT_caches_DLSC"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches_DLSC"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw(self, context):
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         dls_cache = config.dls_cache
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        layout.active = context.scene.luxcore.config.dls_cache.enabled
+        layout.active = context.scene.superluxcore.config.dls_cache.enabled
 
         col = layout.column(align=True)
         col.label(text="Entry Settings:")
@@ -337,23 +337,23 @@ class LUXCORE_RENDER_PT_caches_DLSC_advanced(RenderButtonsPanel, Panel):
         col.prop(dls_cache, "maxsamplescount")
 
 
-class LUXCORE_RENDER_PT_caches_DLSC_persistence(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_caches_DLSC_persistence(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = " "  # Label is drawn manually in draw_header() so we can make it inactive
-    bl_parent_id = "LUXCORE_RENDER_PT_caches_DLSC"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_caches_DLSC"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
-        return (not simple.enabled) or simple.show_advanced and context.scene.luxcore.config.engine == "PATH"
+        simple = context.scene.superluxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced and context.scene.superluxcore.config.engine == "PATH"
 
     def draw_header(self, context):
-        self.layout.active = context.scene.luxcore.config.dls_cache.enabled
+        self.layout.active = context.scene.superluxcore.config.dls_cache.enabled
         self.layout.label(text="Persistence")
 
     def draw(self, context):
-        draw_persistent_file_ui(context, self.layout, context.scene.luxcore.config.dls_cache)
+        draw_persistent_file_ui(context, self.layout, context.scene.superluxcore.config.dls_cache)

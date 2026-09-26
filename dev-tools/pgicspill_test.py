@@ -1,5 +1,5 @@
 """
-PhotonGI cache spilling test (standalone pyluxcore).
+PhotonGI cache spilling test (standalone pysuperluxcore).
 
     python3 dev-tools/pgicspill_test.py
 
@@ -23,7 +23,7 @@ import sys
 import time
 
 import numpy as np
-import pyluxcore
+import pysuperluxcore
 
 OUT_ON = "/tmp/pgicspill_on.png"
 OUT_OFF = "/tmp/pgicspill_off.png"
@@ -74,7 +74,7 @@ def write_ball():
 def make_scene():
     """A matte floor plus a glass ball: gives both an indirect radiance
     cache and a caustic photon cache."""
-    p = pyluxcore.Properties()
+    p = pysuperluxcore.Properties()
     p.SetFromString(f"""
 scene.lights.sun.type = "sun"
 scene.lights.sun.dir = 1 -1 -1
@@ -104,7 +104,7 @@ PERSIST = "/tmp/pgicspill_cache.pst"
 
 
 def render(spill, out, persist=""):
-    scene = pyluxcore.Scene()
+    scene = pysuperluxcore.Scene()
     props = make_scene()
     if spill:
         props.SetFromString("""
@@ -113,7 +113,7 @@ scene.spill.minbytes = 65536
 """)
     scene.Parse(props)
 
-    cfg = pyluxcore.Properties()
+    cfg = pysuperluxcore.Properties()
     cfg.SetFromString(f"""
 renderengine.type = "PATHCPU"
 sampler.type = "SOBOL"
@@ -133,8 +133,8 @@ film.imagepipelines.0.1.type = TONEMAP_AUTOLINEAR
 """)
     if persist:
         cfg.SetFromString(f'path.photongi.persistent.file = "{persist}"\n')
-    rc = pyluxcore.RenderConfig(cfg, scene)
-    session = pyluxcore.RenderSession(rc)
+    rc = pysuperluxcore.RenderConfig(cfg, scene)
+    session = pysuperluxcore.RenderSession(rc)
     session.Start()
     while not session.HasDone():
         session.UpdateStats()
@@ -152,7 +152,7 @@ def mean_rgb(path):
 
 def main():
     write_ball()
-    pyluxcore.Init()
+    pysuperluxcore.Init()
     print(f"[PGICSpill] baseline rss={rss_mb():.0f} MB")
 
     render(True, OUT_ON)

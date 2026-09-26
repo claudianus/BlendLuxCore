@@ -146,7 +146,7 @@ PHOTONGI_GLOSSINESSTHRESH_DESC = (
 )
 
 PHOTONGI_INDIRECT_USAGETHRESHOLDSCALE_DESC = (
-    "In corners and other areas with fine detail, LuxCore uses brute force pathtracing instead of the cache "
+    "In corners and other areas with fine detail, SuperLuxCore uses brute force pathtracing instead of the cache "
     "entries. This parameter is multiplied with the lookup radius and controls the size of the pathtraced area "
     "around corners. Smaller values can increase performance, but might lead to splotches and light leaks near "
     "corners. Use a larger value if you encounter such artifacts"
@@ -223,6 +223,21 @@ VERTEX_CONNECTION_DESC = (
     "count above 8192"
 )
 
+VERTEX_CONNECTION_CONNECTS_DESC = (
+    "Expected number of connect shadow rays per eye vertex "
+    "(probabilistic connection, Popov et al. 2015). Candidates are "
+    "importance-sampled by a throughput/geometry score and reweighted "
+    "to stay unbiased. 0 connects every candidate in the pool "
+    "(deterministic, highest quality)"
+)
+
+VERTEX_CONNECTION_POOL_DESC = (
+    "How many light tasks' vertex caches each eye vertex may connect "
+    "to. Larger pools cover more of the caustic field per eye vertex; "
+    "combine with a connect budget to keep the shadow-ray cost bounded. "
+    "1 = the paired light task only"
+)
+
 ENVLIGHT_CACHE_DESC = (
     "Enable in scenes where the world environment is only visible through small openings (e.g. a room with small windows). "
     "Do not use in open scenes, as it can be detrimental to performance in this case. "
@@ -237,7 +252,7 @@ MIPMAPMEM_DESC = (
     "memory than the \"auto-scale to lowest size\" policy, but needs almost no preprocessing time after the first render"
 )
 MINMEM_DESC = (
-    "Before the rendering starts, LuxCore checks how large each image texture is visible on the film. If the image "
+    "Before the rendering starts, SuperLuxCore checks how large each image texture is visible on the film. If the image "
     "is larger than needed, for example because it is only seen from far away, the image is scaled down. This policy "
     "saves as much memory as possible without affecting render quality, but needs some preprocessing time for every render"
 )
@@ -246,7 +261,7 @@ FIXED_DESC = (
 )
 
 
-class LuxCoreConfigSimple(PropertyGroup):
+class SuperLuxCoreConfigSimple(PropertyGroup):
     """Corona-style simplified settings.
 
     A single quality slider that maps to a curated set of engine
@@ -315,8 +330,8 @@ class LuxCoreConfigSimple(PropertyGroup):
         so export can restore the user's values afterwards (non-destructive).
         Returns an opaque token for restore().
         """
-        config = scene.luxcore.config
-        halt = scene.luxcore.halt
+        config = scene.superluxcore.config
+        halt = scene.superluxcore.halt
         targets = [
             (config.path, "depth_total"), (config.path, "depth_diffuse"),
             (config.path, "depth_glossy"), (config.path, "depth_specular"),
@@ -340,7 +355,7 @@ class LuxCoreConfigSimple(PropertyGroup):
                 pass
 
     def apply(self, config):
-        """Map the quality value onto the underlying LuxCore config.
+        """Map the quality value onto the underlying SuperLuxCore config.
 
         Called by export/config.convert() when Quick Setup is enabled,
         before the regular conversion. The caller snapshots first and
@@ -366,8 +381,8 @@ class LuxCoreConfigSimple(PropertyGroup):
 
     # Material node types that transmit light (=> caustics candidates)
     TRANSMISSIVE_NODE_TYPES = {
-        "LuxCoreNodeMatGlass",   # glass / roughglass / archglass
-        "LuxCoreNodeMatMix",     # can contain glass via mix
+        "SuperLuxCoreNodeMatGlass",   # glass / roughglass / archglass
+        "SuperLuxCoreNodeMatMix",     # can contain glass via mix
     }
 
     def apply_scene_scan(self, scene):
@@ -379,12 +394,12 @@ class LuxCoreConfigSimple(PropertyGroup):
         quality also enable light tracing (hybrid back/forward) which
         resolves sharp caustics.
         """
-        config = scene.luxcore.config
+        config = scene.superluxcore.config
         q = self.quality
 
         has_transmission = False
         for mat in bpy.data.materials:
-            lux_mat = getattr(mat, "luxcore", None)
+            lux_mat = getattr(mat, "superluxcore", None)
             if lux_mat is None:
                 continue
             node_tree = getattr(lux_mat, "node_tree", None)
@@ -392,7 +407,7 @@ class LuxCoreConfigSimple(PropertyGroup):
                 continue
             for node in node_tree.nodes:
                 if node.bl_idname in self.TRANSMISSIVE_NODE_TYPES:
-                    if node.bl_idname == "LuxCoreNodeMatMix":
+                    if node.bl_idname == "SuperLuxCoreNodeMatMix":
                         # Look through the mix inputs instead of trusting
                         # the node name: glass behind either input counts.
                         try:
@@ -403,7 +418,7 @@ class LuxCoreConfigSimple(PropertyGroup):
                             }
                         except Exception:
                             linked = set()
-                        if "LuxCoreNodeMatGlass" not in linked and \
+                        if "SuperLuxCoreNodeMatGlass" not in linked and \
                                 "glass" not in node.name.lower():
                             continue
                     has_transmission = True
@@ -425,14 +440,14 @@ class LuxCoreConfigSimple(PropertyGroup):
 
     def apply_halt(self, scene):
         """Map quality onto halt conditions (samples per pixel)."""
-        scene.luxcore.halt.enable = True
-        scene.luxcore.halt.samples = self.quality_map()["halt_samples"]
+        scene.superluxcore.halt.enable = True
+        scene.superluxcore.halt.samples = self.quality_map()["halt_samples"]
 
 
-class LuxCoreConfigPath(PropertyGroup):
+class SuperLuxCoreConfigPath(PropertyGroup):
     """
     path.*
-    Stored in LuxCoreConfig, accesss with scene.luxcore.config.path
+    Stored in SuperLuxCoreConfig, accesss with scene.superluxcore.config.path
     """
     # TODO: helpful descriptions
     # path.pathdepth.total
@@ -481,6 +496,12 @@ class LuxCoreConfigPath(PropertyGroup):
     # vertices are connected to eye vertices with BIDIRCPU-style MIS
     vertex_connection: BoolProperty(name="Vertex Connection", default=False,
                                     description=VERTEX_CONNECTION_DESC)
+    vertex_connection_connects: IntProperty(name="Connect Budget", default=0,
+                                    min=0, max=256,
+                                    description=VERTEX_CONNECTION_CONNECTS_DESC)
+    vertex_connection_pool: IntProperty(name="Connect Pool", default=1,
+                                    min=1, max=64,
+                                    description=VERTEX_CONNECTION_POOL_DESC)
 
     use_clamping: BoolProperty(name="Clamp Output", default=False, description=CLAMPING_DESC)
     auto_clamping: BoolProperty(
@@ -508,10 +529,10 @@ class LuxCoreConfigPath(PropertyGroup):
     # path.russianroulette.cap
 
 
-class LuxCoreConfigTile(PropertyGroup):
+class SuperLuxCoreConfigTile(PropertyGroup):
     """
     tile.*
-    Stored in LuxCoreConfig, accesss with scene.luxcore.config.tile
+    Stored in SuperLuxCoreConfig, accesss with scene.superluxcore.config.tile
     """
     # tilepath.sampling.aa.size
     path_sampling_aa_size: IntProperty(name="AA Samples", default=3, min=1, soft_max=13,
@@ -540,7 +561,7 @@ class LuxCoreConfigTile(PropertyGroup):
                                             description=THRESH_WARMUP_DESC)
 
 
-class LuxCoreConfigDLSCache(PropertyGroup):
+class SuperLuxCoreConfigDLSCache(PropertyGroup):
     # Overrides other light strategies when enabled
     enabled: BoolProperty(name="", default=False, description=DLSC_DESC)
 
@@ -572,7 +593,7 @@ class LuxCoreConfigDLSCache(PropertyGroup):
                                                 "If you want to use the saved cache, disable this option")
 
 
-class LuxCoreConfigPhotonGI(PropertyGroup):
+class SuperLuxCoreConfigPhotonGI(PropertyGroup):
     enabled: BoolProperty(name="Use PhotonGI cache to accelerate indirect and/or caustic light rendering. \n"
                                "Only used during final render", default=False)
 
@@ -647,7 +668,7 @@ class LuxCoreConfigPhotonGI(PropertyGroup):
                                                  "If you want to use the saved cache, disable this option")
 
 
-class LuxCoreConfigEnvLightCache(PropertyGroup):
+class SuperLuxCoreConfigEnvLightCache(PropertyGroup):
     enabled: BoolProperty(name="", default=False, description=ENVLIGHT_CACHE_DESC)
     # TODO description
     quality: FloatProperty(name="Quality", default=0.5, min=0, max=1)
@@ -659,14 +680,14 @@ class LuxCoreConfigEnvLightCache(PropertyGroup):
                                                 "If you want to use the saved cache, disable this option")
 
 
-class LuxCoreConfigNoiseEstimation(PropertyGroup):
+class SuperLuxCoreConfigNoiseEstimation(PropertyGroup):
     warmup: IntProperty(name="Warmup Samples", default=8, min=1,
                          description=NOISE_THRESH_WARMUP_DESC)
     step: IntProperty(name="Test Step Samples", default=32, min=1, soft_min=16,
                        description=NOISE_THRESH_STEP_DESC)
 
 
-class LuxCoreConfigImageResizePolicy(PropertyGroup):
+class SuperLuxCoreConfigImageResizePolicy(PropertyGroup):
     enabled: BoolProperty(name="Use Image Resizing", default=False, description="")
     types = [
         ("MIPMAPMEM", "Auto-Scale to MipMaps", MIPMAPMEM_DESC, 0),
@@ -694,13 +715,13 @@ class LuxCoreConfigImageResizePolicy(PropertyGroup):
         return utils.luxutils.create_props(prefix, definitions)
 
 
-class LuxCoreConfig(PropertyGroup):
+class SuperLuxCoreConfig(PropertyGroup):
     """
     Main config storage class.
-    Access (in ui or export) with scene.luxcore.config
+    Access (in ui or export) with scene.superluxcore.config
     """
     
-    # These settings are mostly not directly transferrable to LuxCore properties
+    # These settings are mostly not directly transferrable to SuperLuxCore properties
     # They need some if/else decisions and aggregation, e.g. to build the engine name from parts
     engines = [
         ("PATH", "Pathtracing", PATH_DESC, 0),
@@ -734,7 +755,7 @@ class LuxCoreConfig(PropertyGroup):
     # Low-resource profile: the GPU wavefront task count is capped so
     # the per-task buffers (rays/hits, ReSTIR reservoirs, MNEE state,
     # visibility candidate rays) fit a small GPU and leave headroom for
-    # the driver and the OS compositor. LuxCore's default is 512K.
+    # the driver and the OS compositor. SuperLuxCore's default is 512K.
     LOW_RESOURCE_TASK_COUNT = 131072
 
     def _enabled_gpu_devices(self):
@@ -753,7 +774,7 @@ class LuxCoreConfig(PropertyGroup):
             if wanted is None:
                 return []
             # id_data is the owning Scene for a nested PropertyGroup
-            devices = self.id_data.luxcore.devices
+            devices = self.id_data.superluxcore.devices
             if len(devices.devices) == 0:
                 # Lazily populate on first use (new scenes have no
                 # load_post pass to initialize the list)
@@ -792,7 +813,7 @@ class LuxCoreConfig(PropertyGroup):
 
     def _gpu_max_memory(self, device_entry):
         try:
-            devices = self.id_data.luxcore.devices
+            devices = self.id_data.superluxcore.devices
             props = devices.get_device_props()
             for prefix in props.GetAllUniqueSubNames("opencl.device"):
                 if (
@@ -837,12 +858,12 @@ class LuxCoreConfig(PropertyGroup):
                                           "converged pixels more conservatively")
 
     # Quick Setup (Corona-style simplified interface)
-    simple: PointerProperty(type=LuxCoreConfigSimple)
+    simple: PointerProperty(type=SuperLuxCoreConfigSimple)
     # Adaptive strength mapping for Quick Setup (draft = less adaptive)
     simple_adaptive_strength: FloatProperty(name="Adaptive Strength (Simple)", default=0.9, min=0, max=0.95)
 
     # Noise estimation (used by adaptive samplers like SOBOL and RANDOM)
-    noise_estimation: PointerProperty(type=LuxCoreConfigNoiseEstimation)
+    noise_estimation: PointerProperty(type=SuperLuxCoreConfigNoiseEstimation)
     
     # Sampler pattern (used by SOBOL and RANDOM)
     sampler_patterns = [
@@ -872,7 +893,7 @@ class LuxCoreConfig(PropertyGroup):
         name="Free Blender Image Buffers",
         default=True,
         description="Release Blender's decoded pixel buffers of file-backed images once "
-                    "the final render export finishes. LuxCore reads textures from disk "
+                    "the final render export finishes. SuperLuxCore reads textures from disk "
                     "itself, so the same image otherwise occupies RAM twice. Only "
                     "unmodified FILE/SEQUENCE images are freed — painted or dirty "
                     "buffers are never touched",
@@ -880,7 +901,7 @@ class LuxCoreConfig(PropertyGroup):
     external_process: BoolProperty(
         name="External Process",
         default=False,
-        description="Render in a detached process: the exported LuxCore scene is "
+        description="Render in a detached process: the exported SuperLuxCore scene is "
                     "serialized to disk and rendered outside Blender, so Blender's "
                     "scene memory (dependency graph, evaluated meshes, images) is "
                     "released while the render runs. The result is written to the "
@@ -913,7 +934,7 @@ class LuxCoreConfig(PropertyGroup):
         default=False,
         description="Automatically bake heavy meshes to .lxm proxy files in a "
                     "session-temp directory and render them via memory mapping. "
-                    "LuxCore keeps the geometry file-backed (demand-paged, "
+                    "SuperLuxCore keeps the geometry file-backed (demand-paged, "
                     "reclaimable by the OS) and the Blender mesh is never "
                     "converted again. Excluded: instanced-duplicate sources, "
                     "displacement and deformation motion blur. Mesh edits are "
@@ -980,8 +1001,8 @@ class LuxCoreConfig(PropertyGroup):
         return self.engine == "PATH" and self.use_tiles
 
     # Special properties of the various engines
-    path: PointerProperty(type=LuxCoreConfigPath)
-    tile: PointerProperty(type=LuxCoreConfigTile)
+    path: PointerProperty(type=SuperLuxCoreConfigPath)
+    tile: PointerProperty(type=SuperLuxCoreConfigTile)
     # BIDIR properties
     # light.maxdepth
     # TODO description
@@ -1106,14 +1127,14 @@ class LuxCoreConfig(PropertyGroup):
                                               "Slightly slower; results are projected back to RGB on film")
 
     # Special properties of the direct light sampling cache
-    dls_cache: PointerProperty(type=LuxCoreConfigDLSCache)
+    dls_cache: PointerProperty(type=SuperLuxCoreConfigDLSCache)
     # Special properties of the photon GI cache
-    photongi: PointerProperty(type=LuxCoreConfigPhotonGI)
+    photongi: PointerProperty(type=SuperLuxCoreConfigPhotonGI)
     # Special properties of the env. light cache (aka automatic portals)
-    envlight_cache: PointerProperty(type=LuxCoreConfigEnvLightCache)
+    envlight_cache: PointerProperty(type=SuperLuxCoreConfigEnvLightCache)
 
     # FILESAVER options
-    use_filesaver: BoolProperty(name="Only write LuxCore scene", default=False)
+    use_filesaver: BoolProperty(name="Only write SuperLuxCore scene", default=False)
     filesaver_format_items = [
         ("TXT", "Text", "Save as .scn and .cfg text files", 0),
         ("BIN", "Binary", "Save as .bcf binary file", 1),
@@ -1126,8 +1147,8 @@ class LuxCoreConfig(PropertyGroup):
     use_animated_seed: BoolProperty(name="Animated Seed", default=False, description=ANIM_SEED_DESC)
 
     # Min. epsilon settings (drawn in ui/units.py)
-    show_min_epsilon: BoolProperty(name="Advanced LuxCore Settings", default=False,
-                                    description="Show/Hide advanced LuxCore features. "
+    show_min_epsilon: BoolProperty(name="Advanced SuperLuxCore Settings", default=False,
+                                    description="Show/Hide advanced SuperLuxCore features. "
                                                 "Only change them if you know what you are doing")
     min_epsilon: FloatProperty(name="Min. Epsilon", default=1e-5, soft_min=1e-6, soft_max=1e-1,
                                 precision=5,
@@ -1138,7 +1159,7 @@ class LuxCoreConfig(PropertyGroup):
                                 description="Might need adjustment along with the min epsilon to avoid "
                                             "artifacts due to floating point precision issues")
 
-    image_resize_policy: PointerProperty(type=LuxCoreConfigImageResizePolicy)
+    image_resize_policy: PointerProperty(type=SuperLuxCoreConfigImageResizePolicy)
 
     def using_only_lighttracing(self):
         return (self.engine == "PATH" and self.effective_device() == "CPU" and self.path.hybridbackforward_enable

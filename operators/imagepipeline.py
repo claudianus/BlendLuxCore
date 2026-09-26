@@ -55,8 +55,8 @@ crf_preset_names = [
 ]
 
 
-class LUXCORE_OT_select_crf(bpy.types.Operator):
-    bl_idname = "luxcore.select_crf"
+class SUPERLUXCORE_OT_select_crf(bpy.types.Operator):
+    bl_idname = "superluxcore.select_crf"
     bl_label = "Select Preset"
     bl_description = "Camera Response Function presets"
     bl_property = "crf_preset"
@@ -68,7 +68,7 @@ class LUXCORE_OT_select_crf(bpy.types.Operator):
         # There is a known bug with using a callback,
         # Python must keep a reference to the strings
         # returned or Blender will misbehave or even crash.
-        LUXCORE_OT_select_crf.callback_strings = items
+        SUPERLUXCORE_OT_select_crf.callback_strings = items
         return items
 
     crf_preset: EnumProperty(name="CRF Preset",
@@ -81,7 +81,7 @@ class LUXCORE_OT_select_crf(bpy.types.Operator):
 
     def execute(self, context):
         camera = context.scene.camera
-        imagepipeline = camera.data.luxcore.imagepipeline
+        imagepipeline = camera.data.superluxcore.imagepipeline
         imagepipeline.camera_response_func.preset = self.crf_preset
         # This is a trick to force a camera update during viewport render
         # (Blender does not notify us if we only change a custom property)
@@ -93,8 +93,8 @@ class LUXCORE_OT_select_crf(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class LUXCORE_OT_set_raw_view_transform(bpy.types.Operator):
-    bl_idname = "luxcore.set_raw_view_transform"
+class SUPERLUXCORE_OT_set_raw_view_transform(bpy.types.Operator):
+    bl_idname = "superluxcore.set_raw_view_transform"
     bl_label = "Set View Transform to Raw"
     bl_description = ""
 

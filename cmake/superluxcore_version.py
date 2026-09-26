@@ -1,4 +1,4 @@
-"""Retrieve BlendLuxCore version from blender_manifest.toml"""
+"""Retrieve SuperLuxCore version from blender_manifest.toml"""
 import tomllib
 import os
 from pathlib import Path

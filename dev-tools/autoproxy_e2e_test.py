@@ -25,8 +25,8 @@ import glob
 import bpy
 import mathutils
 
-OUT_MESH = "/tmp/luxcore_autoproxy_mesh.png"
-OUT_PROXY = "/tmp/luxcore_autoproxy_proxy.png"
+OUT_MESH = "/tmp/superluxcore_autoproxy_mesh.png"
+OUT_PROXY = "/tmp/superluxcore_autoproxy_proxy.png"
 
 
 def mat_diffuse(name, color):
@@ -87,16 +87,16 @@ def build_scene():
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.sampler = "SOBOL"
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 12
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.sampler = "SOBOL"
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 12
     return scene, floor
 
 
@@ -104,7 +104,7 @@ def baked_files():
     import tempfile
     return sorted(
         glob.glob(os.path.join(
-            tempfile.gettempdir(), "luxcore_autoproxy", "ap_*.lxm"
+            tempfile.gettempdir(), "superluxcore_autoproxy", "ap_*.lxm"
         ))
     )
 
@@ -118,8 +118,8 @@ def main():
     bpy.ops.render.render(write_still=True)
 
     # --- enable auto proxy with a low threshold ---
-    scene.luxcore.config.proxy_auto = True
-    scene.luxcore.config.proxy_auto_mintris = 1000
+    scene.superluxcore.config.proxy_auto = True
+    scene.superluxcore.config.proxy_auto_mintris = 1000
     # Mark the mesh dirty so the persistent-scene cache re-exports it
     # (otherwise the whole object is reused and the proxy never kicks in)
     floor.data.update_tag()

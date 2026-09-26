@@ -5,12 +5,12 @@ import tempfile
 import bpy
 from bpy.app.handlers import persistent
 
-import pyluxcore
+import pysuperluxcore
 from .. import utils, operators
 from ..utils import compatibility
 from . import frame_change_pre
-from ..utils.errorlog import LuxCoreErrorLog
-from ..operators.manual_compatibility import LUXCORE_OT_convert_to_v23
+from ..utils.errorlog import SuperLuxCoreErrorLog
+from ..operators.manual_compatibility import SUPERLUXCORE_OT_convert_to_v23
 from ..export.caches import persistent_scene
 
 if _needs_reload:
@@ -34,19 +34,19 @@ def _init_persistent_cache_file_path(settings, suffix):
         settings.file_path = pgi_path
 
 
-def _init_LuxCoreOnlineLibrary():
+def _init_SuperLuxCoreOnlineLibrary():
     user_preferences = utils.get_addon_preferences(bpy.context)
-    ui_props = bpy.context.scene.luxcoreOL.ui
+    ui_props = bpy.context.scene.superluxcoreOL.ui
 
-    bpy.context.scene.luxcoreOL.on_search = False
-    bpy.context.scene.luxcoreOL.search_category = ""
+    bpy.context.scene.superluxcoreOL.on_search = False
+    bpy.context.scene.superluxcoreOL.search_category = ""
 
     ui_props.assetbar_on = False
     ui_props.turn_off = False
     ui_props.ToC_loaded = False
-    bpy.context.scene.luxcoreOL.model.thumbnails_loaded = False
-    bpy.context.scene.luxcoreOL.scene.thumbnails_loaded = False
-    bpy.context.scene.luxcoreOL.material.thumbnails_loaded = False
+    bpy.context.scene.superluxcoreOL.model.thumbnails_loaded = False
+    bpy.context.scene.superluxcoreOL.scene.thumbnails_loaded = False
+    bpy.context.scene.superluxcoreOL.material.thumbnails_loaded = False
 
     if not os.path.exists(user_preferences.global_dir):
         os.makedirs(user_preferences.global_dir)
@@ -77,21 +77,21 @@ def handler(_):
     for scene in bpy.data.scenes:
         # Update OpenCL devices if .blend is opened on
         # a different computer than it was saved on
-        scene.luxcore.devices.update_devices_if_necessary()
+        scene.superluxcore.devices.update_devices_if_necessary()
 
-        if pyluxcore.GetPlatformDesc().Get("compile.LUXRAYS_DISABLE_OPENCL").GetBool():
+        if pysuperluxcore.GetPlatformDesc().Get("compile.LUXRAYS_DISABLE_OPENCL").GetBool():
             # OpenCL not available, make sure we are using CPU device
-            scene.luxcore.config.device = "CPU"
+            scene.superluxcore.config.device = "CPU"
 
         # Use Blender output path for filesaver by default
-        if not scene.luxcore.config.filesaver_path:
-            scene.luxcore.config.filesaver_path = scene.render.filepath
+        if not scene.superluxcore.config.filesaver_path:
+            scene.superluxcore.config.filesaver_path = scene.render.filepath
 
-        _init_persistent_cache_file_path(scene.luxcore.config.photongi, "pgi")
-        _init_persistent_cache_file_path(scene.luxcore.config.envlight_cache, "env")
-        _init_persistent_cache_file_path(scene.luxcore.config.dls_cache, "dlsc")
+        _init_persistent_cache_file_path(scene.superluxcore.config.photongi, "pgi")
+        _init_persistent_cache_file_path(scene.superluxcore.config.envlight_cache, "env")
+        _init_persistent_cache_file_path(scene.superluxcore.config.dls_cache, "dlsc")
 
-        _init_LuxCoreOnlineLibrary()
+        _init_SuperLuxCoreOnlineLibrary()
 
     # Run converters for backwards compatibility
     compatibility.run()
@@ -101,7 +101,7 @@ def handler(_):
     persistent_scene.clear_all()
 
     frame_change_pre.have_to_check_node_trees = False
-    LuxCoreErrorLog.clear()
+    SuperLuxCoreErrorLog.clear()
 
     # After loading a .blend file, make it possible to execute the conversion operator again
-    LUXCORE_OT_convert_to_v23.was_executed = False
+    SUPERLUXCORE_OT_convert_to_v23.was_executed = False

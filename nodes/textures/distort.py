@@ -1,11 +1,11 @@
 import bpy
 from bpy.props import FloatProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 from ... import icons
 
 
-class LuxCoreNodeTexDistort(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexDistort(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Distort"
     bl_width_default = 150
     
@@ -14,10 +14,10 @@ class LuxCoreNodeTexDistort(LuxCoreNodeTexture, bpy.types.Node):
                             description="Multiplier to adjust effect strength")
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Color", (1, 1, 1))
-        self.add_input("LuxCoreSocketVector", "Offset", (0, 0, 0))
+        self.add_input("SuperLuxCoreSocketColor", "Color", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketVector", "Offset", (0, 0, 0))
 
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
         
     def draw_buttons(self, context, layout):
         obj = context.object
@@ -26,7 +26,7 @@ class LuxCoreNodeTexDistort(LuxCoreNodeTexture, bpy.types.Node):
 
         layout.prop(self, "strength")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "distort",
             "texture": self.inputs["Color"].export(exporter, depsgraph, props),
@@ -34,4 +34,4 @@ class LuxCoreNodeTexDistort(LuxCoreNodeTexture, bpy.types.Node):
             "strength": self.strength,
         }
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

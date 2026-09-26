@@ -17,7 +17,7 @@ RGB_GAIN_DESC = "The color of each light in this group is multiplied with this m
 TEMP_DESC = "Blackbody emission color in Kelvin by which to shift the color of each light in this group"
 
 
-class LuxCoreLightGroup(PropertyGroup):
+class SuperLuxCoreLightGroup(PropertyGroup):
     def name_set(self, value):
         old_name = self.get("name", "")
         new_name = value
@@ -30,7 +30,7 @@ class LuxCoreLightGroup(PropertyGroup):
             new_name = "Can't be empty"
         
         # Prevent name collisions
-        groups = self.id_data.luxcore.lightgroups.get_all_groups()
+        groups = self.id_data.superluxcore.lightgroups.get_all_groups()
         names = {group.name for group in groups}
         i = 0
         new_name_base = new_name
@@ -43,14 +43,14 @@ class LuxCoreLightGroup(PropertyGroup):
         
         # After a rename, update all occurences of the name automatically
         relevant_node_types = {
-            "LuxCoreNodeMatEmission",
-            "LuxCoreNodeVolClear",
-            "LuxCoreNodeVolHomogeneous",
-            "LuxCoreNodeVolHeterogeneous",
+            "SuperLuxCoreNodeMatEmission",
+            "SuperLuxCoreNodeVolClear",
+            "SuperLuxCoreNodeVolHomogeneous",
+            "SuperLuxCoreNodeVolHeterogeneous",
         }
 
         for mat in bpy.data.materials:
-            node_tree = mat.luxcore.node_tree
+            node_tree = mat.superluxcore.node_tree
             if mat.library or not node_tree:
                 continue
 
@@ -62,7 +62,7 @@ class LuxCoreLightGroup(PropertyGroup):
             if obj.library:
                 continue
             if obj.type == "LIGHT":
-                lux_light = obj.data.luxcore
+                lux_light = obj.data.superluxcore
                 if lux_light.lightgroup and lux_light.lightgroup == old_name:
                     lux_light.lightgroup = new_name
                 
@@ -87,9 +87,9 @@ class LuxCoreLightGroup(PropertyGroup):
 
 
 # Attached to scene
-class LuxCoreLightGroupSettings(PropertyGroup):
-    default: PointerProperty(type=LuxCoreLightGroup)
-    custom: CollectionProperty(type=LuxCoreLightGroup)
+class SuperLuxCoreLightGroupSettings(PropertyGroup):
+    default: PointerProperty(type=SuperLuxCoreLightGroup)
+    custom: CollectionProperty(type=SuperLuxCoreLightGroup)
 
     def add(self):
         if len(self.custom) < MAX_CUSTOM_LIGHTGROUPS:

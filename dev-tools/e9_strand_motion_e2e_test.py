@@ -1,5 +1,5 @@
-# E9 Phase-5b end-to-end regression: BlendLuxCore hair-curves strand
-# motion blur export (LuxCore dev-tools/deformation-motion-blur-design.md).
+# E9 Phase-5b end-to-end regression: SuperLuxCore hair-curves strand
+# motion blur export (SuperLuxCore dev-tools/deformation-motion-blur-design.md).
 #
 # Scene: a "comb" of hair strands on a CURVES object whose control
 # points are keyframed to sweep +x across the shutter interval. The
@@ -17,7 +17,7 @@
 #   blender --background --factory-startup \
 #       --python dev-tools/e9_strand_motion_e2e_test.py
 #
-# Requires the BlendLuxCore addon with a pyluxcore build exposing
+# Requires the SuperLuxCore addon with a pysuperluxcore build exposing
 # Scene.SetStrandsVertexMotion. Exits 0 on PASS, 1 on FAIL. Rendered
 # images land in $E9_TEST_OUT (default /tmp).
 
@@ -41,7 +41,7 @@ def find_addon_key():
     return next(
         a.module
         for a in bpy.context.preferences.addons
-        if "luxcore" in a.module.lower()
+        if "superluxcore" in a.module.lower()
     )
 
 
@@ -78,13 +78,13 @@ for me in list(bpy.data.meshes):
     bpy.data.meshes.remove(me)
 
 scene = bpy.context.scene
-scene.luxcore.config.engine = "PATH"
-scene.luxcore.config.device = "OCL"
-scene.luxcore.devices.use_native_cpu = False
-scene.luxcore.halt.enable = True
-scene.luxcore.halt.use_samples = True
-scene.luxcore.halt.samples = 64
-scene.render.engine = "LUXCORE"
+scene.superluxcore.config.engine = "PATH"
+scene.superluxcore.config.device = "OCL"
+scene.superluxcore.devices.use_native_cpu = False
+scene.superluxcore.halt.enable = True
+scene.superluxcore.halt.use_samples = True
+scene.superluxcore.halt.samples = 64
+scene.render.engine = "SUPERLUXCORE"
 scene.render.resolution_x = 320
 scene.render.resolution_y = 240
 scene.render.resolution_percentage = 100
@@ -112,8 +112,8 @@ for si, c in enumerate(curves.curves):
 
 hair_obj = bpy.data.objects.new("MotionHair", curves)
 scene.collection.objects.link(hair_obj)
-hair_obj.luxcore.hair.hair_size = 0.05
-hair_obj.luxcore.hair.tesseltype = "ribbon"
+hair_obj.superluxcore.hair.hair_size = 0.05
+hair_obj.superluxcore.hair.tesseltype = "ribbon"
 
 # Keyframe every point's position: 0.0 offset at frame 1, +2.0x at
 # frame 20. keyframe_insert on point.position animates the FCurves
@@ -144,7 +144,7 @@ scene.collection.objects.link(cam)
 cam.location = (0, 0, 4)
 scene.camera = cam
 
-mb = cam_data.luxcore.motion_blur
+mb = cam_data.superluxcore.motion_blur
 mb.enable = True
 mb.object_blur = True
 mb.camera_blur = False
@@ -152,7 +152,7 @@ mb.shutter = 8.0
 mb.steps = 3
 
 # ---------- A: motion blur on, object opted in ----------
-hair_obj.luxcore.enable_motion_blur = True
+hair_obj.superluxcore.enable_motion_blur = True
 render("blur")
 count_b, lo_b, hi_b = red_span(scene.render.filepath)
 check("blur render produced emissive pixels", count_b > 30, f"count={count_b}")
@@ -178,7 +178,7 @@ check(
 
 # ---------- C: blur on but object NOT opted in -> stays sharp ----------
 mb.enable = True
-hair_obj.luxcore.enable_motion_blur = False
+hair_obj.superluxcore.enable_motion_blur = False
 render("noopt")
 count_n, lo_n, hi_n = red_span(scene.render.filepath)
 span_n = hi_n - lo_n

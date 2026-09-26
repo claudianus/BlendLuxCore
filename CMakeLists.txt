@@ -7,7 +7,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
 endif()
 
-project(BlendLuxCore LANGUAGES NONE)
+project(SuperLuxCore LANGUAGES NONE)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/out)
 
 # Create output directory (otherwise Blender complains)
@@ -36,14 +36,14 @@ function(validate_blender_version result blender)
 endfunction()
 
 
-# Get BlendLuxCore version
+# Get SuperLuxCore version
 find_package(Python 3.11 REQUIRED COMPONENTS Interpreter)
 if (CMAKE_BUILD_TYPE STREQUAL "Latest")
   set(BLC_VERSION "Latest")
 else()
   execute_process(
     COMMAND python
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/blendluxcore_version.py
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/superluxcore_version.py
       ${CMAKE_CURRENT_SOURCE_DIR}/blender_manifest.toml
     OUTPUT_VARIABLE BLC_VERSION
   )
@@ -68,9 +68,9 @@ MESSAGE(STATUS "Cleaning wheels directory")
 FILE(GLOB OUTFILES "${CMAKE_CURRENT_SOURCE_DIR}/out/*")
 file(REMOVE ${OUTFILES})
 
-# Clean 'pyluxcore_installation_info.txt'
-MESSAGE(STATUS "Cleaning pyluxcore_installation_info.txt")
-file(REMOVE "pyluxcore_installation_info.txt")
+# Clean 'pysuperluxcore_installation_info.txt'
+MESSAGE(STATUS "Cleaning pysuperluxcore_installation_info.txt")
+file(REMOVE "pysuperluxcore_installation_info.txt")
 
 # Clean wheels entry in Blender manifest
 # Nota: It would also be possible to use configure_file
@@ -80,14 +80,14 @@ string(REGEX REPLACE "wheels *= *\\\[[^]]*\\]" "wheels = []" NEW_CONTENT "${CONT
 file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/blender_manifest.toml" "${NEW_CONTENT}")
 
 
-# Add BlendLuxCore target
+# Add SuperLuxCore target
 # https://docs.blender.org/manual/en/latest/advanced/command_line/extension_arguments.html
 add_custom_target(
   extension ALL ${BLENDER}
     --factory-startup
     --command extension build
     --source-dir ${CMAKE_CURRENT_SOURCE_DIR}
-    --output-filepath ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/BlendLuxCore-${BLC_VERSION}.zip
+    --output-filepath ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/SuperLuxCore-${BLC_VERSION}.zip
   VERBATIM
 )
 
@@ -95,7 +95,7 @@ add_custom_target(
 # cmake --install .
 install(CODE "
   execute_process(
-    COMMAND ${BLENDER} --factory_startup --command extension install-file -r blender_org ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/BlendLuxCore-${BLC_VERSION}.zip
+    COMMAND ${BLENDER} --factory_startup --command extension install-file -r blender_org ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/SuperLuxCore-${BLC_VERSION}.zip
     OUTPUT_VARIABLE INSTALL_OUTPUT
     ERROR_VARIABLE INSTALL_OUTPUT
   )

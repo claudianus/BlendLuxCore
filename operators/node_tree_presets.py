@@ -13,24 +13,24 @@ def new_node(bl_idname, node_tree, previous_node, output=0, input=0):
     return node
 
 
-class LUXCORE_OT_preset_material(bpy.types.Operator):
-    bl_idname = "luxcore.preset_material"
+class SUPERLUXCORE_OT_preset_material(bpy.types.Operator):
+    bl_idname = "superluxcore.preset_material"
     bl_label = ""
     bl_description = "Add a pre-definied node setup"
     bl_options = {"UNDO"}
 
     basic_mapping = OrderedDict([
-        ("Disney", "LuxCoreNodeMatDisney"),
-        ("OpenPBR", "LuxCoreNodeMatOpenPBR"),
-        ("Mix", "LuxCoreNodeMatMix"),
-        ("Matte", "LuxCoreNodeMatMatte"),
-        ("Glossy", "LuxCoreNodeMatGlossy2"),
-        ("Glass", "LuxCoreNodeMatGlass"),
-        ("Null (Transparent)", "LuxCoreNodeMatNull"),
-        ("Metal", "LuxCoreNodeMatMetal"),
-        ("Mirror", "LuxCoreNodeMatMirror"),
-        ("Glossy Translucent", "LuxCoreNodeMatGlossyTranslucent"),
-        ("Matte Translucent", "LuxCoreNodeMatMatteTranslucent"),
+        ("Disney", "SuperLuxCoreNodeMatDisney"),
+        ("OpenPBR", "SuperLuxCoreNodeMatOpenPBR"),
+        ("Mix", "SuperLuxCoreNodeMatMix"),
+        ("Matte", "SuperLuxCoreNodeMatMatte"),
+        ("Glossy", "SuperLuxCoreNodeMatGlossy2"),
+        ("Glass", "SuperLuxCoreNodeMatGlass"),
+        ("Null (Transparent)", "SuperLuxCoreNodeMatNull"),
+        ("Metal", "SuperLuxCoreNodeMatMetal"),
+        ("Mirror", "SuperLuxCoreNodeMatMirror"),
+        ("Glossy Translucent", "SuperLuxCoreNodeMatGlossyTranslucent"),
+        ("Matte Translucent", "SuperLuxCoreNodeMatMatteTranslucent"),
     ])
 
     preset: StringProperty()
@@ -74,7 +74,7 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
             raise Exception("Unknown preset: " + preset)
 
     def _add_node_tree(self, name):
-        node_tree = bpy.data.node_groups.new(name=name, type="luxcore_material_nodes")
+        node_tree = bpy.data.node_groups.new(name=name, type="superluxcore_material_nodes")
         node_tree.use_fake_user = True
         return node_tree
 
@@ -96,19 +96,19 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
             obj.update_tag()
 
         # We have a material, but maybe it has no node tree attached
-        node_tree = mat.luxcore.node_tree
+        node_tree = mat.superluxcore.node_tree
 
         if node_tree is None:
             tree_name = make_nodetree_name(mat.name)
             node_tree = self._add_node_tree(tree_name)
-            mat.luxcore.node_tree = node_tree
+            mat.superluxcore.node_tree = node_tree
             # Flag the object for update, needed in viewport render
             obj.update_tag()
 
         nodes = node_tree.nodes
         output = None
 
-        if len(nodes) == 1 and nodes[0].bl_idname == "LuxCoreNodeMatOutput":
+        if len(nodes) == 1 and nodes[0].bl_idname == "SuperLuxCoreNodeMatOutput":
             # The user deleted all nodes except the output.
             # Just use it instead of creating a new output.
             output = nodes[0]
@@ -118,13 +118,13 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
 
             for node in nodes:
                 # Make sure it is an unchanged default matte node
-                if (node.bl_idname == "LuxCoreNodeMatMatte"
+                if (node.bl_idname == "SuperLuxCoreNodeMatMatte"
                         and node.inputs["Diffuse Color"].default_value == Color((0.7, 0.7, 0.7))
                         and node.inputs["Sigma"].default_value == 0
                         and node.inputs["Opacity"].default_value == 1):
                     matte = node
 
-                if node.bl_idname == "LuxCoreNodeMatOutput":
+                if node.bl_idname == "SuperLuxCoreNodeMatOutput":
                     output = node
 
             if matte and output:
@@ -147,7 +147,7 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
                 node.select = False
 
             # Create an output for the new nodes
-            output = nodes.new("LuxCoreNodeMatOutput")
+            output = nodes.new("SuperLuxCoreNodeMatOutput")
             output.location = (location_x, location_y - 300)
             output.select = False
 
@@ -173,24 +173,24 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
         # If it is not a smoke domain, create the material anyway, but warn the user
         is_smoke_domain = utils.find_smoke_domain_modifier(obj)
 
-        new_node("LuxCoreNodeMatNull", node_tree, output)
+        new_node("SuperLuxCoreNodeMatNull", node_tree, output)
 
         # We need a volume
         name = "Smoke Volume"
-        vol_node_tree = bpy.data.node_groups.new(name=name, type="luxcore_volume_nodes")
+        vol_node_tree = bpy.data.node_groups.new(name=name, type="superluxcore_volume_nodes")
         vol_nodes = vol_node_tree.nodes
         # Attach to output node
-        volume_pointer = new_node("LuxCoreNodeTreePointer", node_tree, output, "Volume", "Interior Volume")
+        volume_pointer = new_node("SuperLuxCoreNodeTreePointer", node_tree, output, "Volume", "Interior Volume")
         volume_pointer.node_tree = vol_node_tree
         volume_pointer.location.x -= 40
         volume_pointer.location.y -= 120
 
         # Add volume nodes
-        vol_output = vol_nodes.new("LuxCoreNodeVolOutput")
+        vol_output = vol_nodes.new("SuperLuxCoreNodeVolOutput")
         vol_output.location = 300, 200
 
-        heterogeneous = new_node("LuxCoreNodeVolHeterogeneous", vol_node_tree, vol_output)
-        smoke_node = new_node("LuxCoreNodeTexSmoke", vol_node_tree, heterogeneous, 0, "Scattering")
+        heterogeneous = new_node("SuperLuxCoreNodeVolHeterogeneous", vol_node_tree, vol_output)
+        smoke_node = new_node("SuperLuxCoreNodeTexSmoke", vol_node_tree, heterogeneous, 0, "Scattering")
         if is_smoke_domain:
             smoke_node.domain = obj
             heterogeneous.auto_step_settings = True
@@ -207,31 +207,31 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
         # If it is not a smoke domain, create the material anyway, but warn the user
         is_smoke_domain = utils.find_smoke_domain_modifier(obj)
 
-        new_node("LuxCoreNodeMatNull", node_tree, output)
+        new_node("SuperLuxCoreNodeMatNull", node_tree, output)
 
         # We need a volume
         name = "Smoke Volume"
-        vol_node_tree = bpy.data.node_groups.new(name=name, type="luxcore_volume_nodes")
+        vol_node_tree = bpy.data.node_groups.new(name=name, type="superluxcore_volume_nodes")
         vol_nodes = vol_node_tree.nodes
         # Attach to output node
-        volume_pointer = new_node("LuxCoreNodeTreePointer", node_tree, output, "Volume", "Interior Volume")
+        volume_pointer = new_node("SuperLuxCoreNodeTreePointer", node_tree, output, "Volume", "Interior Volume")
         volume_pointer.node_tree = vol_node_tree
         volume_pointer.location.x -= 40
         volume_pointer.location.y -= 120
 
         # Add volume nodes
-        vol_output = vol_nodes.new("LuxCoreNodeVolOutput")
+        vol_output = vol_nodes.new("SuperLuxCoreNodeVolOutput")
         vol_output.location = 300, 200
 
-        heterogeneous = new_node("LuxCoreNodeVolHeterogeneous", vol_node_tree, vol_output)
-        smoke_node = new_node("LuxCoreNodeTexSmoke", vol_node_tree, heterogeneous, 0, "Scattering")
+        heterogeneous = new_node("SuperLuxCoreNodeVolHeterogeneous", vol_node_tree, vol_output)
+        smoke_node = new_node("SuperLuxCoreNodeTexSmoke", vol_node_tree, heterogeneous, 0, "Scattering")
         smoke_node.location = heterogeneous.location + Vector((-500, -160))
         if is_smoke_domain:
             smoke_node.domain = obj
             heterogeneous.auto_step_settings = True
             heterogeneous.domain = obj
 
-        mix_node = new_node("LuxCoreNodeTexColorMix", vol_node_tree, heterogeneous, 0, "Absorption")
+        mix_node = new_node("SuperLuxCoreNodeTexColorMix", vol_node_tree, heterogeneous, 0, "Absorption")
         mix_node.mode = "mix"
         mix_node.inputs["Color 1"].default_value = (1, 1, 1)
         vol_node_tree.links.new(smoke_node.outputs["density"], mix_node.inputs["Fac"])
@@ -248,32 +248,32 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
         # If it is not a smoke domain, create the material anyway, but warn the user
         is_smoke_domain = utils.find_smoke_domain_modifier(obj)
 
-        new_node("LuxCoreNodeMatNull", node_tree, output)
+        new_node("SuperLuxCoreNodeMatNull", node_tree, output)
 
         # We need a volume
         name = "Fire and Smoke Volume"
-        vol_node_tree = bpy.data.node_groups.new(name=name, type="luxcore_volume_nodes")
+        vol_node_tree = bpy.data.node_groups.new(name=name, type="superluxcore_volume_nodes")
         vol_nodes = vol_node_tree.nodes
         # Attach to output node
-        volume_pointer = new_node("LuxCoreNodeTreePointer", node_tree, output, "Volume", "Interior Volume")
+        volume_pointer = new_node("SuperLuxCoreNodeTreePointer", node_tree, output, "Volume", "Interior Volume")
         volume_pointer.node_tree = vol_node_tree
         volume_pointer.location.x -= 40
         volume_pointer.location.y -= 120
 
         # Add volume nodes
-        vol_output = vol_nodes.new("LuxCoreNodeVolOutput")
+        vol_output = vol_nodes.new("SuperLuxCoreNodeVolOutput")
         vol_output.location = 300, 200
 
-        heterogeneous = new_node("LuxCoreNodeVolHeterogeneous", vol_node_tree, vol_output)
+        heterogeneous = new_node("SuperLuxCoreNodeVolHeterogeneous", vol_node_tree, vol_output)
 
-        flame_gain = new_node("LuxCoreNodeTexMath", vol_node_tree, heterogeneous, 0, "Emission")
+        flame_gain = new_node("SuperLuxCoreNodeTexMath", vol_node_tree, heterogeneous, 0, "Emission")
         flame_gain.location.y -= 200
         flame_gain.mode = "scale"
         # Use a high gain value so the fire is visible with the default sky
         flame_gain.inputs["Value 2"].default_value = 1
 
         # Colors for the flame
-        flame_band = new_node("LuxCoreNodeTexBand", vol_node_tree, flame_gain, 0, "Value 1")
+        flame_band = new_node("SuperLuxCoreNodeTexBand", vol_node_tree, flame_gain, 0, "Value 1")
         flame_band.update_add(bpy.context)
         flame_band.update_add(bpy.context)
         flame_band.update_add(bpy.context)
@@ -295,7 +295,7 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
 
         # Scattering
         heterogeneous.inputs["Scattering Scale"].default_value = 10
-        smoke_node = new_node("LuxCoreNodeTexSmoke", vol_node_tree, heterogeneous, 0, "Scattering")
+        smoke_node = new_node("SuperLuxCoreNodeTexSmoke", vol_node_tree, heterogeneous, 0, "Scattering")
 
         # Emission (flame) - these nodes need to be below the others
         vol_node_tree.links.new(smoke_node.outputs["flame"], flame_band.inputs["Amount"])
@@ -317,10 +317,10 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
             self.report({"ERROR"}, 'Object "%s" is not a smoke domain!' % obj.name)
 
     def _preset_colored_glass(self, obj, node_tree, output):
-        glass = new_node("LuxCoreNodeMatGlass", node_tree, output)
+        glass = new_node("SuperLuxCoreNodeMatGlass", node_tree, output)
         glass.location.y += 40
         
-        clear_vol = new_node("LuxCoreNodeVolClear", node_tree, output, 0, "Interior Volume")
+        clear_vol = new_node("SuperLuxCoreNodeVolClear", node_tree, output, 0, "Interior Volume")
         clear_vol.location.y -= 280
         clear_vol.inputs["Absorption"].default_value = (0.9, 0.1, 0.1)
 
@@ -328,17 +328,17 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
         output.shadow_color = (1, 1, 1)
         output.show_advanced = True
         
-        glass = new_node("LuxCoreNodeMatGlass", node_tree, output)
+        glass = new_node("SuperLuxCoreNodeMatGlass", node_tree, output)
         glass.location.y += 40
         
-        clear_vol = new_node("LuxCoreNodeVolClear", node_tree, output, 0, "Interior Volume")
+        clear_vol = new_node("SuperLuxCoreNodeVolClear", node_tree, output, 0, "Interior Volume")
         clear_vol.location.y -= 280
         clear_vol.color_depth = 0.2
         clear_vol.inputs["Absorption"].default_value = (0.4, 0.8, 0.7)
 
 
-class LUXCORE_MATERIAL_MT_node_tree_preset(bpy.types.Menu):
-    bl_idname = "LUXCORE_MT_node_tree_preset"
+class SUPERLUXCORE_MATERIAL_MT_node_tree_preset(bpy.types.Menu):
+    bl_idname = "SUPERLUXCORE_MT_node_tree_preset"
     bl_label = "Add Node Tree Preset"
     bl_description = "Add a pre-definied node setup"
 
@@ -346,10 +346,10 @@ class LUXCORE_MATERIAL_MT_node_tree_preset(bpy.types.Menu):
         layout = self.layout
         row = layout.row()
 
-        for category, presets in LUXCORE_OT_preset_material.categories.items():
+        for category, presets in SUPERLUXCORE_OT_preset_material.categories.items():
             col = row.column()
             col.label(text=category)
 
             for preset in presets:
-                op = col.operator("luxcore.preset_material", text=preset)
+                op = col.operator("superluxcore.preset_material", text=preset)
                 op.preset = preset

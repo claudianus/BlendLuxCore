@@ -2,28 +2,28 @@ from bl_ui.properties_render import RenderButtonsPanel
 from bpy.types import Panel
 
 
-class LUXCORE_RENDER_PT_debug_settings(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_label = "LuxCore DEBUG Settings"
+class SUPERLUXCORE_RENDER_PT_debug_settings(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_label = "SuperLuxCore DEBUG Settings"
     bl_options = {'DEFAULT_CLOSED'}    
     bl_order = 998
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
-        return (not simple.enabled) or simple.show_advanced and context.scene.luxcore.debug.show
+        simple = context.scene.superluxcore.config.simple
+        return (not simple.enabled) or simple.show_advanced and context.scene.superluxcore.debug.show
 
     def draw_header(self, context):
         self.layout.label(text="", icon="CONSOLE")
 
     def draw(self, context):
         layout = self.layout
-        debug = context.scene.luxcore.debug
+        debug = context.scene.superluxcore.debug
 
-        layout.operator("luxcore.toggle_debug_options", text="Hide and Disable Debug Options")
+        layout.operator("superluxcore.toggle_debug_options", text="Hide and Disable Debug Options")
         layout.prop(debug, "enabled")
 
         col = layout.column()

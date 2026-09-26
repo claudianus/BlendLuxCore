@@ -1,8 +1,8 @@
 from collections import OrderedDict
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from .image import ImageExporter
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 
 
 def convert(scene, context=None, index=0):
@@ -28,7 +28,7 @@ def convert(scene, context=None, index=0):
         # Final renders: temporally accumulate the linear beauty first,
         # so the tonemapped display and every downstream plugin see the
         # stabilized image. The denoiser pipeline gets its own instance.
-        if context is None and scene.luxcore.denoiser.temporal_enabled:
+        if context is None and scene.superluxcore.denoiser.temporal_enabled:
             from .aovs import add_temporal_accumulate
             index = add_temporal_accumulate(definitions, index, scene)
 
@@ -38,12 +38,12 @@ def convert(scene, context=None, index=0):
     except Exception as error:
         import traceback
         traceback.print_exc()
-        LuxCoreErrorLog.add_warning('Imagepipeline: %s' % error)
-        return pyluxcore.Properties()
+        SuperLuxCoreErrorLog.add_warning('Imagepipeline: %s' % error)
+        return pysuperluxcore.Properties()
 
 
 def convert_defs(context, scene, definitions, plugin_index, define_radiancescales=True):
-    pipeline = scene.camera.data.luxcore.imagepipeline
+    pipeline = scene.camera.data.superluxcore.imagepipeline
     using_filesaver = utils.using_filesaver(context, scene)
     # Start index of plugins. Some AOVs prepend their own plugins.
     index = plugin_index
@@ -55,10 +55,10 @@ def convert_defs(context, scene, definitions, plugin_index, define_radiancescale
     if pipeline.tonemapper.enabled:
         index = convert_tonemapper(definitions, index, pipeline.tonemapper)
 
-    if context and scene.luxcore.viewport.get_denoiser(context) == "OPTIX":
+    if context and scene.superluxcore.viewport.get_denoiser(context) == "OPTIX":
         definitions[str(index) + ".type"] = "OPTIX_DENOISER"
         definitions[str(index) + ".sharpness"] = 0
-        definitions[str(index) + ".minspp"] = scene.luxcore.viewport.min_samples
+        definitions[str(index) + ".minspp"] = scene.superluxcore.viewport.min_samples
         index += 1
 
     if use_backgroundimage(context, scene):
@@ -106,7 +106,7 @@ def convert_defs(context, scene, definitions, plugin_index, define_radiancescale
 def use_backgroundimage(context, scene):
     viewport_in_camera_view = context and context.region_data.view_perspective == "CAMERA"
     final_render = not context
-    pipeline = scene.camera.data.luxcore.imagepipeline
+    pipeline = scene.camera.data.superluxcore.imagepipeline
     return pipeline.backgroundimage.is_enabled(context) and (final_render or viewport_in_camera_view)
 
 
@@ -163,7 +163,7 @@ def _backgroundimage(definitions, index, backgroundimage, scene):
                                         backgroundimage.image_user,
                                         scene)
     except OSError as error:
-        LuxCoreErrorLog.add_warning("Imagepipeline: %s" % error)
+        SuperLuxCoreErrorLog.add_warning("Imagepipeline: %s" % error)
         # Skip this plugin
         return index
 
@@ -226,7 +226,7 @@ def _camera_response_func(definitions, index, camera_response_func, scene):
                                      must_exist=True, must_be_existing_file=True)
         except OSError as error:
             # Make the error message more precise
-            LuxCoreErrorLog.add_warning('Could not find .crf file at path "%s" (%s)'
+            SuperLuxCoreErrorLog.add_warning('Could not find .crf file at path "%s" (%s)'
                                         % (camera_response_func.file, error))
             name = None
     else:
@@ -248,7 +248,7 @@ def _color_LUT(definitions, index, color_LUT, scene):
                                      must_exist=True, must_be_existing_file=True)
     except OSError as error:
         # Make the error message more precise
-        LuxCoreErrorLog.add_warning('Could not find .cube file at path "%s" (%s)'
+        SuperLuxCoreErrorLog.add_warning('Could not find .cube file at path "%s" (%s)'
                                     % (color_LUT.file, error))
         filepath = None
 
@@ -287,7 +287,7 @@ def _output_switcher(definitions, index, channel):
 
 
 def _lightgroups(definitions, scene):
-    lightgroups = scene.luxcore.lightgroups
+    lightgroups = scene.superluxcore.lightgroups
 
     _lightgroup(definitions, lightgroups.default, 0)
 

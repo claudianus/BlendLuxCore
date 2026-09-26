@@ -1,8 +1,8 @@
 """
-Recording proxy for pyluxcore.Scene used by the async session worker.
+Recording proxy for pysuperluxcore.Scene used by the async session worker.
 
 The viewport update path (Exporter._update_scene) runs on Blender's main
-thread because it needs the depsgraph, but the real pyluxcore scene is
+thread because it needs the depsgraph, but the real pysuperluxcore scene is
 owned by the session worker thread, which performs
 BeginSceneEdit/EndSceneEdit and session restarts. Calling into the real
 scene from the main thread would race the worker (and a long call there
@@ -16,7 +16,7 @@ updated while recording.
 
 The shadow state is deliberately conservative: a name the proxy has not
 seen defined reports False. A false negative only makes the caller
-define the resource again — LuxCore re-defines an existing mesh,
+define the resource again — SuperLuxCore re-defines an existing mesh,
 material, texture or image map in place — while a false positive would
 skip a needed definition and corrupt the scene, so the proxy never
 claims a name it did not record.

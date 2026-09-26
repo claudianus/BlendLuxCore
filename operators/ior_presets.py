@@ -1,5 +1,5 @@
-""" BlendLuxCore operator and data classes to support the LuxCoreNodeIORPreset
-    class in module BlendLuxCore/nodes/textures/iorpreset"""
+""" SuperLuxCore operator and data classes to support the SuperLuxCoreNodeIORPreset
+    class in module SuperLuxCore/nodes/textures/iorpreset"""
 # <pep8 compliant>
 import copy
 import bpy
@@ -11,7 +11,7 @@ from bpy.props import EnumProperty, StringProperty, IntProperty
 #   https://en.wikipedia.org/wiki/Calcite
 
 
-class LuxCoreIORPresetValues():
+class SuperLuxCoreIORPresetValues():
     """Class to contain IOR preset items, and return them in
        a list of tuples suitable for an EnumProperty"""
 
@@ -92,21 +92,21 @@ class LuxCoreIORPresetValues():
 
 # It seems that Blender *Property classes do not support inheritance if
 # there are methods in the same class. The following classes
-# (LuxCoreIORPresetCommonProperties, LuxCoreIORPresetBase,
-#  LUXCORE_OT_ior_preset_names  and LUXCORE_OT_ior_preset_values) are an
+# (SuperLuxCoreIORPresetCommonProperties, SuperLuxCoreIORPresetBase,
+#  SUPERLUXCORE_OT_ior_preset_names  and SUPERLUXCORE_OT_ior_preset_values) are an
 # attempt at minimizing code duplication within the limits imposed by Blender.
-class LuxCoreIORPresetCommonProperties():
+class SuperLuxCoreIORPresetCommonProperties():
     """ A property-only class to work around Blender's inheritance limits. """
-    bl_idname = "luxcore.ior_preset_common_properties"
+    bl_idname = "superluxcore.ior_preset_common_properties"
     bl_label = ""
     node_name: StringProperty()
     node_tree_index: IntProperty()
 
 
-class LuxCoreIORPresetBase(LuxCoreIORPresetCommonProperties):
-    """ A base class for LUXCORE_OT_ior_preset_* common methods. Do not call"""
+class SuperLuxCoreIORPresetBase(SuperLuxCoreIORPresetCommonProperties):
+    """ A base class for SUPERLUXCORE_OT_ior_preset_* common methods. Do not call"""
 
-    bl_idname = "luxcore.ior_preset_base"
+    bl_idname = "superluxcore.ior_preset_base"
 
     def cb_ior_preset(self, context):
         return []
@@ -116,7 +116,7 @@ class LuxCoreIORPresetBase(LuxCoreIORPresetCommonProperties):
                               items=cb_ior_preset)
 
     def execute(self, context):
-        ior_name, ior_value = LuxCoreIORPresetValues.get_item(self.ior_preset)
+        ior_name, ior_value = SuperLuxCoreIORPresetValues.get_item(self.ior_preset)
         node = bpy.data.node_groups[self.node_tree_index].nodes[self.node_name]
         node.ior_name_text = ior_name
         node.ior_value_text = str(ior_value)
@@ -128,23 +128,23 @@ class LuxCoreIORPresetBase(LuxCoreIORPresetCommonProperties):
         return {'FINISHED'}
 
 
-class LUXCORE_OT_ior_preset_names(bpy.types.Operator,
-                                  LuxCoreIORPresetBase,
-                                  LuxCoreIORPresetCommonProperties):
+class SUPERLUXCORE_OT_ior_preset_names(bpy.types.Operator,
+                                  SuperLuxCoreIORPresetBase,
+                                  SuperLuxCoreIORPresetCommonProperties):
     """ A custom operator to return a list of IOR presets sorted by name """
 
-    bl_idname = "luxcore.ior_preset_names"
+    bl_idname = "superluxcore.ior_preset_names"
     bl_description = "Index of Refraction presets sorted by name"
     bl_property = "ior_preset"
 
     callback_strings = []
 
     def cb_ior_preset(self, context):
-        items = LuxCoreIORPresetValues.get_sorted_list("name")
+        items = SuperLuxCoreIORPresetValues.get_sorted_list("name")
         # There is a known bug with using a callback,
         # Python must keep a reference to the strings
         # returned or Blender will misbehave or even crash.
-        LUXCORE_OT_ior_preset_names.callback_strings = items
+        SUPERLUXCORE_OT_ior_preset_names.callback_strings = items
         return items
 
     ior_preset: EnumProperty(name="IOR Preset",
@@ -152,23 +152,23 @@ class LUXCORE_OT_ior_preset_names(bpy.types.Operator,
                               items=cb_ior_preset)
 
 
-class LUXCORE_OT_ior_preset_values(bpy.types.Operator,
-                                   LuxCoreIORPresetBase,
-                                   LuxCoreIORPresetCommonProperties):
+class SUPERLUXCORE_OT_ior_preset_values(bpy.types.Operator,
+                                   SuperLuxCoreIORPresetBase,
+                                   SuperLuxCoreIORPresetCommonProperties):
     """ A custom operator to return a list of IOR presets sorted by value """
 
-    bl_idname = "luxcore.ior_preset_values"
+    bl_idname = "superluxcore.ior_preset_values"
     bl_description = "Index of Refraction presets sorted by value"
     bl_property = "ior_preset"
 
     callback_strings = []
 
     def cb_ior_preset(self, context):
-        items = LuxCoreIORPresetValues.get_sorted_list("value")
+        items = SuperLuxCoreIORPresetValues.get_sorted_list("value")
         # There is a known bug with using a callback,
         # Python must keep a reference to the strings
         # returned or Blender will misbehave or even crash.
-        LUXCORE_OT_ior_preset_values.callback_strings = items
+        SUPERLUXCORE_OT_ior_preset_values.callback_strings = items
         return items
 
     ior_preset: EnumProperty(name="IOR Preset",

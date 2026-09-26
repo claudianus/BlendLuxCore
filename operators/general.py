@@ -1,11 +1,11 @@
 import bpy
 from bpy.props import StringProperty, BoolProperty, FloatProperty
 from .utils import init_vol_node_tree, poll_node, use_cycles_settings, use_cycles_material_nodes
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 
 
-class LUXCORE_OT_use_cycles_settings(bpy.types.Operator):
-    bl_idname = "luxcore.use_cycles_settings"
+class SUPERLUXCORE_OT_use_cycles_settings(bpy.types.Operator):
+    bl_idname = "superluxcore.use_cycles_settings"
     bl_label = "Use Cycles Settings"
     bl_description = "Use Cycles material nodes, light settings, world settings etc. wherever possible"
     bl_options = {"UNDO"}
@@ -19,8 +19,8 @@ class LUXCORE_OT_use_cycles_settings(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_use_cycles_nodes_everywhere(bpy.types.Operator):
-    bl_idname = "luxcore.use_cycles_nodes_everywhere"
+class SUPERLUXCORE_OT_use_cycles_nodes_everywhere(bpy.types.Operator):
+    bl_idname = "superluxcore.use_cycles_nodes_everywhere"
     bl_label = "Use Cycles nodes on all materials"
     bl_description = 'Enable the "Use Cycles nodes" checkbox on all materials that have a Cycles nodetree'
     bl_options = {"UNDO"}
@@ -34,18 +34,18 @@ class LUXCORE_OT_use_cycles_nodes_everywhere(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_errorlog_clear(bpy.types.Operator):
-    bl_idname = "luxcore.errorlog_clear"
+class SUPERLUXCORE_OT_errorlog_clear(bpy.types.Operator):
+    bl_idname = "superluxcore.errorlog_clear"
     bl_label = "Clear Error Log"
     bl_description = "(Log is automatically cleared when a final or viewport render is started)"
 
     def execute(self, context):
-        LuxCoreErrorLog.clear()
+        SuperLuxCoreErrorLog.clear()
         return {"FINISHED"}
 
 
-class LUXCORE_OT_switch_texture_context(bpy.types.Operator):
-    bl_idname = "luxcore.switch_texture_context"
+class SUPERLUXCORE_OT_switch_texture_context(bpy.types.Operator):
+    bl_idname = "superluxcore.switch_texture_context"
     bl_label = ""
     bl_description = "Switch the texture context"
 
@@ -64,8 +64,8 @@ class LUXCORE_OT_switch_texture_context(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_switch_space_data_context(bpy.types.Operator):
-    bl_idname = "luxcore.switch_space_data_context"
+class SUPERLUXCORE_OT_switch_space_data_context(bpy.types.Operator):
+    bl_idname = "superluxcore.switch_space_data_context"
     bl_label = ""
     bl_description = "Switch the properties context (Render, Scene, Material, Texture, ...)"
 
@@ -82,11 +82,11 @@ class LUXCORE_OT_switch_space_data_context(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_switch_to_camera_settings(bpy.types.Operator):
+class SUPERLUXCORE_OT_switch_to_camera_settings(bpy.types.Operator):
     """
     Used in render layer UI
     """
-    bl_idname = "luxcore.switch_to_camera_settings"
+    bl_idname = "superluxcore.switch_to_camera_settings"
     bl_label = "Switch to camera settings to solve"
     bl_description = "Solve this issue by using a non-automatic tonemapper in the imagepipeline settings"
 
@@ -96,12 +96,12 @@ class LUXCORE_OT_switch_to_camera_settings(bpy.types.Operator):
 
     def execute(self, context):
         context.scene.objects.active = context.scene.camera
-        bpy.ops.luxcore.switch_space_data_context(target="DATA")
+        bpy.ops.superluxcore.switch_space_data_context(target="DATA")
         return {"FINISHED"}
 
 
-class LUXCORE_OT_set_suggested_clamping_value(bpy.types.Operator):
-    bl_idname = "luxcore.set_suggested_clamping_value"
+class SUPERLUXCORE_OT_set_suggested_clamping_value(bpy.types.Operator):
+    bl_idname = "superluxcore.set_suggested_clamping_value"
     bl_label = ""
     bl_description = (
         "Apply the suggested clamping value. Note that this is only a starting point, "
@@ -109,15 +109,15 @@ class LUXCORE_OT_set_suggested_clamping_value(bpy.types.Operator):
     )
 
     def execute(self, context):
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         config.path.use_clamping = True
         config.path.clamping = config.path.suggested_clamping_value
 
         return {"FINISHED"}
 
 
-class LUXCORE_OT_set_quality_preset(bpy.types.Operator):
-    bl_idname = "luxcore.set_quality_preset"
+class SUPERLUXCORE_OT_set_quality_preset(bpy.types.Operator):
+    bl_idname = "superluxcore.set_quality_preset"
     bl_label = "Set Quality Preset"
     bl_description = "Set the Quick Setup quality slider to a named preset"
     bl_options = {"INTERNAL"}
@@ -125,23 +125,23 @@ class LUXCORE_OT_set_quality_preset(bpy.types.Operator):
     quality: FloatProperty(min=0.0, max=1.0)
 
     def execute(self, context):
-        context.scene.luxcore.config.simple.quality = self.quality
+        context.scene.superluxcore.config.simple.quality = self.quality
         return {"FINISHED"}
 
 
-class LUXCORE_OT_update_opencl_devices(bpy.types.Operator):
-    bl_idname = "luxcore.update_opencl_devices"
+class SUPERLUXCORE_OT_update_opencl_devices(bpy.types.Operator):
+    bl_idname = "superluxcore.update_opencl_devices"
     bl_label = "Update Device List"
     bl_description = "Use this button if the device list below does not match your computer's devices"
 
     def execute(self, context):
-        devices = context.scene.luxcore.devices
+        devices = context.scene.superluxcore.devices
         devices.init_devices(devices.get_device_props())
         return {"FINISHED"}
 
 
-class LUXCORE_OT_add_node(bpy.types.Operator):
-    bl_idname = "luxcore.add_node"
+class SUPERLUXCORE_OT_add_node(bpy.types.Operator):
+    bl_idname = "superluxcore.add_node"
     bl_label = "Add"
 
     node_type: StringProperty()
@@ -171,10 +171,10 @@ class LUXCORE_OT_add_node(bpy.types.Operator):
         node_tree.links.new(new_node.outputs[output_id], node.inputs[self.input_socket])
 
         # Special stuff only needed by material output
-        if self.socket_type == "LuxCoreSocketVolume" and self.node_type == "LuxCoreNodeTreePointer":
+        if self.socket_type == "SuperLuxCoreSocketVolume" and self.node_type == "SuperLuxCoreNodeTreePointer":
             name = "Volume"
 
-            vol_tree = bpy.data.node_groups.new(name=name, type="luxcore_volume_nodes")
+            vol_tree = bpy.data.node_groups.new(name=name, type="superluxcore_volume_nodes")
             init_vol_node_tree(vol_tree)
 
             new_node.node_tree = vol_tree
@@ -182,8 +182,8 @@ class LUXCORE_OT_add_node(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_attach_sun_to_sky(bpy.types.Operator):
-    bl_idname = "luxcore.attach_sun_to_sky"
+class SUPERLUXCORE_OT_attach_sun_to_sky(bpy.types.Operator):
+    bl_idname = "superluxcore.attach_sun_to_sky"
     bl_label = "Attach to Sky"
     bl_description = "Attach if the sky should use the rotation and turbidity settings of this sun"
 
@@ -193,13 +193,13 @@ class LUXCORE_OT_attach_sun_to_sky(bpy.types.Operator):
 
     def execute(self, context):
         world = context.scene.world
-        world.luxcore.sun = context.object
+        world.superluxcore.sun = context.object
         world.update_tag()
         return {"FINISHED"}
 
 
-class LUXCORE_OT_copy_error_to_clipboard(bpy.types.Operator):
-    bl_idname = "luxcore.copy_error_to_clipboard"
+class SUPERLUXCORE_OT_copy_error_to_clipboard(bpy.types.Operator):
+    bl_idname = "superluxcore.copy_error_to_clipboard"
     bl_label = ""
     bl_description = "Copy the error message to clipboard so you can paste it with Ctrl+V"
 
@@ -210,12 +210,12 @@ class LUXCORE_OT_copy_error_to_clipboard(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_open_website(bpy.types.Operator):
-    bl_idname = "luxcore.open_website"
+class SUPERLUXCORE_OT_open_website(bpy.types.Operator):
+    bl_idname = "superluxcore.open_website"
     bl_label = ""
     bl_description = "Open related website in the web browser"
     # Note: use the "URL" icon and a custom text when using this operator:
-    # op = layout.operator("luxcore.open_website", text="Wiki Page", icon=icons.URL)
+    # op = layout.operator("superluxcore.open_website", text="Wiki Page", icon=icons.URL)
     # op.url = "https://www.example.com"
 
     url: StringProperty()
@@ -226,14 +226,14 @@ class LUXCORE_OT_open_website(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_open_website_popup(bpy.types.Operator):
-    bl_idname = "luxcore.open_website_popup"
+class SUPERLUXCORE_OT_open_website_popup(bpy.types.Operator):
+    bl_idname = "superluxcore.open_website_popup"
     bl_label = "Open Website"
     bl_description = "Open related website in the web browser"
     # This operator is intended to be used as a popup with short message and OK button.
     # When the user clicks the OK button, the url is opened.
     # Usage:
-    # bpy.ops.luxcore.open_website_popup("INVOKE_DEFAULT",
+    # bpy.ops.superluxcore.open_website_popup("INVOKE_DEFAULT",
     #                                    message="Short message",
     #                                    url="http://example.com/")
 
@@ -255,8 +255,8 @@ class LUXCORE_OT_open_website_popup(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LUXCORE_OT_select_object(bpy.types.Operator):
-    bl_idname = "luxcore.select_object"
+class SUPERLUXCORE_OT_select_object(bpy.types.Operator):
+    bl_idname = "superluxcore.select_object"
     bl_label = "Select Object"
     bl_description = "Select this object"
     bl_options = {"UNDO"}

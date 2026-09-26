@@ -9,7 +9,7 @@ if _needs_reload:
     import importlib
     importlib.reload(base)
 
-classes = (base.LuxCoreRenderEngine,)
+classes = (base.SuperLuxCoreRenderEngine,)
 
 def register():
     utils.register_module("Engine", classes)

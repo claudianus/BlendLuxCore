@@ -7,7 +7,7 @@
    via the "Bake .lxm Proxy" operator.
 2. Sets proxy_filepath on the object — export must skip mesh
    conversion entirely and emit scene.objects.X.ply = <lxm path>,
-   which LuxCore mmaps copy-on-write.
+   which SuperLuxCore mmaps copy-on-write.
 3. Renders a proxy frame AND a converted-mesh frame at 1280x720 and
    compares them (same mesh => same image, modulo MC noise).
 
@@ -24,8 +24,8 @@ import os
 import bpy
 import mathutils
 
-OUT_PROXY = "/tmp/luxcore_lxmproxy_720p.png"
-OUT_MESH = "/tmp/luxcore_lxmmesh_720p.png"
+OUT_PROXY = "/tmp/superluxcore_lxmproxy_720p.png"
+OUT_MESH = "/tmp/superluxcore_lxmmesh_720p.png"
 LXM = "/tmp/blc_baked_proxy.lxm"
 
 
@@ -83,16 +83,16 @@ def build_scene():
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.sampler = "SOBOL"
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 15
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.sampler = "SOBOL"
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 15
     return scene, floor
 
 
@@ -107,8 +107,8 @@ def main():
     # --- bake + proxy ---
     bpy.context.view_layer.objects.active = floor
     floor.select_set(True)
-    bpy.ops.luxcore.bake_lxm_proxy(filepath=LXM)
-    assert floor.luxcore.proxy_filepath, "proxy_filepath not set by bake"
+    bpy.ops.superluxcore.bake_lxm_proxy(filepath=LXM)
+    assert floor.superluxcore.proxy_filepath, "proxy_filepath not set by bake"
     assert os.path.isfile(LXM), "proxy file not written"
     print(f"[LxmProxyE2E] baked {LXM}: {os.path.getsize(LXM)/1e6:.1f} MB")
 

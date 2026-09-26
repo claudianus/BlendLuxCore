@@ -31,14 +31,14 @@ from ... import icons
 
 def draw_panel_categories(self, context):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
 
     if ui_props.asset_type == 'MODEL':
-        asset_props = scene.luxcoreOL.model
+        asset_props = scene.superluxcoreOL.model
     elif ui_props.asset_type == 'SCENE':
-        asset_props = scene.luxcoreOL.scene
+        asset_props = scene.superluxcoreOL.scene
     elif ui_props.asset_type == 'MATERIAL':
-        asset_props = scene.luxcoreOL.material
+        asset_props = scene.superluxcoreOL.material
     else:
         raise ValueError(f"Unhandled asset type {ui_props.asset_type}")
 
@@ -52,14 +52,14 @@ def draw_panel_categories(self, context):
     layout.label(text='Categories')
 
     col = layout.column(align=True)
-    op = col.operator('view3d.luxcore_ol_asset_bar', text="All")
+    op = col.operator('view3d.superluxcore_ol_asset_bar', text="All")
     op.do_search = False
     op.keep_running = True
 
     for cat in categories.keys():
         col = layout.column(align=True)
         ctext = '%s (%i)' % (cat, categories[cat])
-        op = col.operator('view3d.luxcore_ol_asset_bar', text=ctext)
+        op = col.operator('view3d.superluxcore_ol_asset_bar', text=ctext)
         op.do_search = True
         op.keep_running = True
         op.category = cat
@@ -67,10 +67,10 @@ def draw_panel_categories(self, context):
 
 def draw_panel_model_search(self, context):
     scene = context.scene
-    model_props = scene.luxcoreOL.model
+    model_props = scene.superluxcoreOL.model
     layout = self.layout
 
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
 
     if ui_props.assetbar_on:
         icon = 'HIDE_OFF'
@@ -79,7 +79,7 @@ def draw_panel_model_search(self, context):
         icon = 'HIDE_ON'
         tooltip = 'Click to Show Asset Bar'
 
-    assetbar_operator = layout.operator('view3d.luxcore_ol_asset_bar', text='Asset Bar', icon=icon)
+    assetbar_operator = layout.operator('view3d.superluxcore_ol_asset_bar', text='Asset Bar', icon=icon)
 
     assetbar_operator.keep_running = False
     assetbar_operator.do_search = False
@@ -103,7 +103,7 @@ def draw_panel_model_search(self, context):
 def draw_panel_scene_search(self, context):
     scene = context.scene
     layout = self.layout
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
 
     if ui_props.assetbar_on:
         icon = 'HIDE_OFF'
@@ -112,7 +112,7 @@ def draw_panel_scene_search(self, context):
         icon = 'HIDE_ON'
         tooltip = 'Click to Show Asset Bar'
 
-    assetbar_operator = layout.operator('view3d.luxcore_ol_asset_bar', text='Asset Bar', icon=icon)
+    assetbar_operator = layout.operator('view3d.superluxcore_ol_asset_bar', text='Asset Bar', icon=icon)
     assetbar_operator.keep_running = False
     assetbar_operator.do_search = False
     assetbar_operator.tooltip = tooltip
@@ -126,7 +126,7 @@ def draw_panel_material_search(self, context):
     scene = context.scene
     layout = self.layout
 
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
 
     if ui_props.assetbar_on:
         icon = 'HIDE_OFF'
@@ -135,7 +135,7 @@ def draw_panel_material_search(self, context):
         icon = 'HIDE_ON'
         tooltip = 'Click to Show Asset Bar'
 
-    assetbar_operator = layout.operator('view3d.luxcore_ol_asset_bar', text='Asset Bar', icon=icon)
+    assetbar_operator = layout.operator('view3d.superluxcore_ol_asset_bar', text='Asset Bar', icon=icon)
     assetbar_operator.keep_running = False
     assetbar_operator.do_search = False
     assetbar_operator.tooltip = tooltip
@@ -147,13 +147,13 @@ def draw_panel_material_search(self, context):
     draw_panel_categories(self, context)
 
 
-class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY(Panel):
-    bl_label = "LuxCore Online Library"
-    bl_category = "LuxCoreOnlineLibrary"
+class VIEW3D_PT_SUPERLUXCORE_ONLINE_LIBRARY(Panel):
+    bl_label = "SuperLuxCore Online Library"
+    bl_category = "SuperLuxCoreOnlineLibrary"
     #bl_options = {'DEFAULT_CLOSED'}
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_idname = "VIEW3D_PT_LUXCORE_ONLINE_LIBRARY"
+    bl_idname = "VIEW3D_PT_SUPERLUXCORE_ONLINE_LIBRARY"
     bl_order = 1
 
     @classmethod
@@ -164,22 +164,22 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY(Panel):
 
     def draw(self, context):
         scene = context.scene
-        ui_props = scene.luxcoreOL.ui
+        ui_props = scene.superluxcoreOL.ui
 
         layout = self.layout
 
         col = layout.column(align=True)
         col.scale_x = 1.4
         col.scale_y = 1.4
-        op = col.operator("luxcore.open_website", icon=icons.URL, text="Donation (Blendermarket)")
+        op = col.operator("superluxcore.open_website", icon=icons.URL, text="Donation (Blendermarket)")
         op.url = "https://blendermarket.com/creators/draviastudio"
-        op = col.operator("luxcore.open_website", icon=icons.URL, text="Donation (CG Trader)")
+        op = col.operator("superluxcore.open_website", icon=icons.URL, text="Donation (CG Trader)")
         op.url = "https://www.cgtrader.com/draviastudio"
 
         col = layout.column(align=True)
         col.scale_x = 1.4
         col.scale_y = 1.4
-        op = col.operator("luxcore.open_website", icon=icons.URL, text="License: CC-BY-SA")
+        op = col.operator("superluxcore.open_website", icon=icons.URL, text="License: CC-BY-SA")
         op.url = "https://github.com/LuxCoreRender/LoL/blob/master/COPYING.txt"
 
         layout.separator()
@@ -194,7 +194,7 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY(Panel):
             col = layout.column(align=True)
             col.label(text="It's better to save the file first.")
 
-        layout.operator('scene.luxcore_ol_update_toc', text='Update ToC from server')
+        layout.operator('scene.superluxcore_ol_update_toc', text='Update ToC from server')
         if ui_props.asset_type == 'MODEL':
             draw_panel_model_search(self, context)
         elif ui_props.asset_type == 'SCENE':
@@ -208,9 +208,9 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY(Panel):
                 #label_multiline(layout, text='switch to paint or sculpt mode.', width=context.region.width)
 
 
-class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_DOWNLOADS(Panel):
-    bl_category = "LuxCoreOnlineLibrary"
-    bl_idname = "VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_DOWNLOADS"
+class VIEW3D_PT_SUPERLUXCORE_ONLINE_LIBRARY_DOWNLOADS(Panel):
+    bl_category = "SuperLuxCoreOnlineLibrary"
+    bl_idname = "VIEW3D_PT_SUPERLUXCORE_ONLINE_LIBRARY_DOWNLOADS"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_label = "Downloads"
@@ -232,7 +232,7 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_DOWNLOADS(Panel):
            row = layout.row()
            row.label(text=asset_data['name'])
            row.label(text=str(int(tcom.progress)) + ' %')
-           row.operator('scene.luxcore_ol_download_kill', text='', icon='CANCEL').thread_index = idx
+           row.operator('scene.superluxcore_ol_download_kill', text='', icon='CANCEL').thread_index = idx
 
            # TODO: Implement retry download
            # if tcom.passargs.get('retry_counter', 0) > 0:
@@ -243,9 +243,9 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_DOWNLOADS(Panel):
            #     layout.separator()
 
 
-class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_LOCAL(Panel):
-    bl_category = "LuxCoreOnlineLibrary"
-    bl_idname = "VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_LOCAL"
+class VIEW3D_PT_SUPERLUXCORE_ONLINE_LIBRARY_LOCAL(Panel):
+    bl_category = "SuperLuxCoreOnlineLibrary"
+    bl_idname = "VIEW3D_PT_SUPERLUXCORE_ONLINE_LIBRARY_LOCAL"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_label = "Local"
@@ -262,8 +262,8 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_LOCAL(Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        upload_props = context.scene.luxcoreOL.upload
-        ui_props = context.scene.luxcoreOL.ui
+        upload_props = context.scene.superluxcoreOL.upload
+        ui_props = context.scene.superluxcoreOL.ui
 
         if ui_props.asset_type == "MATERIAL":
             obj = context.active_object
@@ -309,18 +309,18 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_LOCAL(Panel):
 
         col = layout.column(align=True)
         col.enabled = (upload_props.thumbnail is not None or upload_props.autorender)
-        col.operator("scene.luxcore_ol_add_local", text="Add asset...")
+        col.operator("scene.superluxcore_ol_add_local", text="Add asset...")
         col = layout.column(align=True)
-        col.operator("scene.luxcore_ol_scan_local", text="Search new local assets")
+        col.operator("scene.superluxcore_ol_scan_local", text="Search new local assets")
 
 
 def settings_toggle_icon(enabled):
     return icons.EXPANDABLE_OPENED if enabled else icons.EXPANDABLE_CLOSED
 
 
-class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_SCAN_RESULT(Panel):
-    bl_category = "LuxCoreOnlineLibrary"
-    bl_idname = "VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_SCAN_RESULT"
+class VIEW3D_PT_SUPERLUXCORE_ONLINE_LIBRARY_SCAN_RESULT(Panel):
+    bl_category = "SuperLuxCoreOnlineLibrary"
+    bl_idname = "VIEW3D_PT_SUPERLUXCORE_ONLINE_LIBRARY_SCAN_RESULT"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_label = "Scan Result"
@@ -330,15 +330,15 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_SCAN_RESULT(Panel):
     def poll(self, context):
         user_preferences = get_addon_preferences(context)
 
-        return len(context.scene.luxcoreOL.upload.add_list) > 0 and user_preferences.use_library
+        return len(context.scene.superluxcoreOL.upload.add_list) > 0 and user_preferences.use_library
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        upload_props = context.scene.luxcoreOL.upload
-        ui_props = context.scene.luxcoreOL.ui
+        upload_props = context.scene.superluxcoreOL.upload
+        ui_props = context.scene.superluxcoreOL.ui
 
         # if ui_props.asset_type == "MATERIAL":
         #
@@ -360,7 +360,7 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_SCAN_RESULT(Panel):
                  icon_only=True, emboss=False)
         col = row.column()
         col.prop(asset, "name", text="")
-        # op = row.operator("scene.luxcore_ol_remove_asset",
+        # op = row.operator("scene.superluxcore_ol_remove_asset",
         #                   text="", icon=icons.CLEAR, emboss=False)
         # op.index = idx
 
@@ -379,5 +379,5 @@ class VIEW3D_PT_LUXCORE_ONLINE_LIBRARY_SCAN_RESULT(Panel):
 
             col = box.column(align=True)
             col.enabled = (asset.thumbnail is not None)
-            op = col.operator("scene.luxcore_ol_add_local", text="Add asset...")
+            op = col.operator("scene.superluxcore_ol_add_local", text="Add asset...")
             op.asset_index = idx

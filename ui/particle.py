@@ -60,9 +60,9 @@ def compatible_panels():
      types = bpy.types
      return [getattr(types, p) for p in panels if hasattr(types, p)]
 
-class LUXCORE_HAIR_PT_hair(ParticleButtonsPanel, Panel):
-    bl_label = "LuxCore Hair Settings"
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_HAIR_PT_hair(ParticleButtonsPanel, Panel):
+    bl_label = "SuperLuxCore Hair Settings"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_order = 10
     
     @classmethod
@@ -75,7 +75,7 @@ class LUXCORE_HAIR_PT_hair(ParticleButtonsPanel, Panel):
         is_hair = psys.settings.type == "HAIR"
         is_path = psys.settings.render_type == "PATH"
         engine = context.scene.render.engine
-        return is_hair and is_path and engine == "LUXCORE"
+        return is_hair and is_path and engine == "SUPERLUXCORE"
 
     def draw_header(self, context):
         layout = self.layout
@@ -83,7 +83,7 @@ class LUXCORE_HAIR_PT_hair(ParticleButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
-        settings = context.particle_settings.luxcore.hair
+        settings = context.particle_settings.superluxcore.hair
 
         layout.use_property_split = True
         layout.use_property_decorate = False      
@@ -177,7 +177,7 @@ class LUXCORE_HAIR_PT_hair(ParticleButtonsPanel, Panel):
         layout.prop(settings, "instancing")
 
 
-class LUXCORE_PARTICLE_PT_textures(ParticleButtonsPanel, Panel):
+class SUPERLUXCORE_PARTICLE_PT_textures(ParticleButtonsPanel, Panel):
     bl_label = "Textures"
     bl_context = "particle"
     bl_options = {'DEFAULT_CLOSED'}
@@ -190,7 +190,7 @@ class LUXCORE_PARTICLE_PT_textures(ParticleButtonsPanel, Panel):
             return False
         if psys.settings is None:
             return False
-        return engine == "LUXCORE"
+        return engine == "SUPERLUXCORE"
 
     def draw(self, context):
         layout = self.layout
@@ -213,14 +213,14 @@ class LUXCORE_PARTICLE_PT_textures(ParticleButtonsPanel, Panel):
             layout.template_ID(slot, "texture", new="texture.new")
 
             row = layout.row()
-            op = row.operator("luxcore.switch_space_data_context", text="Show Texture Settings", icon="UI")
+            op = row.operator("superluxcore.switch_space_data_context", text="Show Texture Settings", icon="UI")
             op.target = "TEXTURE"
 
 def register():
     for panel in compatible_panels():
-        panel.COMPAT_ENGINES.add("LUXCORE")        
+        panel.COMPAT_ENGINES.add("SUPERLUXCORE")        
 
 
 def unregister():
     for panel in compatible_panels():
-        panel.COMPAT_ENGINES.remove("LUXCORE")
+        panel.COMPAT_ENGINES.remove("SUPERLUXCORE")

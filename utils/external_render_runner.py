@@ -1,5 +1,5 @@
 """
-Detached LuxCore render runner — executed by Blender's bundled Python
+Detached SuperLuxCore render runner — executed by Blender's bundled Python
 as a separate process (see utils/external_render.py). Loads a binary
 serialized RenderConfig, renders until the halt condition, and writes
 every film output to the working directory.
@@ -25,10 +25,10 @@ def main():
         argv = argv[1:]
     bcf_path, workdir = argv[0], argv[1]
 
-    import pyluxcore
+    import pysuperluxcore
 
     print(f"[extrender] loading {bcf_path}", flush=True)
-    config = pyluxcore.RenderConfig(bcf_path)
+    config = pysuperluxcore.RenderConfig(bcf_path)
 
     # external_render.py strips opencl.devices.select (the string is
     # indexed over this process's own enumeration). Vulkan is opt-in in
@@ -42,16 +42,16 @@ def main():
             "METAL": "METAL_GPU",
             "VULKAN": "VULKAN_GPU",
         }[backend]
-        descs = pyluxcore.GetOpenCLDeviceDescs()
+        descs = pysuperluxcore.GetOpenCLDeviceDescs()
         names = descs.GetAllUniqueSubNames("opencl.device")
         select = "".join(
             "1" if descs.Get(n + ".type").GetString() == wanted else "0"
             for n in names
         )
         if "1" in select:
-            props = pyluxcore.Properties()
+            props = pysuperluxcore.Properties()
             props.Set(
-                pyluxcore.Property("opencl.devices.select", select))
+                pysuperluxcore.Property("opencl.devices.select", select))
             config.Parse(props)
             print(f"[extrender] {backend} device selection: {select}",
                   flush=True)
@@ -59,7 +59,7 @@ def main():
             print(f"[extrender] WARNING: no {backend} device found, "
                   "using default device selection", flush=True)
 
-    session = pyluxcore.RenderSession(config)
+    session = pysuperluxcore.RenderSession(config)
 
     session.Start()
     print("[extrender] session started", flush=True)

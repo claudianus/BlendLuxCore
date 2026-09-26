@@ -37,7 +37,7 @@ ideas in the code, do not hesitate to fix it.
 The
 [fish](https://github.com/fish-shell/fish-shell#fish---the-friendly-interactive-shell-)
 shell [design document](https://fishshell.com/docs/current/design.html)
-outlines some more principles that are also used in BlendLuxCore, especially
+outlines some more principles that are also used in SuperLuxCore, especially
 the *The law of discoverability*.
 
 * Please keep the code "reloadable". It means that, if the "Reload Scripts"

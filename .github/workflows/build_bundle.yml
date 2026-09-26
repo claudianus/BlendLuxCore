@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-name: BlendLuxCore Build Bundle
+name: SuperLuxCore Build Bundle
 
 on:
   pull_request:
@@ -126,8 +126,8 @@ jobs:
         uses: actions/upload-artifact@v4
         id: upload
         with:
-          name: "BlendLuxCore"
-          path: "${{ github.workspace }}/build/out/BlendLuxCore-*.zip"
+          name: "SuperLuxCore"
+          path: "${{ github.workspace }}/build/out/SuperLuxCore-*.zip"
 
   attest-wheels:
     needs: [build-bundle]

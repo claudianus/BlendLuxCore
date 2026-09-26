@@ -1,15 +1,15 @@
 import bpy
-"""A BlendLuxCore node to provide index of refraction preset values for
-    LuxCoreRender in Blender"""
+"""A SuperLuxCore node to provide index of refraction preset values for
+    SuperLuxCore in Blender"""
 # <pep8 compliant>
 import bpy
 from bpy.props import FloatProperty, StringProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...operators import ior_presets
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexIORPreset(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexIORPreset(SuperLuxCoreNodeTexture, bpy.types.Node):
     """ Index of Refraction Preset node """
     bl_label = "IOR Preset"
     bl_width_default = 180
@@ -32,9 +32,9 @@ class LuxCoreNodeTexIORPreset(LuxCoreNodeTexture, bpy.types.Node):
 
     def init(self, context):
         self.label = "IOR Preset"
-        self.outputs.new("LuxCoreSocketIOR", "IOR")
+        self.outputs.new("SuperLuxCoreSocketIOR", "IOR")
         if not (self.ior_name_text and self.ior_value_text):
-            item = ior_presets.LuxCoreIORPresetValues.get_item()
+            item = ior_presets.SuperLuxCoreIORPresetValues.get_item()
             self.ior_name_text = item[0]
             self.ior_value_text = str(item[1])
             self.ior_value_float = item[1]
@@ -47,14 +47,14 @@ class LuxCoreNodeTexIORPreset(LuxCoreNodeTexture, bpy.types.Node):
         row.scale_x = 1.1
         row.scale_y = 1.1
         row.prop(self, "ior_name_text", text="", emboss=False)
-        op_alpha = row.operator("luxcore.ior_preset_names", icon="SORTALPHA")
+        op_alpha = row.operator("superluxcore.ior_preset_names", icon="SORTALPHA")
 
         # Numeric-sorting operator
         row = layout.row(align=False)
         row.scale_x = 1.1
         row.scale_y = 1.1
         row.prop(self, "ior_value_text", text="Value", emboss=False)
-        op_num = row.operator("luxcore.ior_preset_values", icon="SORTSIZE")
+        op_num = row.operator("superluxcore.ior_preset_values", icon="SORTSIZE")
 
         # Get the index of the node tree in bpy.data.node_groups
         tree_index = None
@@ -67,9 +67,9 @@ class LuxCoreNodeTexIORPreset(LuxCoreNodeTexture, bpy.types.Node):
             operator.node_name = self.name
             operator.node_tree_index = tree_index
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "constfloat1",
             "value": self.ior_value_float,
         }
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

@@ -3,15 +3,15 @@ from time import time
 _needs_reload = "bpy" in locals()
 
 import bpy
-import pyluxcore
+import pysuperluxcore
 from .. import export
 from .. import draw
 from ..draw.viewport import FrameBuffer
 from .. import utils
 from ..utils import render as utils_render
 from ..utils import get_addon_preferences
-from ..utils.log import LuxCoreLog
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.log import SuperLuxCoreLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from ..export.config import convert_viewport_engine
 from . import session_worker
 
@@ -140,7 +140,7 @@ def _drain_worker_error(engine):
     if err is None:
         return
     kind, error = err
-    LuxCoreErrorLog.add_error(error)
+    SuperLuxCoreErrorLog.add_error(error)
     engine.update_stats("Error: ", str(error))
     if kind in ("start", "config"):
         engine.viewport_fatal_error = str(error)
@@ -173,7 +173,7 @@ def view_update(engine, context, depsgraph, changes=None):
         # consumed by the first get_changes() after the session lands.
         return
 
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
 
     if engine.session is None:
         # A fresh start clears any earlier fatal error (recovery beats a
@@ -200,13 +200,13 @@ def view_update(engine, context, depsgraph, changes=None):
                 # prevent constant re-exports while resizing
                 return
         else:
-            display_luxcore_logs = get_addon_preferences(
+            display_superluxcore_logs = get_addon_preferences(
                 context
-            ).display_luxcore_logs
-            if display_luxcore_logs:
-                pyluxcore.SetLogHandler(LuxCoreLog.add)
+            ).display_superluxcore_logs
+            if display_superluxcore_logs:
+                pysuperluxcore.SetLogHandler(SuperLuxCoreLog.add)
             else:
-                pyluxcore.SetLogHandler(LuxCoreLog.silent)
+                pysuperluxcore.SetLogHandler(SuperLuxCoreLog.silent)
 
         try:
             print("=" * 50)
@@ -224,9 +224,9 @@ def view_update(engine, context, depsgraph, changes=None):
                 depsgraph, context, engine=engine
             )
             if result is not None:
-                luxcore_scene, config_props = result
+                superluxcore_scene, config_props = result
                 engine.viewport_phase = ""
-                worker.submit_start(luxcore_scene, config_props)
+                worker.submit_start(superluxcore_scene, config_props)
         except Exception as error:
             engine.session = None
             # Reset the exporter to invalidate all caches
@@ -234,7 +234,7 @@ def view_update(engine, context, depsgraph, changes=None):
             engine.viewport_fatal_error = str(error)
 
             engine.update_stats("Error: ", str(error))
-            LuxCoreErrorLog.add_error(error)
+            SuperLuxCoreErrorLog.add_error(error)
 
             import traceback
 
@@ -246,7 +246,7 @@ def view_update(engine, context, depsgraph, changes=None):
     if not changes:
         return
 
-    # Config changes restart the session on the *reused* LuxCore scene -
+    # Config changes restart the session on the *reused* SuperLuxCore scene -
     # no scene re-export. Runs on the worker; the framebuffer keeps the
     # last frame until the new session produces samples (begin_reset).
     if changes & export.Change.CONFIG:
@@ -265,7 +265,7 @@ def view_update(engine, context, depsgraph, changes=None):
         except Exception as error:
             # A half-recorded edit must not be replayed; rebuild the
             # scene from scratch instead.
-            LuxCoreErrorLog.add_error(error)
+            SuperLuxCoreErrorLog.add_error(error)
             import traceback
 
             traceback.print_exc()
@@ -298,27 +298,27 @@ def view_draw(engine, context, depsgraph):
         return
 
     if engine.session is None:
-        config = scene.luxcore.config
+        config = scene.superluxcore.config
         definitions = {}
-        luxcore_engine, _ = convert_viewport_engine(
+        superluxcore_engine, _ = convert_viewport_engine(
             context, scene, definitions, config
         )
         message = ""
 
-        if luxcore_engine.endswith("OCL"):
+        if superluxcore_engine.endswith("OCL"):
             # The dummy Scene/RenderConfig below costs a full kernel-config
             # build per redraw; HasCachedKernels() only changes when the
             # config does, so cache it on the engine for the sessionless
             # phase (cleared on every fresh start above).
             if engine.kernel_check_cache is None:
                 # Create dummy renderconfig to check if we have to compile OpenCL kernels
-                luxcore_scene = pyluxcore.Scene()
+                superluxcore_scene = pysuperluxcore.Scene()
                 definitions = {
                     "scene.camera.type": "perspective",
                 }
-                luxcore_scene.Parse(utils.luxutils.create_props("", definitions))
+                superluxcore_scene.Parse(utils.luxutils.create_props("", definitions))
 
-                devices = scene.luxcore.devices
+                devices = scene.superluxcore.devices
                 definitions = {
                     "renderengine.type": "RTPATHOCL",
                     "sampler.type": "TILEPATHSAMPLER",
@@ -327,7 +327,7 @@ def view_draw(engine, context, depsgraph):
                     "opencl.devices.select": devices.devices_to_selection_string(),
                 }
                 config_props = utils.luxutils.create_props("", definitions)
-                renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
+                renderconfig = pysuperluxcore.RenderConfig(config_props, superluxcore_scene)
                 engine.kernel_check_cache = (
                     renderconfig.HasCachedKernels(),
                     utils.get_addon_preferences(context).gpu_backend,
@@ -389,7 +389,7 @@ def view_draw(engine, context, depsgraph):
         try:
             jobs = engine.exporter.update(depsgraph, context, changes)
         except Exception as error:
-            LuxCoreErrorLog.add_error(error)
+            SuperLuxCoreErrorLog.add_error(error)
             import traceback
 
             traceback.print_exc()
@@ -486,9 +486,9 @@ def view_draw(engine, context, depsgraph):
         return
 
     # Check if we need to pause the viewport render
-    # (note: the LuxCore stat "stats.renderengine.time" is not reliable here)
+    # (note: the SuperLuxCore stat "stats.renderengine.time" is not reliable here)
     rendered_time = time() - engine.viewport_start_time
-    halt_time = scene.luxcore.viewport.halt_time
+    halt_time = scene.superluxcore.viewport.halt_time
     status_message = worker.phase if worker is not None else ""
 
     if rendered_time > halt_time:
@@ -504,7 +504,7 @@ def view_draw(engine, context, depsgraph):
         status_message = status_message or "(Paused)"
 
         # ...and denoise
-        use_oidn = context.scene.luxcore.viewport.get_denoiser(context) == "OIDN"
+        use_oidn = context.scene.superluxcore.viewport.get_denoiser(context) == "OIDN"
         if use_oidn and not framebuffer.denoised:
             # The background worker only computes OIDN; the upload/draw
             # happens here on the main thread (GL-safe).
@@ -532,7 +532,7 @@ def view_draw(engine, context, depsgraph):
         try:
             if session is not None:
                 _locked_session_call(engine, session.UpdateStats)
-                vp = scene.luxcore.viewport
+                vp = scene.superluxcore.viewport
                 interactive = (
                     vp.denoise_interactive
                     and vp.get_denoiser(context) == "OIDN"

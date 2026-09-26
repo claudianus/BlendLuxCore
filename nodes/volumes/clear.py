@@ -1,6 +1,6 @@
 import bpy
 from bpy.props import IntProperty, FloatProperty, StringProperty
-from ..base import LuxCoreNodeVolume, COLORDEPTH_DESC
+from ..base import SuperLuxCoreNodeVolume, COLORDEPTH_DESC
 from ...utils import node as utils_node
 from ...utils.light_descriptions import LIGHTGROUP_DESC
 
@@ -10,7 +10,7 @@ VOLUME_PRIORITY_DESC = (
 )
 
 
-class LuxCoreNodeVolClear(LuxCoreNodeVolume, bpy.types.Node):
+class SuperLuxCoreNodeVolClear(SuperLuxCoreNodeVolume, bpy.types.Node):
     bl_label = "Clear Volume"
     bl_width_default = 160
 
@@ -25,14 +25,14 @@ class LuxCoreNodeVolClear(LuxCoreNodeVolume, bpy.types.Node):
     def init(self, context):
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketVolume", "Volume")
+        self.outputs.new("SuperLuxCoreSocketVolume", "Volume")
 
     def draw_buttons(self, context, layout):
         self.draw_common_buttons(context, layout)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "clear",
         }
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

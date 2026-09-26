@@ -93,17 +93,17 @@ def build_scene():
     bg.inputs[1].default_value = 0.4
     scene.world = world
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.device = "CPU"
-    scene.luxcore.config.sampler = "SOBOL"
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 20
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.device = "CPU"
+    scene.superluxcore.config.sampler = "SOBOL"
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 20
     return scene, floor
 
 
@@ -137,7 +137,7 @@ def main():
     floor.select_set(True)
     if os.path.exists(LXM):
         os.remove(LXM)
-    bpy.ops.luxcore.bake_lxm_proxy(filepath=LXM)
+    bpy.ops.superluxcore.bake_lxm_proxy(filepath=LXM)
     assert os.path.isfile(LXM)
 
     info = parse_lxm_header(LXM)

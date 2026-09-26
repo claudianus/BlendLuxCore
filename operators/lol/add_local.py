@@ -114,8 +114,8 @@ def render_thumbnail(args):
 
 
 class LOLAddLocalOperator(Operator):
-    bl_idname = 'scene.luxcore_ol_add_local'
-    bl_label = 'LuxCore Online Library Add Assets Local'
+    bl_idname = 'scene.superluxcore_ol_add_local'
+    bl_label = 'SuperLuxCore Online Library Add Assets Local'
     bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
 
     asset_index: IntProperty(name="asset_index", default=-1, options={'SKIP_SAVE'})
@@ -127,8 +127,8 @@ class LOLAddLocalOperator(Operator):
 
     def execute(self, context):
         scene = context.scene
-        ui_props = scene.luxcoreOL.ui
-        upload_props = scene.luxcoreOL.upload
+        ui_props = scene.superluxcoreOL.ui
+        upload_props = scene.superluxcoreOL.upload
 
         user_preferences = get_addon_preferences(context)
 
@@ -227,8 +227,8 @@ class LOLAddLocalOperator(Operator):
 
 
 class LOLScanLocalOperator(Operator):
-    bl_idname = 'scene.luxcore_ol_scan_local'
-    bl_label = 'LuxCore Online Library Scan Local Assets'
+    bl_idname = 'scene.superluxcore_ol_scan_local'
+    bl_label = 'SuperLuxCore Online Library Scan Local Assets'
     bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
 
     @classmethod
@@ -238,8 +238,8 @@ class LOLScanLocalOperator(Operator):
 
     def execute(self, context):
         scene = context.scene
-        ui_props = scene.luxcoreOL.ui
-        upload_props = scene.luxcoreOL.upload
+        ui_props = scene.superluxcoreOL.ui
+        upload_props = scene.superluxcoreOL.upload
 
         user_preferences = get_addon_preferences(context)
         assetpath = join(user_preferences.global_dir, ui_props.asset_type.lower(), 'local')

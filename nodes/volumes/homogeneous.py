@@ -1,7 +1,7 @@
 import bpy
 from bpy.props import IntProperty, BoolProperty, FloatProperty, StringProperty, EnumProperty
 from .clear import VOLUME_PRIORITY_DESC
-from ..base import LuxCoreNodeVolume, COLORDEPTH_DESC
+from ..base import SuperLuxCoreNodeVolume, COLORDEPTH_DESC
 from ...utils import node as utils_node
 from ...utils.light_descriptions import LIGHTGROUP_DESC
 
@@ -31,7 +31,7 @@ PARAM_DESC = (
 )
 
 
-class LuxCoreNodeVolHomogeneous(LuxCoreNodeVolume, bpy.types.Node):
+class SuperLuxCoreNodeVolHomogeneous(SuperLuxCoreNodeVolume, bpy.types.Node):
     bl_label = "Homogeneous Volume"
     bl_width_default = 175
 
@@ -74,13 +74,13 @@ class LuxCoreNodeVolHomogeneous(LuxCoreNodeVolume, bpy.types.Node):
 
     def init(self, context):
         self.add_common_inputs()
-        self.add_input("LuxCoreSocketColor", "Scattering", (1, 1, 1))
-        self.add_input("LuxCoreSocketFloatPositive", "Scattering Scale", 1.0)
-        self.add_input("LuxCoreSocketColor", "Albedo", (0.5, 0.5, 0.5), enabled=False)
-        self.add_input("LuxCoreSocketFloatPositive", "Mean Free Path", 0.1, enabled=False)
-        self.add_input("LuxCoreSocketVolumeAsymmetry", "Asymmetry", (0, 0, 0))
+        self.add_input("SuperLuxCoreSocketColor", "Scattering", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketFloatPositive", "Scattering Scale", 1.0)
+        self.add_input("SuperLuxCoreSocketColor", "Albedo", (0.5, 0.5, 0.5), enabled=False)
+        self.add_input("SuperLuxCoreSocketFloatPositive", "Mean Free Path", 0.1, enabled=False)
+        self.add_input("SuperLuxCoreSocketVolumeAsymmetry", "Asymmetry", (0, 0, 0))
 
-        self.outputs.new("LuxCoreSocketVolume", "Volume")
+        self.outputs.new("SuperLuxCoreSocketVolume", "Volume")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "parametrization")
@@ -89,7 +89,7 @@ class LuxCoreNodeVolHomogeneous(LuxCoreNodeVolume, bpy.types.Node):
         layout.prop(self, "distance_sampling")
         self.draw_common_buttons(context, layout)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "homogeneous",
             "asymmetry": self.inputs["Asymmetry"].export(exporter, depsgraph, props),
@@ -101,4 +101,4 @@ class LuxCoreNodeVolHomogeneous(LuxCoreNodeVolume, bpy.types.Node):
             definitions["sssalbedo"] = self.inputs["Albedo"].export(exporter, depsgraph, props)
             definitions["sssmfp"] = self.inputs["Mean Free Path"].export(exporter, depsgraph, props)
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

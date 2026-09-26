@@ -1,19 +1,19 @@
 import bpy
 from bpy.props import EnumProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexHitpointInfo(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexHitpointInfo(SuperLuxCoreNodeTexture, bpy.types.Node):
     """ Access to various hitpoint attributes """
     bl_label = "Hitpoint Info"
     bl_width_default = 150
 
     def init(self, context):
-        self.outputs.new("LuxCoreSocketVector", "Shading Normal")
-        self.outputs.new("LuxCoreSocketVector", "Position")
+        self.outputs.new("SuperLuxCoreSocketVector", "Shading Normal")
+        self.outputs.new("SuperLuxCoreSocketVector", "Position")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {}
         if output_socket == self.outputs["Shading Normal"]:
             definitions["type"] = "shadingnormal"
@@ -21,4 +21,4 @@ class LuxCoreNodeTexHitpointInfo(LuxCoreNodeTexture, bpy.types.Node):
             definitions["type"] = "position"
         else:
             raise Exception("Unknown output socket:", output_socket)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

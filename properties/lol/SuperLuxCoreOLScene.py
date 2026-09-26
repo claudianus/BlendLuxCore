@@ -30,7 +30,7 @@ from ...utils.lol import utils as utils
 
 def switch_local_free(self, context):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
 
     utils.init_categories(context)
     ui_props.scrolloffset = 0
@@ -38,8 +38,8 @@ def switch_local_free(self, context):
 
 def switch_search_results(self, context):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
-    upload_props = scene.luxcoreOL.upload
+    ui_props = scene.superluxcoreOL.ui
+    upload_props = scene.superluxcoreOL.upload
 
     if not ui_props.ToC_loaded:
         utils.download_table_of_contents(context)
@@ -48,31 +48,31 @@ def switch_search_results(self, context):
     ui_props.scrolloffset = 0
 
     if ui_props.asset_type == 'MODEL':
-        asset_props = scene.luxcoreOL.model
-        if not scene.luxcoreOL.model.thumbnails_loaded:
+        asset_props = scene.superluxcoreOL.model
+        if not scene.superluxcoreOL.model.thumbnails_loaded:
             utils.load_previews(context, ui_props.asset_type)
-            scene.luxcoreOL.model.thumbnails_loaded = True
+            scene.superluxcoreOL.model.thumbnails_loaded = True
     if ui_props.asset_type == 'SCENE':
-        asset_props = scene.luxcoreOL.scene
-        if not scene.luxcoreOL.scene.thumbnails_loaded:
+        asset_props = scene.superluxcoreOL.scene
+        if not scene.superluxcoreOL.scene.thumbnails_loaded:
             utils.load_previews(context, ui_props.asset_type)
-            scene.luxcoreOL.scene.thumbnails_loaded = True
+            scene.superluxcoreOL.scene.thumbnails_loaded = True
     if ui_props.asset_type == 'MATERIAL':
-        asset_props = scene.luxcoreOL.material
-        if not scene.luxcoreOL.material.thumbnails_loaded:
+        asset_props = scene.superluxcoreOL.material
+        if not scene.superluxcoreOL.material.thumbnails_loaded:
             utils.load_previews(context, ui_props.asset_type)
-            scene.luxcoreOL.material.thumbnails_loaded = True
+            scene.superluxcoreOL.material.thumbnails_loaded = True
 
     utils.init_categories(context)
 
-    scene.luxcoreOL.on_search = False
+    scene.superluxcoreOL.on_search = False
     self.category = ""
-    scene.luxcoreOL.search_category = self.category
+    scene.superluxcoreOL.search_category = self.category
 
     upload_props.add_list.clear()
 
 
-class LuxCoreOnlineLibraryAssetBar(bpy.types.PropertyGroup):
+class SuperLuxCoreOnlineLibraryAssetBar(bpy.types.PropertyGroup):
     ui_scale = 1
     thumb_size_def = 96
     margin_def = 0
@@ -108,7 +108,7 @@ class LuxCoreOnlineLibraryAssetBar(bpy.types.PropertyGroup):
     highlight_margin: IntProperty(name="Highlight Margin", default=int(margin_def / 2), min=-10, max=256)
 
 
-class LuxCoreOnlineLibraryUI(bpy.types.PropertyGroup):
+class SuperLuxCoreOnlineLibraryUI(bpy.types.PropertyGroup):
     ui_scale = 1
     thumb_size_def = 96
     margin_def = 0
@@ -151,10 +151,10 @@ class LuxCoreOnlineLibraryUI(bpy.types.PropertyGroup):
     local: BoolProperty(name="Local only", default=False, update=switch_local_free)
     free_only: BoolProperty(name="Free only", default=False, update=switch_local_free)
 
-    assetbar: PointerProperty(type=LuxCoreOnlineLibraryAssetBar)
+    assetbar: PointerProperty(type=SuperLuxCoreOnlineLibraryAssetBar)
 
 
-class LuxCoreOnlineLibraryModel(bpy.types.PropertyGroup):
+class SuperLuxCoreOnlineLibraryModel(bpy.types.PropertyGroup):
     thumbnails_loaded: BoolProperty(name="thumbnails_loaded", default=False, options={'SKIP_SAVE'})
     free_only: BoolProperty(name="Free only", default=False, update=switch_local_free)
     switched_append_method: BoolProperty(name="Switched Append Method", default=False)
@@ -188,15 +188,15 @@ class LuxCoreOnlineLibraryModel(bpy.types.PropertyGroup):
                                         subtype='ANGLE')
 
 
-class LuxCoreOnlineLibraryMaterial(bpy.types.PropertyGroup):
+class SuperLuxCoreOnlineLibraryMaterial(bpy.types.PropertyGroup):
     thumbnails_loaded: BoolProperty(name="thumbnails_loaded", default=False, options={'SKIP_SAVE'})
 
 
-class LuxCoreOnlineLibraryScene(bpy.types.PropertyGroup):
+class SuperLuxCoreOnlineLibraryScene(bpy.types.PropertyGroup):
     thumbnails_loaded: BoolProperty(name="thumbnails_loaded", default=False, options={'SKIP_SAVE'})
 
 
-class LuxCoreOnlineLibraryAsset(bpy.types.PropertyGroup):
+class SuperLuxCoreOnlineLibraryAsset(bpy.types.PropertyGroup):
     name: StringProperty(name="Asset name", description="Assign a name to the asset", default="Default")
     category: StringProperty(name="Category", description="Assign a category to the asset", default="misc")
     url: StringProperty(name="Url", description="Assign a category to the asset", default="")
@@ -208,34 +208,34 @@ class LuxCoreOnlineLibraryAsset(bpy.types.PropertyGroup):
     thumbnail: PointerProperty(name="Image", type=bpy.types.Image)
 
 
-class LuxCoreOnlineLibraryUpload(bpy.types.PropertyGroup):
+class SuperLuxCoreOnlineLibraryUpload(bpy.types.PropertyGroup):
     name: StringProperty(name="Asset name", description="Assign a name to the asset", default="Default")
     category: StringProperty(name='Category', description="Assign a category to the asset", default="misc")
     autorender: BoolProperty(name="Autorender thumbnail", default=True)
     samples: IntProperty(name="Samples", default=50, min=1)
     show_thumbnail: BoolProperty(name="", default=True, description="Show thumbnail")
     thumbnail: PointerProperty(name="Image", type=bpy.types.Image)
-    add_list: CollectionProperty(type=LuxCoreOnlineLibraryAsset)
+    add_list: CollectionProperty(type=SuperLuxCoreOnlineLibraryAsset)
 
 
-class LuxCoreOnlineLibrary(bpy.types.PropertyGroup):
-    ui: PointerProperty(type=LuxCoreOnlineLibraryUI)
-    model: PointerProperty(type=LuxCoreOnlineLibraryModel)
-    material: PointerProperty(type=LuxCoreOnlineLibraryMaterial)
-    scene: PointerProperty(type=LuxCoreOnlineLibraryScene)
+class SuperLuxCoreOnlineLibrary(bpy.types.PropertyGroup):
+    ui: PointerProperty(type=SuperLuxCoreOnlineLibraryUI)
+    model: PointerProperty(type=SuperLuxCoreOnlineLibraryModel)
+    material: PointerProperty(type=SuperLuxCoreOnlineLibraryMaterial)
+    scene: PointerProperty(type=SuperLuxCoreOnlineLibraryScene)
     on_search: BoolProperty(name="on_search", default=False)
     search_category: StringProperty(name="search_category", default="")
-    upload: PointerProperty(type=LuxCoreOnlineLibraryUpload)
+    upload: PointerProperty(type=SuperLuxCoreOnlineLibraryUpload)
 
     @classmethod
     def register(cls):
-        bpy.types.Scene.luxcoreOL = PointerProperty( name="LuxCore Online Library Settings",
-            description="LuxCore Online Library settings", type=cls)
+        bpy.types.Scene.superluxcoreOL = PointerProperty( name="SuperLuxCore Online Library Settings",
+            description="SuperLuxCore Online Library settings", type=cls)
 
     @classmethod
     def unregister(cls):
-        del bpy.types.Scene.luxcoreOL
+        del bpy.types.Scene.superluxcoreOL
 
 
-#class LuxCoreOnlineLibrarySceneBrush(bpy.types.PropertyGroup):
+#class SuperLuxCoreOnlineLibrarySceneBrush(bpy.types.PropertyGroup):
 

@@ -3,7 +3,7 @@ Unit tests for the async session worker architecture.
 
 Loads `export/recorded_scene.py` and `engine/session_worker.py` directly by
 file path (bypassing the package __init__, which needs bpy), with a fake
-`pyluxcore` module injected into sys.modules. Runs under plain python3:
+`pysuperluxcore` module injected into sys.modules. Runs under plain python3:
 
     python3 dev-tools/async_worker_unit_test.py
 """
@@ -24,7 +24,7 @@ def check(name, ok, detail=""):
     print(("PASS" if ok else "FAIL"), name, detail)
 
 
-# ---------------------------------------------------------------- fake pyluxcore
+# ---------------------------------------------------------------- fake pysuperluxcore
 
 
 class FakeProperty:
@@ -224,13 +224,13 @@ class FakeSession:
         return self.config
 
 
-fake_pyluxcore = type(sys)("pyluxcore")
-fake_pyluxcore.Properties = FakeProperties
-fake_pyluxcore.Property = FakeProperty
-fake_pyluxcore.RenderConfig = FakeConfig
-fake_pyluxcore.RenderSession = FakeSession
-fake_pyluxcore.KernelCacheFill = lambda config, cb=None: None
-sys.modules["pyluxcore"] = fake_pyluxcore
+fake_pysuperluxcore = type(sys)("pysuperluxcore")
+fake_pysuperluxcore.Properties = FakeProperties
+fake_pysuperluxcore.Property = FakeProperty
+fake_pysuperluxcore.RenderConfig = FakeConfig
+fake_pysuperluxcore.RenderSession = FakeSession
+fake_pysuperluxcore.KernelCacheFill = lambda config, cb=None: None
+sys.modules["pysuperluxcore"] = fake_pysuperluxcore
 
 
 def load(name, path):

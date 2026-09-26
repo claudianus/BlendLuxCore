@@ -9,7 +9,7 @@ from functools import lru_cache
 from time import time
 
 from ... import utils
-import pyluxcore
+import pysuperluxcore
 from .. import mesh_converter
 from .. import named_attributes
 from ..hair import (
@@ -22,7 +22,7 @@ from ..hair import (
 )
 from .exported_data import ExportedMesh, ExportedObject, ExportedPart
 from .. import light, material, pointcloud, volume, cycles_node_reader
-from ...utils.errorlog import LuxCoreErrorLog
+from ...utils.errorlog import SuperLuxCoreErrorLog
 from ...utils import node as utils_node
 from ...utils import MESH_OBJECTS
 from ...utils.node import get_active_output
@@ -46,7 +46,7 @@ _auto_proxy_dir_swept = False
 
 
 def _get_auto_proxy_dir():
-    d = os.path.join(tempfile.gettempdir(), "luxcore_autoproxy")
+    d = os.path.join(tempfile.gettempdir(), "superluxcore_autoproxy")
     os.makedirs(d, exist_ok=True)
     # Once per process: drop orphans left by crashed/killed sessions.
     global _auto_proxy_dir_swept
@@ -81,10 +81,10 @@ def _dupli_motion_enabled(dg_obj_instance):
     # both keeps the first instance's object-level motion props and the
     # duplicated instances consistent — flagging either side blurs all
     # copies instead of a subset.
-    if dg_obj_instance.object.luxcore.enable_motion_blur:
+    if dg_obj_instance.object.superluxcore.enable_motion_blur:
         return True
     parent = dg_obj_instance.parent
-    return bool(parent and parent.luxcore.enable_motion_blur)
+    return bool(parent and parent.superluxcore.enable_motion_blur)
 
 
 @contextmanager
@@ -102,20 +102,20 @@ def _timed(exporter, stat_name):
 
 def uses_pointiness(node_tree):
     # TODO better check would be if the node is linked to the output and actually used
-    return utils_node.has_nodes(node_tree, "LuxCoreNodeTexPointiness", True)
+    return utils_node.has_nodes(node_tree, "SuperLuxCoreNodeTexPointiness", True)
 
 
 def uses_random_per_island_uniform_float(node_tree):
     # TODO better check would be if the node is linked to the output and actually used
     return utils_node.has_nodes(
-        node_tree, "LuxCoreNodeTexRandomPerIsland", True
+        node_tree, "SuperLuxCoreNodeTexRandomPerIsland", True
     )
 
 
 def uses_random_per_island_int(node_tree):
     # TODO better check would be if the node is linked to the output and actually used
     for node in utils_node.find_nodes_multi(
-        node_tree, {"LuxCoreNodeTexMapping2D", "LuxCoreNodeTexMapping3D"}, True
+        node_tree, {"SuperLuxCoreNodeTexMapping2D", "SuperLuxCoreNodeTexMapping3D"}, True
     ):
         if (
             node.mapping_type in {"uvrandommapping2d", "localrandommapping3d"}
@@ -128,14 +128,14 @@ def uses_random_per_island_int(node_tree):
 def needs_edge_detector_shape(node_tree):
     # TODO better check would be if the node is linked to the output and actually used
     for node in utils_node.find_nodes(
-        node_tree, "LuxCoreNodeTexWireframe", True
+        node_tree, "SuperLuxCoreNodeTexWireframe", True
     ):
         if node.hide_planar_edges:
             return True
     # The bevel texture reads per-edge angles written by edgedetectoraov
     if utils_node.find_nodes(node_tree, "ShaderNodeBevel", True):
         return True
-    if utils_node.find_nodes(node_tree, "LuxCoreNodeTexBevel", True):
+    if utils_node.find_nodes(node_tree, "SuperLuxCoreNodeTexBevel", True):
         return True
     return False
 
@@ -146,12 +146,12 @@ def uses_displacement(obj):
         if not mat:
             continue
         if (
-            mat.luxcore.node_tree
+            mat.superluxcore.node_tree
             and utils_node.has_nodes_multi(
-                mat.luxcore.node_tree,
+                mat.superluxcore.node_tree,
                 {
-                    "LuxCoreNodeShapeHeightDisplacement",
-                    "LuxCoreNodeShapeVectorDisplacement",
+                    "SuperLuxCoreNodeShapeHeightDisplacement",
+                    "SuperLuxCoreNodeShapeVectorDisplacement",
                 },
                 True,
             )
@@ -159,7 +159,7 @@ def uses_displacement(obj):
             return True
         # Cycles-routed material with a Displacement output link
         if (
-            not mat.luxcore.node_tree
+            not mat.superluxcore.node_tree
             and cycles_node_reader.get_displacement_link(mat.original) is not None
         ):
             return True
@@ -168,7 +168,7 @@ def uses_displacement(obj):
 
 def _apply_cycles_displacement(shape, obj, mat_index, depsgraph, scene_props):
     """
-    Wraps the shape in a LuxCore "displacement" shape when the material on
+    Wraps the shape in a SuperLuxCore "displacement" shape when the material on
     mat_index is a Cycles-routed material whose output Displacement socket
     is driven by a Displacement/Vector Displacement node.
     """
@@ -183,7 +183,7 @@ def _apply_cycles_displacement(shape, obj, mat_index, depsgraph, scene_props):
         link, scene_props, mat.original, obj.name
     )
     if disp is None:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             "Material output Displacement is only supported through "
             "Displacement/Vector Displacement nodes",
             obj_name=obj.name,
@@ -192,19 +192,19 @@ def _apply_cycles_displacement(shape, obj, mat_index, depsgraph, scene_props):
 
     disp_shape = "%s_disp%d" % (shape, mat_index)
     prefix = "scene.shapes." + disp_shape + "."
-    scene_props.Set(pyluxcore.Property(prefix + "type", "displacement"))
-    scene_props.Set(pyluxcore.Property(prefix + "source", shape))
-    scene_props.Set(pyluxcore.Property(prefix + "map", disp["map"]))
-    scene_props.Set(pyluxcore.Property(prefix + "map.type", disp["map.type"]))
-    scene_props.Set(pyluxcore.Property(prefix + "scale", disp["scale"]))
-    scene_props.Set(pyluxcore.Property(prefix + "offset", disp["offset"]))
-    scene_props.Set(pyluxcore.Property(prefix + "normalsmooth", True))
+    scene_props.Set(pysuperluxcore.Property(prefix + "type", "displacement"))
+    scene_props.Set(pysuperluxcore.Property(prefix + "source", shape))
+    scene_props.Set(pysuperluxcore.Property(prefix + "map", disp["map"]))
+    scene_props.Set(pysuperluxcore.Property(prefix + "map.type", disp["map.type"]))
+    scene_props.Set(pysuperluxcore.Property(prefix + "scale", disp["scale"]))
+    scene_props.Set(pysuperluxcore.Property(prefix + "offset", disp["offset"]))
+    scene_props.Set(pysuperluxcore.Property(prefix + "normalsmooth", True))
     return disp_shape
 
 
 def _apply_cycles_edge_detector(shape, obj, mat_index, depsgraph, scene_props):
     """
-    Wraps the shape in a LuxCore "edgedetectoraov" shape when the Cycles-routed
+    Wraps the shape in a SuperLuxCore "edgedetectoraov" shape when the Cycles-routed
     material on mat_index contains a Bevel node: the bevel texture reads the
     per-edge angles recorded by this shape.
     """
@@ -218,8 +218,8 @@ def _apply_cycles_edge_detector(shape, obj, mat_index, depsgraph, scene_props):
 
     edge_shape = "%s_edge%d" % (shape, mat_index)
     prefix = "scene.shapes." + edge_shape + "."
-    scene_props.Set(pyluxcore.Property(prefix + "type", "edgedetectoraov"))
-    scene_props.Set(pyluxcore.Property(prefix + "source", shape))
+    scene_props.Set(pysuperluxcore.Property(prefix + "type", "edgedetectoraov"))
+    scene_props.Set(pysuperluxcore.Property(prefix + "source", shape))
     return edge_shape
 
 
@@ -240,8 +240,8 @@ def define_shapes(input_shape, node_tree, exporter, depsgraph, scene_props):
         # as of 2.82, we use it to store the pointiness information.
         pointiness_shape = input_shape + "_pointiness"
         prefix = "scene.shapes." + pointiness_shape + "."
-        scene_props.Set(pyluxcore.Property(prefix + "type", "pointiness"))
-        scene_props.Set(pyluxcore.Property(prefix + "source", shape))
+        scene_props.Set(pysuperluxcore.Property(prefix + "type", "pointiness"))
+        scene_props.Set(pysuperluxcore.Property(prefix + "source", shape))
         shape = pointiness_shape
 
     _uses_random_per_island_uniform_float = (
@@ -257,10 +257,10 @@ def define_shapes(input_shape, node_tree, exporter, depsgraph, scene_props):
 
         island_aov_shape = input_shape + "_island_aov"
         prefix = "scene.shapes." + island_aov_shape + "."
-        scene_props.Set(pyluxcore.Property(prefix + "type", "islandaov"))
-        scene_props.Set(pyluxcore.Property(prefix + "source", shape))
+        scene_props.Set(pysuperluxcore.Property(prefix + "type", "islandaov"))
+        scene_props.Set(pysuperluxcore.Property(prefix + "source", shape))
         scene_props.Set(
-            pyluxcore.Property(prefix + "dataindex", island_aov_index)
+            pysuperluxcore.Property(prefix + "dataindex", island_aov_index)
         )
         shape = island_aov_shape
 
@@ -269,14 +269,14 @@ def define_shapes(input_shape, node_tree, exporter, depsgraph, scene_props):
             random_tri_aov_shape = input_shape + "_random_tri_aov_shape"
             prefix = "scene.shapes." + random_tri_aov_shape + "."
             scene_props.Set(
-                pyluxcore.Property(prefix + "type", "randomtriangleaov")
+                pysuperluxcore.Property(prefix + "type", "randomtriangleaov")
             )
-            scene_props.Set(pyluxcore.Property(prefix + "source", shape))
+            scene_props.Set(pysuperluxcore.Property(prefix + "source", shape))
             scene_props.Set(
-                pyluxcore.Property(prefix + "srcdataindex", island_aov_index)
+                pysuperluxcore.Property(prefix + "srcdataindex", island_aov_index)
             )
             scene_props.Set(
-                pyluxcore.Property(
+                pysuperluxcore.Property(
                     prefix + "dstdataindex",
                     TriAOVDataIndices.RANDOM_PER_ISLAND_FLOAT,
                 )
@@ -286,8 +286,8 @@ def define_shapes(input_shape, node_tree, exporter, depsgraph, scene_props):
     if needs_edge_detector_shape(node_tree):
         edge_detector_shape = input_shape + "_edge_detector"
         prefix = "scene.shapes." + edge_detector_shape + "."
-        scene_props.Set(pyluxcore.Property(prefix + "type", "edgedetectoraov"))
-        scene_props.Set(pyluxcore.Property(prefix + "source", shape))
+        scene_props.Set(pysuperluxcore.Property(prefix + "type", "edgedetectoraov"))
+        scene_props.Set(pysuperluxcore.Property(prefix + "source", shape))
         shape = edge_detector_shape
 
     return shape
@@ -297,12 +297,12 @@ def warn_about_subdivision_levels(obj):
     for modifier in obj.modifiers:
         if modifier.type == "SUBSURF" and modifier.show_viewport:
             if not modifier.show_render:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     "Subdivision modifier enabled in viewport, but not in final render",
                     obj_name=obj.name,
                 )
             elif modifier.render_levels < modifier.levels:
-                LuxCoreErrorLog.add_warning(
+                SuperLuxCoreErrorLog.add_warning(
                     f"Final render subdivision level ({modifier.render_levels}) smaller than viewport subdivision level ({modifier.levels})",
                     obj_name=obj.name,
                 )
@@ -318,7 +318,7 @@ def get_material(obj, material_index, depsgraph):
     if material_index < len(obj.material_slots):
         material = obj.material_slots[material_index].material
     if material is not None:
-        node_tree = material.luxcore.node_tree
+        node_tree = material.superluxcore.node_tree
         if (
             node_tree is not None
         ):  # happens e.g. in default cube scene when only cycles nodes are defined
@@ -338,10 +338,10 @@ def get_material(obj, material_index, depsgraph):
         if mat is None:
             # Note: material.convert returns the fallback material in this case
             msg = "No material attached to slot %d" % (material_index + 1)
-            LuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
+            SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
     else:
         # The object has no material slots
-        LuxCoreErrorLog.add_warning("No material defined", obj_name=obj.name)
+        SuperLuxCoreErrorLog.add_warning("No material defined", obj_name=obj.name)
         # Use fallback material
         mat = None
 
@@ -361,7 +361,7 @@ def export_material(
         lux_mat_name, mat_props = material.convert(
             exporter, depsgraph, mat, is_viewport_render, obj.name
         )
-        node_tree = mat.luxcore.node_tree
+        node_tree = mat.superluxcore.node_tree
         return lux_mat_name, mat_props, node_tree
     else:
         lux_mat_name, mat_props = material.fallback()
@@ -437,7 +437,7 @@ class Duplis:
         self.object_ids = array("I", [])
         # Transform motion blur for instances (A5). `keys` is allocated
         # only when object blur is enabled and the instanced object opts
-        # in via luxcore.enable_motion_blur; it stores one
+        # in via superluxcore.enable_motion_blur; it stores one
         # (instancer_ptr, persistent_id) key per instance, parallel to
         # object_ids. motion_blur.convert() then fills motion/motion_times
         # as [instance][step]-major buffers for Scene.DuplicateObject's
@@ -449,10 +449,10 @@ class Duplis:
         self.motion_times = None
         self.motion_steps = 0
         self.motion_missing = 0
-        # Source object's luxcore.id, cached at Duplis creation: it is a
-        # per-object constant, so reading original.luxcore.id per instance
+        # Source object's superluxcore.id, cached at Duplis creation: it is a
+        # per-object constant, so reading original.superluxcore.id per instance
         # would be a wasted 4-level RNA traversal in the hot loop.
-        self.luxcore_id = -1
+        self.superluxcore_id = -1
         # Compound instance key of the first (base) instance — lets the
         # persistent-scene delta find this source's geo_meta entry
         # (A6-III instancer refresh).
@@ -489,7 +489,7 @@ class ObjectCache2:
         depsgraph,
         view_layer,
         engine,
-        luxcore_scene,
+        superluxcore_scene,
         scene_props,
         context,
     ):
@@ -515,7 +515,7 @@ class ObjectCache2:
 
         # Hoisted out of the per-instance fast path below: one global
         # lookup instead of an attribute chain per instance.
-        blender_mat_to_list = pyluxcore.BlenderMatrix4x4ToList
+        blender_mat_to_list = pysuperluxcore.BlenderMatrix4x4ToList
 
         for index, dg_obj_instance in enumerate(depsgraph.object_instances):
             obj = dg_obj_instance.object
@@ -531,8 +531,8 @@ class ObjectCache2:
                 and obj.type in MESH_OBJECTS
             ):
                 # This code is optimized for large amounts of duplis. Drawback is that objects generated from this
-                # code can't be transformed later in a viewport render session (due to BlendLuxCore implementation
-                # reasons, not because of LuxCore)
+                # code can't be transformed later in a viewport render session (due to SuperLuxCore implementation
+                # reasons, not because of SuperLuxCore)
                 if dg_obj_instance.parent is not None:
                     # Record unconditionally (even for instances skipped
                     # below): the refresh path compares this source set
@@ -574,7 +574,7 @@ class ObjectCache2:
                                 context.space_data
                             ):
                                 continue
-                        obj_id = duplis.luxcore_id
+                        obj_id = duplis.superluxcore_id
                         if obj_id == -1:
                             obj_id = dg_obj_instance.random_id & 0xFFFFFFFE
                         duplis.object_ids.append(obj_id)
@@ -628,7 +628,7 @@ class ObjectCache2:
                         dg_obj_instance,
                         obj,
                         depsgraph,
-                        luxcore_scene,
+                        superluxcore_scene,
                         scene_props,
                         is_viewport_render,
                         view_layer,
@@ -641,7 +641,7 @@ class ObjectCache2:
                         new_duplis.obj_key = utils.make_key_from_instance(
                             dg_obj_instance
                         )
-                        new_duplis.luxcore_id = obj.original.luxcore.id
+                        new_duplis.superluxcore_id = obj.original.superluxcore.id
                         if (
                             exporter.object_blur_enabled
                             and _dupli_motion_enabled(dg_obj_instance)
@@ -681,7 +681,7 @@ class ObjectCache2:
                     dg_obj_instance,
                     obj,
                     depsgraph,
-                    luxcore_scene,
+                    superluxcore_scene,
                     scene_props,
                     is_viewport_render,
                     view_layer,
@@ -695,22 +695,22 @@ class ObjectCache2:
         # self._debug_info()
         return instances
 
-    def duplicate_instances(self, instances, luxcore_scene, stats):
+    def duplicate_instances(self, instances, superluxcore_scene, stats):
         """
         We can only duplicate the instances *after* the scene_props were parsed so the base
-        objects are available for luxcore_scene. Needs to happen before this method is called.
+        objects are available for superluxcore_scene. Needs to happen before this method is called.
         """
         start_time = time()
 
         # Point clouds: one icosphere instance per point beyond the base object
-        instance_count = self._flush_pointcloud_duplicates(luxcore_scene)
+        instance_count = self._flush_pointcloud_duplicates(superluxcore_scene)
         for duplis in instances.values():
             if duplis is None:
                 # If duplis is None, then a non-exportable object like a curve with zero faces is being duplicated
                 continue
 
             if duplis.get_count() == 0:
-                # Only one instance was created (and is already present in the luxcore_scene), nothing to duplicate
+                # Only one instance was created (and is already present in the superluxcore_scene), nothing to duplicate
                 continue
 
             instance_count += duplis.get_count()
@@ -721,7 +721,7 @@ class ObjectCache2:
                 if duplis.motion is not None and duplis.motion_steps > 1:
                     # Transform motion blur for instances (A5): per-instance
                     # [step] time series collected by motion_blur.convert().
-                    luxcore_scene.DuplicateObject(
+                    superluxcore_scene.DuplicateObject(
                         src_name,
                         dst_name,
                         duplis.get_count(),
@@ -731,7 +731,7 @@ class ObjectCache2:
                         duplis.object_ids,
                     )
                 else:
-                    luxcore_scene.DuplicateObject(
+                    superluxcore_scene.DuplicateObject(
                         src_name,
                         dst_name,
                         duplis.get_count(),
@@ -743,7 +743,7 @@ class ObjectCache2:
             stats.export_time_instancing.value = time() - start_time
             stats.instance_count.value = instance_count
 
-    def _flush_pointcloud_duplicates(self, luxcore_scene):
+    def _flush_pointcloud_duplicates(self, superluxcore_scene):
         count = 0
         for (
             src_name, matrices, count_, object_ids, obj_key
@@ -752,7 +752,7 @@ class ObjectCache2:
             if exported is not None and exported.pc_motion is not None:
                 # Per-point motion blur: [instance][step] buffers built by
                 # motion_blur.convert() from re-evaluated point positions.
-                luxcore_scene.DuplicateObject(
+                superluxcore_scene.DuplicateObject(
                     src_name,
                     src_name + "dupli",
                     count_,
@@ -762,7 +762,7 @@ class ObjectCache2:
                     object_ids,
                 )
             else:
-                luxcore_scene.DuplicateObject(
+                superluxcore_scene.DuplicateObject(
                     src_name, src_name + "dupli", count_, matrices, object_ids
                 )
             count += count_
@@ -788,7 +788,7 @@ class ObjectCache2:
             if (use_instancing and not (modified or obj.type == "META"))
             else obj.original
         )
-        key = utils.get_luxcore_name(source, is_viewport_render)
+        key = utils.get_superluxcore_name(source, is_viewport_render)
         if use_instancing:
             key += "_instance"
         return key
@@ -799,7 +799,7 @@ class ObjectCache2:
         dg_obj_instance,
         obj,
         depsgraph,
-        luxcore_scene,
+        superluxcore_scene,
         scene_props,
         is_viewport_render,
         view_layer=None,
@@ -813,7 +813,7 @@ class ObjectCache2:
 
         obj_key = utils.make_key_from_instance(dg_obj_instance)
         exported_stuff = None
-        props = pyluxcore.Properties()
+        props = pysuperluxcore.Properties()
 
         if dg_obj_instance.show_self:
             if obj.type in MESH_OBJECTS:
@@ -824,14 +824,14 @@ class ObjectCache2:
                         )
                         # Same rule as use_instancing in _convert_mesh_obj:
                         # objects with motion blur need a transformation on
-                        # the LuxCore object, it may not be baked into the
+                        # the SuperLuxCore object, it may not be baked into the
                         # strand points
                         is_for_duplication = (
                             is_viewport_render
                             or dg_obj_instance.is_instance
                             or (
                                 exporter.motion_blur_enabled
-                                and obj.luxcore.enable_motion_blur
+                                and obj.superluxcore.enable_motion_blur
                             )
                         )
                         curve_res = convert_hair_curves(
@@ -839,7 +839,7 @@ class ObjectCache2:
                             depsgraph,
                             obj,
                             obj_key,
-                            luxcore_scene,
+                            superluxcore_scene,
                             is_for_duplication,
                             dg_obj_instance.matrix_world,
                         )
@@ -854,7 +854,7 @@ class ObjectCache2:
                                 else None
                             )
                             if mat:
-                                node_tree = mat.luxcore.node_tree
+                                node_tree = mat.superluxcore.node_tree
                                 if node_tree:
                                     lux_shape = define_shapes(
                                         lux_shape,
@@ -917,7 +917,7 @@ class ObjectCache2:
                         obj,
                         obj_key,
                         depsgraph,
-                        luxcore_scene,
+                        superluxcore_scene,
                         scene_props,
                         is_viewport_render,
                         view_layer,
@@ -932,7 +932,7 @@ class ObjectCache2:
                         obj,
                         obj_key,
                         depsgraph,
-                        luxcore_scene,
+                        superluxcore_scene,
                         scene_props,
                         is_viewport_render,
                         view_layer,
@@ -948,7 +948,7 @@ class ObjectCache2:
                         obj,
                         obj_key,
                         depsgraph,
-                        luxcore_scene,
+                        superluxcore_scene,
                         scene_props,
                         is_viewport_render,
                         view_layer,
@@ -962,7 +962,7 @@ class ObjectCache2:
                         obj,
                         obj_key,
                         depsgraph,
-                        luxcore_scene,
+                        superluxcore_scene,
                         dg_obj_instance.matrix_world.copy(),
                         is_viewport_render,
                     )
@@ -978,7 +978,7 @@ class ObjectCache2:
             ):
                 # Can't use the memory address of the psys as key because it changes
                 # when the psys is updated (e.g. because some hair moves)
-                # Motion-blur opt-in needs the transform on the LuxCore
+                # Motion-blur opt-in needs the transform on the SuperLuxCore
                 # object (not baked into the strand points) so object
                 # motion and strand deformation compose correctly.
                 is_for_duplication = (
@@ -986,7 +986,7 @@ class ObjectCache2:
                     or dg_obj_instance.is_instance
                     or (
                         exporter.motion_blur_enabled
-                        and obj.luxcore.enable_motion_blur
+                        and obj.superluxcore.enable_motion_blur
                     )
                 )
                 psys_key = make_psys_key(obj, psys, is_for_duplication)
@@ -1006,7 +1006,7 @@ class ObjectCache2:
                         obj_key,
                         psys,
                         depsgraph,
-                        luxcore_scene,
+                        superluxcore_scene,
                         scene_props,
                         is_viewport_render,
                         is_for_duplication,
@@ -1020,7 +1020,7 @@ class ObjectCache2:
                     if lux_shape:
                         mat = get_material(obj, mat_index, depsgraph)
                         if mat:
-                            node_tree = mat.luxcore.node_tree
+                            node_tree = mat.superluxcore.node_tree
                             if node_tree:
                                 lux_shape = define_shapes(
                                     lux_shape,
@@ -1048,7 +1048,7 @@ class ObjectCache2:
                         visible_to_cam,
                         is_for_duplication,
                         dg_obj_instance.matrix_world,
-                        settings.luxcore.hair.instancing == "enabled",
+                        settings.superluxcore.hair.instancing == "enabled",
                     )
 
                 # TODO handle case when exported_stuff is None
@@ -1078,7 +1078,7 @@ class ObjectCache2:
             scene_props.Set(props)
             self.exported_objects[obj_key] = exported_stuff
             # Transform deltas are only safe where the transform either
-            # sits on the LuxCore object or is world-baked into mesh
+            # sits on the SuperLuxCore object or is world-baked into mesh
             # verts. Volumes bake it into their grid mapping and
             # pointclouds into per-point instance matrices, so those
             # require a full re-export on any transform change.
@@ -1094,13 +1094,13 @@ class ObjectCache2:
         heavy static mesh eligible for .lxm baking. Also used by the
         persistent-scene delta to veto in-place DefineMesh patching
         (a proxied object must re-export through _convert_mesh_obj)."""
-        config = getattr(getattr(scene, "luxcore", None), "config", None)
+        config = getattr(getattr(scene, "superluxcore", None), "config", None)
         if not getattr(config, "proxy_auto", False):
             return False
         if (
             obj.type != "MESH"
             or uses_displacement(obj)
-            or (motion_blur_enabled and obj.luxcore.enable_motion_blur)
+            or (motion_blur_enabled and obj.superluxcore.enable_motion_blur)
         ):
             return False
         # Gate on the evaluated mesh — modifiers can raise the tri
@@ -1151,7 +1151,7 @@ class ObjectCache2:
 
         # use_instancing=True keeps the mesh in local space; the
         # object's own transform is applied at render time.
-        bake_scene = pyluxcore.Scene()
+        bake_scene = pysuperluxcore.Scene()
         exported = mesh_converter.convert(
             obj, "autoproxy_" + sig, depsgraph, bake_scene,
             False, True, None, exporter,
@@ -1163,7 +1163,7 @@ class ObjectCache2:
         paths = {}
         # Cluster stride from config — a signature component, so a
         # stride change re-bakes (the file's residency unit changes).
-        config = getattr(getattr(scene, "luxcore", None), "config", None)
+        config = getattr(getattr(scene, "superluxcore", None), "config", None)
         stride = int(getattr(config, "proxy_cluster_stride", 16))
         for shape_name, mat_index in exported.mesh_definitions:
             path = os.path.join(
@@ -1205,7 +1205,7 @@ class ObjectCache2:
         obj,
         obj_key,
         depsgraph,
-        luxcore_scene,
+        superluxcore_scene,
         scene_props,
         is_viewport_render,
         view_layer,
@@ -1218,12 +1218,12 @@ class ObjectCache2:
             or dg_obj_instance.is_instance
             or utils.can_share_mesh(obj.original)
             or (
-                exporter.motion_blur_enabled and obj.luxcore.enable_motion_blur
+                exporter.motion_blur_enabled and obj.superluxcore.enable_motion_blur
             )
             or uses_displacement(obj)
         )
 
-        # .lxm mesh proxy: the geometry lives in a file that LuxCore
+        # .lxm mesh proxy: the geometry lives in a file that SuperLuxCore
         # maps copy-on-write at render time — the Blender mesh is never
         # read at all. The file identity (path + mtime + size) is part
         # of the mesh key so a re-baked proxy re-exports automatically.
@@ -1231,7 +1231,7 @@ class ObjectCache2:
         proxy_path = ""
         if obj.type == "MESH":
             proxy_path = bpy.path.abspath(
-                getattr(obj.luxcore, "proxy_filepath", "") or ""
+                getattr(obj.superluxcore, "proxy_filepath", "") or ""
             )
             if proxy_path and not os.path.isfile(proxy_path):
                 print(f"[BLC] Proxy file missing, converting mesh: {proxy_path}")
@@ -1278,7 +1278,7 @@ class ObjectCache2:
                     obj,
                     mesh_key,
                     depsgraph,
-                    luxcore_scene,
+                    superluxcore_scene,
                     is_viewport_render,
                     use_instancing,
                     transform,
@@ -1414,7 +1414,7 @@ class ObjectCache2:
             or depsgraph.id_type_updated("POINTCLOUD")
         ) and not only_scene
 
-    def update(self, exporter, depsgraph, luxcore_scene, scene_props, context):
+    def update(self, exporter, depsgraph, superluxcore_scene, scene_props, context):
         is_viewport_render = bool(context)
         redefine_objs_with_these_mesh_keys = []
         # Always instance in viewport so we can move objects around
@@ -1486,9 +1486,9 @@ class ObjectCache2:
                                 ]:
                                     del self.exported_objects[key]
                         elif getattr(
-                            obj.luxcore, "proxy_filepath", ""
+                            obj.superluxcore, "proxy_filepath", ""
                         ) and os.path.isfile(
-                            bpy.path.abspath(obj.luxcore.proxy_filepath)
+                            bpy.path.abspath(obj.superluxcore.proxy_filepath)
                         ):
                             # .lxm proxy objects never read their mesh
                             # datablock — a mesh-edit flag changes
@@ -1501,13 +1501,13 @@ class ObjectCache2:
                             try:
                                 st = os.stat(
                                     bpy.path.abspath(
-                                        obj.luxcore.proxy_filepath
+                                        obj.superluxcore.proxy_filepath
                                     )
                                 )
                                 cur_sig = (
                                     (
                                         bpy.path.abspath(
-                                            obj.luxcore.proxy_filepath
+                                            obj.superluxcore.proxy_filepath
                                         ),
                                         st.st_mtime_ns,
                                         st.st_size,
@@ -1516,7 +1516,7 @@ class ObjectCache2:
                             except OSError:
                                 cur_sig = ()
                             if exported and exported.proxy_sig != cur_sig:
-                                exported.delete(luxcore_scene)
+                                exported.delete(superluxcore_scene)
                                 del self.exported_objects[obj_key]
                             else:
                                 mesh_key = None
@@ -1532,7 +1532,7 @@ class ObjectCache2:
                                 obj,
                                 mesh_key,
                                 depsgraph,
-                                luxcore_scene,
+                                superluxcore_scene,
                                 is_viewport_render,
                                 use_instancing,
                                 transform,
@@ -1550,7 +1550,7 @@ class ObjectCache2:
                                     )
 
                                     if mat:
-                                        node_tree = mat.luxcore.node_tree
+                                        node_tree = mat.superluxcore.node_tree
                                         if node_tree:
                                             shape = define_shapes(
                                                 shape,
@@ -1606,7 +1606,7 @@ class ObjectCache2:
                             for k in self.exported_objects
                             if k == obj_key or k.startswith(obj_key + "_")
                         ]:
-                            self.exported_objects[key].delete(luxcore_scene)
+                            self.exported_objects[key].delete(superluxcore_scene)
                             del self.exported_objects[key]
                     elif obj.type == "LIGHT":
                         obj_key = utils.make_key(obj)
@@ -1615,7 +1615,7 @@ class ObjectCache2:
                             obj,
                             obj_key,
                             depsgraph,
-                            luxcore_scene,
+                            superluxcore_scene,
                             obj.matrix_world.copy(),
                             is_viewport_render,
                         )
@@ -1668,19 +1668,19 @@ class ObjectCache2:
                 if updated:
                     scene_props.Set(exported_obj.get_props())
             else:
-                # Object is new and not in LuxCore yet, or it is a light, do a full export
+                # Object is new and not in SuperLuxCore yet, or it is a light, do a full export
                 self._convert_obj(
                     exporter,
                     dg_obj_instance,
                     obj,
                     depsgraph,
-                    luxcore_scene,
+                    superluxcore_scene,
                     scene_props,
                     is_viewport_render,
                 )
 
         # Newly re-exported point clouds queued their instances during
         # _convert_obj; realize them on the live scene now.
-        self._flush_pointcloud_duplicates(luxcore_scene)
+        self._flush_pointcloud_duplicates(superluxcore_scene)
 
         # self._debug_info()

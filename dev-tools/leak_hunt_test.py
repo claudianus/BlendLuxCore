@@ -1,5 +1,5 @@
 """
-Repeat-render leak hunt (standalone pyluxcore).
+Repeat-render leak hunt (standalone pysuperluxcore).
 
     python3 dev-tools/leak_hunt_test.py
 
@@ -18,7 +18,7 @@ in scene parsing itself (imagemap cache, mesh cache).
 import resource
 import sys
 
-import pyluxcore
+import pysuperluxcore
 
 ROUNDS = 5
 RES = (1280, 720)
@@ -30,7 +30,7 @@ def rss_mb():
 
 
 def scene_props():
-    p = pyluxcore.Properties()
+    p = pysuperluxcore.Properties()
     p.SetFromString(f"""
 scene.objects.quad.ply = "{PLY}"
 scene.objects.quad.material = "mat"
@@ -46,7 +46,7 @@ scene.camera.up = 0 0 1
 
 
 def cfg_props():
-    c = pyluxcore.Properties()
+    c = pysuperluxcore.Properties()
     c.SetFromString(f"""
 renderengine.type = "PATHCPU"
 sampler.type = "SOBOL"
@@ -62,14 +62,14 @@ def main():
     if not os.path.exists(PLY):
         sys.exit(f"missing {PLY} — run memory_stages_test.py first")
 
-    pyluxcore.Init()
+    pysuperluxcore.Init()
     base = rss_mb()
     print(f"[LeakHunt] baseline after Init: {base:.0f} MB")
 
     # Round A: fresh Scene each iteration (parse-time leaks)
     scene_rss = []
     for i in range(ROUNDS):
-        s = pyluxcore.Scene()
+        s = pysuperluxcore.Scene()
         s.Parse(scene_props())
         del s
         scene_rss.append(rss_mb())
@@ -77,12 +77,12 @@ def main():
           " ".join(f"{v:.0f}" for v in scene_rss))
 
     # Round B: shared scene, fresh config+session each iteration
-    scene = pyluxcore.Scene()
+    scene = pysuperluxcore.Scene()
     scene.Parse(scene_props())
     render_rss = []
     for i in range(ROUNDS):
-        rc = pyluxcore.RenderConfig(cfg_props(), scene)
-        session = pyluxcore.RenderSession(rc)
+        rc = pysuperluxcore.RenderConfig(cfg_props(), scene)
+        session = pysuperluxcore.RenderSession(rc)
         session.Start()
         session.Stop()
         del session, rc

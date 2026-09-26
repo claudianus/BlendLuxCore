@@ -14,6 +14,7 @@ from . import (
     glossy2,
     glossycoating,
     glossytranslucent,
+    hair,
     matte,
     mattetranslucent,
     metal,
@@ -28,7 +29,7 @@ from . import (
 )
 import nodeitems_utils
 from . import tree
-from .tree import luxcore_node_categories_material
+from .tree import superluxcore_node_categories_material
 
 if _needs_reload:
     import importlib
@@ -44,6 +45,7 @@ if _needs_reload:
         glossy2,
         glossycoating,
         glossytranslucent,
+        hair,
         matte,
         mattetranslucent,
         metal,
@@ -60,37 +62,38 @@ if _needs_reload:
         importlib.reload(module)
 
 classes = (
-    carpaint.LuxCoreNodeMatCarpaint,
-    carpaint.LuxCoreSocketReflection,
-    cloth.LuxCoreSocketRepeatU,
-    cloth.LuxCoreSocketRepeatV,
-    cloth.LuxCoreNodeMatCloth,
-    disney.LuxCoreNodeMatDisney,
-    frontbackopacity.LuxCoreNodeMatFrontBackOpacity,
-    glass.LuxCoreSocketCauchyC,
-    glass.LuxCoreNodeMatGlass,
-    glossy2.LuxCoreNodeMatGlossy2,
-    glossycoating.LuxCoreNodeMatGlossyCoating,
-    glossytranslucent.LuxCoreNodeMatGlossyTranslucent,
-    matte.LuxCoreSocketSigma,
-    matte.LuxCoreNodeMatMatte,
-    mattetranslucent.LuxCoreNodeMatMatteTranslucent,
-    metal.LuxCoreNodeMatMetal,
-    mirror.LuxCoreNodeMatMirror,
-    mix.LuxCoreNodeMatMix,
-    null.LuxCoreNodeMatNull,
-    openpbr.LuxCoreNodeMatOpenPBR,
-    output.LuxCoreNodeMatOutput,
-    tree.LuxCoreMaterialNodeTree,
-    twosided.LuxCoreNodeMatTwoSided,
-    velvet.LuxCoreNodeMatVelvet,
-    emission.LuxCoreNodeMatEmission,
+    carpaint.SuperLuxCoreNodeMatCarpaint,
+    carpaint.SuperLuxCoreSocketReflection,
+    cloth.SuperLuxCoreSocketRepeatU,
+    cloth.SuperLuxCoreSocketRepeatV,
+    cloth.SuperLuxCoreNodeMatCloth,
+    disney.SuperLuxCoreNodeMatDisney,
+    frontbackopacity.SuperLuxCoreNodeMatFrontBackOpacity,
+    glass.SuperLuxCoreSocketCauchyC,
+    glass.SuperLuxCoreNodeMatGlass,
+    glossy2.SuperLuxCoreNodeMatGlossy2,
+    glossycoating.SuperLuxCoreNodeMatGlossyCoating,
+    glossytranslucent.SuperLuxCoreNodeMatGlossyTranslucent,
+    hair.SuperLuxCoreNodeMatHair,
+    matte.SuperLuxCoreSocketSigma,
+    matte.SuperLuxCoreNodeMatMatte,
+    mattetranslucent.SuperLuxCoreNodeMatMatteTranslucent,
+    metal.SuperLuxCoreNodeMatMetal,
+    mirror.SuperLuxCoreNodeMatMirror,
+    mix.SuperLuxCoreNodeMatMix,
+    null.SuperLuxCoreNodeMatNull,
+    openpbr.SuperLuxCoreNodeMatOpenPBR,
+    output.SuperLuxCoreNodeMatOutput,
+    tree.SuperLuxCoreMaterialNodeTree,
+    twosided.SuperLuxCoreNodeMatTwoSided,
+    velvet.SuperLuxCoreNodeMatVelvet,
+    emission.SuperLuxCoreNodeMatEmission,
 )
 
 
 def register():
     nodeitems_utils.register_node_categories(
-        "LUXCORE_MATERIAL_TREE", luxcore_node_categories_material
+        "SUPERLUXCORE_MATERIAL_TREE", superluxcore_node_categories_material
     )
 
     utils.register_module("Materials", classes)
@@ -98,4 +101,4 @@ def register():
 
 def unregister():
     utils.unregister_module("Materials", classes)
-    nodeitems_utils.unregister_node_categories("LUXCORE_MATERIAL_TREE")
+    nodeitems_utils.unregister_node_categories("SUPERLUXCORE_MATERIAL_TREE")

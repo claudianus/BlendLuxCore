@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# E2E: Cycles-node compatibility layer -> real LuxCore renders.
+# E2E: Cycles-node compatibility layer -> real SuperLuxCore renders.
 #
 # Builds a suite of scenes that use ONLY native Blender/Cycles node trees
-# (no LuxCore node trees, no LuxCore materials), renders each with the
-# LuxCore engine and asserts the output is finite and non-black with a
+# (no SuperLuxCore node trees, no SuperLuxCore materials), renders each with the
+# SuperLuxCore engine and asserts the output is finite and non-black with a
 # plausible luminance band. Where the result is physically comparable the
 # same scene is also rendered with Cycles (CPU) and the mean luminance /
 # normalised-luminance RMSE are compared with a loose tolerance.
@@ -15,7 +15,7 @@
 # keeps the Cycles comparison free of view-transform bias.
 #
 # Expected divergences (loose tolerances, see per-scene comments):
-#   * glass / sun   — LuxCore PATH handles refraction+caustics differently
+#   * glass / sun   — SuperLuxCore PATH handles refraction+caustics differently
 #                     than Cycles at low sample counts; IOR handling differs
 #   * noise ramp    — blender_noise is an approx mapping; distribution mean
 #                     differs from the Cycles noise
@@ -27,7 +27,7 @@
 #   * auto-clamping — the default auto-clamp applies the previous render's
 #                     suggested variance clamp, silently crushing bright
 #                     emitters (~13x on s04); disabled here for parity
-#   * light path    — mapped to the LuxCore rayinfo texture (HitPoint ray
+#   * light path    — mapped to the SuperLuxCore rayinfo texture (HitPoint ray
 #                     context filled by Scene::Intersect); only physically
 #                     different integrator behaviour should remain
 #
@@ -66,30 +66,30 @@ def check(name, ok, detail=""):
     print(f"[E23-TEST] {'ok' if ok else 'FAIL'}: {name} {detail}", flush=True)
 
 
-def ensure_luxcore():
+def ensure_superluxcore():
     """Register the extension's render engine when running under
     --factory-startup (extensions are not auto-enabled there)."""
     try:
-        bpy.context.scene.render.engine = "LUXCORE"
+        bpy.context.scene.render.engine = "SUPERLUXCORE"
         return "already-registered"
     except TypeError:
-        bpy.ops.preferences.addon_enable(module="blendluxcore")
-        bpy.context.scene.render.engine = "LUXCORE"
+        bpy.ops.preferences.addon_enable(module="superluxcore")
+        bpy.context.scene.render.engine = "SUPERLUXCORE"
         return "enabled"
 
 
 def find_addon_key():
     return next(
         a.module for a in bpy.context.preferences.addons
-        if "luxcore" in a.module.lower()
+        if "superluxcore" in a.module.lower()
     )
 
 
-def luxcore_warnings():
+def superluxcore_warnings():
     """Warning messages logged by the *engine's own* errorlog module."""
     try:
         mod = importlib.import_module(find_addon_key() + ".utils.errorlog")
-        return [w.message for w in mod.LuxCoreErrorLog.warnings]
+        return [w.message for w in mod.SuperLuxCoreErrorLog.warnings]
     except Exception:
         return []
 
@@ -153,10 +153,10 @@ def reset_scene():
 
 def black_world(scene):
     """A Cycles world with zero strength -> no environment light in either
-    engine (LuxCore returns no world light when gain == 0)."""
+    engine (SuperLuxCore returns no world light when gain == 0)."""
     world = bpy.data.worlds.new("w")
     scene.world = world
-    world.luxcore.use_cycles_settings = True
+    world.superluxcore.use_cycles_settings = True
     bg = world.node_tree.nodes.get("Background")
     bg.inputs["Strength"].default_value = 0.0
     return world
@@ -211,7 +211,7 @@ def add_light(scene, light_type, location=(0, 0, 5), target=None,
     ld.energy = energy
     for key, value in attrs.items():
         setattr(ld, key, value)
-    ld.luxcore.use_cycles_settings = True
+    ld.superluxcore.use_cycles_settings = True
     obj = bpy.data.objects.new("lt", ld)
     scene.collection.objects.link(obj)
     obj.location = location
@@ -232,10 +232,10 @@ def render(scene, engine, tag, samples, denoise=True):
     scene.render.image_settings.color_depth = "32"
     scene.render.film_transparent = False
 
-    if engine == "LUXCORE":
-        scene.luxcore.config.engine = "PATH"
-        scene.luxcore.config.device = "CPU"
-        halt = scene.luxcore.halt
+    if engine == "SUPERLUXCORE":
+        scene.superluxcore.config.engine = "PATH"
+        scene.superluxcore.config.device = "CPU"
+        halt = scene.superluxcore.halt
         halt.enable = True
         halt.use_time = False
         halt.use_samples = True
@@ -246,11 +246,11 @@ def render(scene, engine, tag, samples, denoise=True):
         # unclamped render and applies it to the NEXT render — with a shared
         # scene that silently crushes bright emitters (s04 measured ~13x
         # dimmer until disabled). Disable for a fair transport comparison.
-        path_cfg = scene.luxcore.config.path
+        path_cfg = scene.superluxcore.config.path
         path_cfg.use_clamping = False
         path_cfg.auto_clamping = False
         path_cfg.suggested_clamping_value = -1
-        scene.luxcore.denoiser.enabled = denoise
+        scene.superluxcore.denoiser.enabled = denoise
     else:
         scene.cycles.samples = samples
         scene.cycles.device = "CPU"
@@ -432,7 +432,7 @@ def build_s09_world_background(scene):
     """World Background node (flat color) lights a cube — no lights."""
     world = bpy.data.worlds.new("w")
     scene.world = world
-    world.luxcore.use_cycles_settings = True
+    world.superluxcore.use_cycles_settings = True
     bg = world.node_tree.nodes.get("Background")
     bg.inputs["Color"].default_value = (0.3, 0.4, 0.55, 1.0)
     bg.inputs["Strength"].default_value = 0.9
@@ -446,10 +446,10 @@ def build_s09_world_background(scene):
 
 
 def build_s10_world_sky(scene):
-    """World Background <- TexSky (Hosek-Wilkie) -> LuxCore sky2."""
+    """World Background <- TexSky (Hosek-Wilkie) -> SuperLuxCore sky2."""
     world = bpy.data.worlds.new("w")
     scene.world = world
-    world.luxcore.use_cycles_settings = True
+    world.superluxcore.use_cycles_settings = True
     nt = world.node_tree
     bg = nt.nodes.get("Background")
     bg.inputs["Strength"].default_value = 1.0
@@ -556,7 +556,7 @@ def build_s13_shadertorgb_fallback(scene):
 
 
 # ---------------------------------------------------------------------------
-# Per-scene image assertions (evaluated on the LuxCore render)
+# Per-scene image assertions (evaluated on the SuperLuxCore render)
 # ---------------------------------------------------------------------------
 
 def check_noise_structure(rgb):
@@ -610,7 +610,7 @@ def check_camera_vs_mirror_colors(rgb):
 # ---------------------------------------------------------------------------
 # parity: max allowed luminance factor max(lux,cyc)/min(lux,cyc);
 #         "record" renders Cycles too but only logs the divergence;
-#         None renders LuxCore only.
+#         None renders SuperLuxCore only.
 SCENES = [
     dict(id="s01", name="s01_diffuse_point", build=build_s01_diffuse_point,
          parity=1.6, rmse=0.65),
@@ -664,11 +664,11 @@ def run_scene(spec):
     samples = spec.get("samples", 32)
     denoise = spec.get("denoise", True)
 
-    # --- LuxCore render -------------------------------------------------
+    # --- SuperLuxCore render -------------------------------------------------
     try:
-        rgb, dt = render(scene, "LUXCORE", name, samples, denoise)
+        rgb, dt = render(scene, "SUPERLUXCORE", name, samples, denoise)
     except Exception:
-        check(f"{name} LUXCORE render", False, traceback.format_exc(limit=3))
+        check(f"{name} SUPERLUXCORE render", False, traceback.format_exc(limit=3))
         return
 
     st = img_stats(rgb)
@@ -678,7 +678,7 @@ def run_scene(spec):
     check(f"{name} plausible luminance", st["mean"] < 300,
           f"mean={st['mean']:.3f} max={st['max']:.1f}")
 
-    warns = luxcore_warnings()
+    warns = superluxcore_warnings()
     if spec.get("warn"):
         needle = spec["warn"]
         hit = any(needle in m for m in warns)
@@ -741,18 +741,18 @@ def check_stale_clamp():
     scene = reset_scene()
     build_s04_emission(scene)
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = scene.render.resolution_y = RES
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "OPEN_EXR"
     scene.render.image_settings.color_depth = "32"
-    halt = scene.luxcore.halt
+    halt = scene.superluxcore.halt
     halt.enable = True
     halt.use_time = False
     halt.use_samples = True
     halt.samples = 16
     halt.use_noise_thresh = False
-    path_cfg = scene.luxcore.config.path
+    path_cfg = scene.superluxcore.config.path
     path_cfg.use_clamping = False
     path_cfg.auto_clamping = True
     path_cfg.suggested_clamping_value = -1
@@ -794,7 +794,7 @@ def check_stale_clamp():
 
 def main():
     t_start = time.time()
-    print("[E23-TEST] addon:", ensure_luxcore())
+    print("[E23-TEST] addon:", ensure_superluxcore())
 
     for spec in SCENES:
         run_scene(spec)

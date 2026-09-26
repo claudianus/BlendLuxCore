@@ -1,12 +1,12 @@
 import bpy
 from bpy.props import BoolProperty, FloatProperty
-from ..base import LuxCoreNodeTexture, LuxCoreNodeMaterial
+from ..base import SuperLuxCoreNodeTexture, SuperLuxCoreNodeMaterial
 from ... import utils
 from ...utils import node as utils_node
 from .bump import SAMPLING_DISTANCE_DESC
 
 
-class LuxCoreNodeTexTriplanarBump(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexTriplanarBump(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Triplanar Bump Mapping"
     bl_width_default = 200
 
@@ -40,22 +40,22 @@ class LuxCoreNodeTexTriplanarBump(LuxCoreNodeTexture, bpy.types.Node):
                                      update=utils_node.force_viewport_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketFloatUnbounded", "Value", 0)
-        self.add_input("LuxCoreSocketBumpHeight", "Bump Height", 0.001)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Value Y", 0, enabled=False)
-        self.add_input("LuxCoreSocketBumpHeight", "Bump Height Y", 0.001, enabled=False)
-        self.add_input("LuxCoreSocketFloatUnbounded", "Value Z", 0, enabled=False)
-        self.add_input("LuxCoreSocketBumpHeight", "Bump Height Z", 0.001, enabled=False)
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Value", 0)
+        self.add_input("SuperLuxCoreSocketBumpHeight", "Bump Height", 0.001)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Value Y", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketBumpHeight", "Bump Height Y", 0.001, enabled=False)
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Value Z", 0, enabled=False)
+        self.add_input("SuperLuxCoreSocketBumpHeight", "Bump Height Z", 0.001, enabled=False)
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
 
-        self.outputs.new("LuxCoreSocketBump", "Bump")
+        self.outputs.new("SuperLuxCoreSocketBump", "Bump")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "multiple_textures")
 
         col = layout.column()
         output = self.outputs["Bump"]
-        col.active = output.is_linked and isinstance(output.links[0].to_node, LuxCoreNodeMaterial)
+        col.active = output.is_linked and isinstance(output.links[0].to_node, SuperLuxCoreNodeMaterial)
         col.prop(self, "sampling_distance")
 
     def _create_bump_tex(self, suffix, value, height, props):
@@ -69,7 +69,7 @@ class LuxCoreNodeTexTriplanarBump(LuxCoreNodeTexture, bpy.types.Node):
         props.Set(utils.luxutils.create_props(prefix, defs))
         return tex_name
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.multiple_textures:
             value1 = self.inputs["Value X"].export(exporter, depsgraph, props)
             height1 = self.inputs["Bump Height X"].export(exporter, depsgraph, props)
@@ -98,4 +98,4 @@ class LuxCoreNodeTexTriplanarBump(LuxCoreNodeTexture, bpy.types.Node):
         if not utils_node.get_link(self.inputs["3D Mapping"]):
             definitions["mapping.type"] = "localmapping3d"
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

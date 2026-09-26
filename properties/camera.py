@@ -1,8 +1,8 @@
 import bpy
 from bpy.props import PointerProperty, BoolProperty, FloatProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Image
-from .imagepipeline import LuxCoreImagepipeline
-from .image_user import LuxCoreImageUser
+from .imagepipeline import SuperLuxCoreImagepipeline
+from .image_user import SuperLuxCoreImageUser
 
 CLIPPING_PLANE_DESC = (
     "The arbitrary clipping plane is used to clip the scene at any position and angle. "
@@ -18,7 +18,7 @@ SHUTTER_TIME_DESC = (
 AUTO_VOLUME_DESC = "Use the exterior volume of the object in the middle of the film as camera volume"
 
 
-class LuxCoreMotionBlur(PropertyGroup):
+class SuperLuxCoreMotionBlur(PropertyGroup):
     enable: BoolProperty(name="Enable Motion Blur", default=False)
     object_blur: BoolProperty(name="Object", default=True, description="Blur moving objects")
     camera_blur: BoolProperty(name="Camera", default=False, description="Blur if camera moves")
@@ -27,7 +27,7 @@ class LuxCoreMotionBlur(PropertyGroup):
     steps: IntProperty(name="Steps", default=2, min=2, soft_max=20, max=129, description="Number of substeps")
 
 
-class LuxCoreBokeh(PropertyGroup):
+class SuperLuxCoreBokeh(PropertyGroup):
     non_uniform: BoolProperty(name="Non-Uniform Bokeh", default=False)
     blades: IntProperty(name="Blades", default=8, min=3,
                               description="Number of aperture blades")
@@ -52,21 +52,21 @@ class LuxCoreBokeh(PropertyGroup):
         self.image_user.update(self.image)
 
     image: PointerProperty(name="Image", type=Image, update=update_image)
-    image_user: PointerProperty(type=LuxCoreImageUser)
+    image_user: PointerProperty(type=SuperLuxCoreImageUser)
 
 
-class LuxCoreCameraProps(PropertyGroup):
+class SuperLuxCoreCameraProps(PropertyGroup):
     use_clipping: BoolProperty(name="Clipping", default=True,
-                                description="Use near/far clipping for the LuxCore camera "
+                                description="Use near/far clipping for the SuperLuxCore camera "
                                             "(clipping still affects the Blender OpenGL viewport even if disabled)")
     use_autofocus: BoolProperty(name="Use Autofocus", default=False,
                                  description="Focus on the surface in the center of the film")
     use_clipping_plane: BoolProperty(name="Use Clipping Plane", default=False, description=CLIPPING_PLANE_DESC)
     clipping_plane: PointerProperty(name="Clipping Plane", type=bpy.types.Object, description=CLIPPING_PLANE_DESC)
 
-    motion_blur: PointerProperty(type=LuxCoreMotionBlur)
-    imagepipeline: PointerProperty(type=LuxCoreImagepipeline)
-    bokeh: PointerProperty(type=LuxCoreBokeh)
+    motion_blur: PointerProperty(type=SuperLuxCoreMotionBlur)
+    imagepipeline: PointerProperty(type=SuperLuxCoreImagepipeline)
+    bokeh: PointerProperty(type=SuperLuxCoreBokeh)
 
     volume: PointerProperty(type=bpy.types.NodeTree)
     auto_volume: BoolProperty(name="Auto-Detect Camera Volume", default=True, description=AUTO_VOLUME_DESC)
@@ -78,12 +78,12 @@ class LuxCoreCameraProps(PropertyGroup):
     
     @classmethod
     def register(cls):
-        bpy.types.Camera.luxcore = PointerProperty(
-            name="LuxCore Camera Settings",
-            description="LuxCore camera settings",
+        bpy.types.Camera.superluxcore = PointerProperty(
+            name="SuperLuxCore Camera Settings",
+            description="SuperLuxCore camera settings",
             type=cls,
         )
 
     @classmethod
     def unregister(cls):
-        del bpy.types.Camera.luxcore
+        del bpy.types.Camera.superluxcore

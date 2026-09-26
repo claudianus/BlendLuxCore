@@ -23,7 +23,7 @@ import bpy
 import mathutils
 import numpy as np
 
-OUT = "/tmp/luxcore_memtest_720p.png"
+OUT = "/tmp/superluxcore_memtest_720p.png"
 
 
 def mat_diffuse(name, color):
@@ -149,18 +149,18 @@ def main():
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.filepath = OUT
     scene.render.image_settings.file_format = "PNG"
 
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.sampler = "SOBOL"
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 30
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.sampler = "SOBOL"
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 30
 
     print("[MemTest] Rendering 1280x720 ...")
     bpy.ops.render.render(write_still=True)

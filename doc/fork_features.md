@@ -1,4 +1,4 @@
-# BlendLuxCore fork — feature documentation
+# SuperLuxCore fork — feature documentation
 
 Changes made to the Blender adapter since the fork, in the same evidence
 format as the engine docs (`SuperLuxCore/doc/features/`). Each section states
@@ -7,15 +7,15 @@ validated.
 
 ## Cycles node coverage — `export/cycles_node_reader.py`
 
-**What/why.** Blender scenes use Cycles shader nodes; to render them LuxCore
-must translate each node to an equivalent LuxCore texture/material. Coverage
+**What/why.** Blender scenes use Cycles shader nodes; to render them SuperLuxCore
+must translate each node to an equivalent SuperLuxCore texture/material. Coverage
 grew from **36 to 71 of the ~101 Blender 5.2 shader nodes** by auto-routing
 unmapped node trees through the Cycles reader (`Blender-first materials:
 auto-route Blender node trees to the Cycles reader`).
 
 **Added mappings** (commit `Cycles node reader: ...` and follow-ups):
 
-| Node | LuxCore output | Notes |
+| Node | SuperLuxCore output | Notes |
 |---|---|---|
 | TexBrick | `brick` texture | |
 | BsdfMetallic | metal material | |
@@ -28,7 +28,7 @@ auto-route Blender node trees to the Cycles reader`).
 | Particle Info | `objectid` / `objectidnormalized` | per-instance random/id |
 | White Noise | `whitenoise` | deterministic 3D-seed hash |
 | Blackbody | `blackbody` texture | linked Temperature input |
-| Map Range | `remap` | clamped (LuxCore remap always clamps) |
+| Map Range | `remap` | clamped (SuperLuxCore remap always clamps) |
 | Subsurface Scattering | Disney `subsurface` | approximation (no BSSRDF) |
 | Attribute (generic/named) | `hitpointvertexaov` / `hitpointtriangleaov` / `hitpointcolor` | GN "Store Named Attribute" output and hand-authored `mesh.attributes`: scalar float/int/bool → vertex or triangle AOV, vector/float2 → extra color layer. Fac/Color/Vector outputs resolved; edge-domain and string attributes warn |
 
@@ -43,7 +43,7 @@ table above is the API surface.
 ## Volumes — `export/volume.py`
 
 **What/why.** Blender VOLUME objects carry an OpenVDB file; they export to a
-bounded box mesh with a heterogeneous LuxCore volume fed by `densitygrid`
+bounded box mesh with a heterogeneous SuperLuxCore volume fed by `densitygrid`
 textures. Fire emission is driven by the file's `flame`/`temperature`/`heat`
 grid.
 
@@ -108,7 +108,7 @@ gradients on CPU and Metal/OpenCL.
   Blender layout). On Metal the series also drives native motion-curve
   primitives; CPU/OCL paths shade re-tessellated motion triangles.
   Particle hair with the motion-blur opt-in now exports strands
-  unbaked (object transform on the LuxCore object) so transform and
+  unbaked (object transform on the SuperLuxCore object) so transform and
   deformation motion compose. Guard rails: a mid-shutter change in
   strand layout (curve counts / particle counts) or a shape wrapper
   falls back to static with a notice.
@@ -126,7 +126,7 @@ gradients on CPU and Metal/OpenCL.
   counts) are exposed in render stats.
 - **Persistent scene reuse** (A6-II, `export/caches/persistent_scene.py`):
   final renders of the same scene + view layer reuse the previous
-  `pyluxcore.Scene` instead of re-exporting every object. A
+  `pysuperluxcore.Scene` instead of re-exporting every object. A
   `depsgraph_update_post` handler accumulates dirty datablock ids
   (keyed on `.original` pointers — `DepsgraphUpdate.id` is evaluated);
   an empty/ignorable dirty set reuses the scene wholesale, a
@@ -220,11 +220,11 @@ gradients on CPU and Metal/OpenCL.
 - **Quality presets**: Draft / Standard / Final buttons on top of the
   Quick Setup quality slider.
 - **ReSTIR DI visibility weighting** (`restir_visibility_enable`): exposes
-  LuxCore's `lightstrategy.restir.visibility.enable` — candidates' shadow
+  SuperLuxCore's `lightstrategy.restir.visibility.enable` — candidates' shadow
   rays steer the reservoir target. Opt-in; honest description in the
   tooltip (it can reallocate noise into penumbra edges on mostly-visible
   scenes instead of reducing it).
-- **ReSTIR GI** (`restir_gi_enable`): exposes LuxCore's
+- **ReSTIR GI** (`restir_gi_enable`): exposes SuperLuxCore's
   `path.restir.gi.enable` (first-bounce reservoir, temporal + gated
   spatial reuse). Runs on PATHCPU and the pathoclbase GPU engines
   (PATHOCL/TILEPATHOCL); the export is gated so RTPATHOCL/BIDIR* never
@@ -253,7 +253,7 @@ gradients on CPU and Metal/OpenCL.
   after film resets (empty frames are never uploaded — the previous image
   stays up until new samples land, bounded to 0.5 s so black scenes still
   display), the last frame is also drawn while a restarted session boots,
-  film readback runs on a worker thread (pyluxcore releases the GIL in
+  film readback runs on a worker thread (pysuperluxcore releases the GIL in
   `Film.GetOutputFloat`/`ApplyOIDN`, so the device-queue drain no longer
   stalls the UI), and "Interactive Denoise" runs OIDN periodically during
   rendering instead of only after pause (denoised frames own the display to
@@ -268,7 +268,7 @@ Apple-only and falls back to CPU/OpenCL elsewhere.
 
 ## Development workflow
 
-- `dev-tools/sync_dev_install.sh` — syncs a freshly built pyluxcore .so
+- `dev-tools/sync_dev_install.sh` — syncs a freshly built pysuperluxcore .so
   (with @rpath→@loader_path/.dylibs rewrites + runtime dylibs), updates the
   dev wheel the add-on installs from, points `blc_settings.json` at it
   (LOCAL wheel source — the wheel must live outside `wheels/` because

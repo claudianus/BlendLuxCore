@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import IntProperty, FloatProperty, BoolProperty
-from ..base import LuxCoreNodeShape
+from ..base import SuperLuxCoreNodeShape
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeShapeMergeOnDistance(LuxCoreNodeShape, bpy.types.Node):
+class SuperLuxCoreNodeShapeMergeOnDistance(SuperLuxCoreNodeShape, bpy.types.Node):
     bl_label = "Merge on Distance"
     bl_width_default = 150
 
@@ -27,8 +27,8 @@ class LuxCoreNodeShapeMergeOnDistance(LuxCoreNodeShape, bpy.types.Node):
     )
 
     def init(self, context):
-        self.add_input("LuxCoreSocketShape", "Shape")
-        self.outputs.new("LuxCoreSocketShape", "Shape")
+        self.add_input("SuperLuxCoreSocketShape", "Shape")
+        self.outputs.new("SuperLuxCoreSocketShape", "Shape")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "tolerance")

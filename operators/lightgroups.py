@@ -5,20 +5,20 @@ from ..properties.lightgroups import MAX_LIGHTGROUPS, is_lightgroup_pass_name
 
 is_blender_5 = bpy.app.version[0] >= 5 # only test of Blender 5 for now
 
-class LUXCORE_OT_add_lightgroup(bpy.types.Operator):
-    bl_idname = "luxcore.add_lightgroup"
+class SUPERLUXCORE_OT_add_lightgroup(bpy.types.Operator):
+    bl_idname = "superluxcore.add_lightgroup"
     bl_label = "Add Light Group"
     bl_description = "Add a light group"
     bl_options = {"UNDO"}
 
     def execute(self, context):
-        groups = context.scene.luxcore.lightgroups
+        groups = context.scene.superluxcore.lightgroups
         groups.add()
         return {"FINISHED"}
 
 
-class LUXCORE_OT_remove_lightgroup(bpy.types.Operator):
-    bl_idname = "luxcore.remove_lightgroup"
+class SUPERLUXCORE_OT_remove_lightgroup(bpy.types.Operator):
+    bl_idname = "superluxcore.remove_lightgroup"
     bl_label = "Remove Light Group"
     bl_description = "Remove this light group"
     bl_options = {"UNDO"}
@@ -26,13 +26,13 @@ class LUXCORE_OT_remove_lightgroup(bpy.types.Operator):
     index: IntProperty()
 
     def execute(self, context):
-        groups = context.scene.luxcore.lightgroups
+        groups = context.scene.superluxcore.lightgroups
         groups.remove(self.index)
         return {"FINISHED"}
 
 
-class LUXCORE_OT_select_objects_in_lightgroup(bpy.types.Operator):
-    bl_idname = "luxcore.select_objects_in_lightgroup"
+class SUPERLUXCORE_OT_select_objects_in_lightgroup(bpy.types.Operator):
+    bl_idname = "superluxcore.select_objects_in_lightgroup"
     bl_label = "Select Objects"
     bl_description = ("Select all objects that are affected by this light "
                       "group (lights and meshes with emissive material)\n"
@@ -42,19 +42,19 @@ class LUXCORE_OT_select_objects_in_lightgroup(bpy.types.Operator):
     index: IntProperty()
 
     def execute(self, context):
-        group_name = context.scene.luxcore.lightgroups.custom[self.index].name
+        group_name = context.scene.superluxcore.lightgroups.custom[self.index].name
         relevant_node_types = {
-            "LuxCoreNodeMatEmission",
-            "LuxCoreNodeVolClear",
-            "LuxCoreNodeVolHomogeneous",
-            "LuxCoreNodeVolHeterogeneous",
+            "SuperLuxCoreNodeMatEmission",
+            "SuperLuxCoreNodeVolClear",
+            "SuperLuxCoreNodeVolHomogeneous",
+            "SuperLuxCoreNodeVolHeterogeneous",
         }
 
         # There are probably far less materials than objects in the scene
         materials_in_group = set()
         for mat in bpy.data.materials:
-            node_tree = mat.luxcore.node_tree
-            if not node_tree or mat.luxcore.use_cycles_nodes:
+            node_tree = mat.superluxcore.node_tree
+            if not node_tree or mat.superluxcore.use_cycles_nodes:
                 continue
 
             for node in utils_node.find_nodes_multi(node_tree, relevant_node_types, follow_pointers=True):
@@ -63,7 +63,7 @@ class LUXCORE_OT_select_objects_in_lightgroup(bpy.types.Operator):
                     break
 
         for obj in context.scene.objects:
-            if obj.type == "LIGHT" and obj.data.luxcore.lightgroup == group_name:
+            if obj.type == "LIGHT" and obj.data.superluxcore.lightgroup == group_name:
                 obj.select_set(True, view_layer=context.view_layer)
             else:
                 for mat_slot in obj.material_slots:
@@ -75,10 +75,10 @@ class LUXCORE_OT_select_objects_in_lightgroup(bpy.types.Operator):
 
 
 # Marks to find our node trees if they already exist
-LUX_COMPOSITOR_MARK = "LuxCore Compositor"
-LUX_EDITOR_MARK = "luxcore_light_group_editor"
-LUX_MIXER_MARK = "luxcore_light_group_mixer"
-LUX_MIXER_INSTANCE_MARK = "luxcore_light_group_mixer_instance"
+LUX_COMPOSITOR_MARK = "SuperLuxCore Compositor"
+LUX_EDITOR_MARK = "superluxcore_light_group_editor"
+LUX_MIXER_MARK = "superluxcore_light_group_mixer"
+LUX_MIXER_INSTANCE_MARK = "superluxcore_light_group_mixer_instance"
 # Our node tree names
 EDIT_LIGHT_GROUP_NAME = ".LightGroupEditor"
 LIGHT_GROUP_MIXER_NAME = ".LightGroupMixer"
@@ -215,8 +215,8 @@ def has_light_group_outputs(renderlayer_node):
     return False
 
 
-class LUXCORE_OT_create_lightgroup_nodes(bpy.types.Operator):
-    bl_idname = "luxcore.create_lightgroup_nodes"
+class SUPERLUXCORE_OT_create_lightgroup_nodes(bpy.types.Operator):
+    bl_idname = "superluxcore.create_lightgroup_nodes"
     bl_label = "Create/Update Light Group Nodes"
     bl_description = ("Creates a node group in the compositor which can be used to edit the scene "
                       "lighting after the render is complete. If one or more mixer nodes already "
@@ -226,7 +226,7 @@ class LUXCORE_OT_create_lightgroup_nodes(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return len(context.scene.luxcore.lightgroups.custom) > 0
+        return len(context.scene.superluxcore.lightgroups.custom) > 0
 
     def execute(self, context):
         scene = context.scene
@@ -234,7 +234,7 @@ class LUXCORE_OT_create_lightgroup_nodes(bpy.types.Operator):
         if not is_blender_5:
             scene.use_nodes = True
 
-        # create a dedicated LuxCore compositor node group
+        # create a dedicated SuperLuxCore compositor node group
         if is_blender_5 and not LUX_COMPOSITOR_MARK in bpy.data.node_groups:
             bpy.ops.node.new_compositing_node_group(name=LUX_COMPOSITOR_MARK)
 
@@ -275,8 +275,8 @@ class LUXCORE_OT_create_lightgroup_nodes(bpy.types.Operator):
 
         # Enable denoiser AOVs (needs to be done before refreshing the render layer node)
         view_layer = scene.view_layers[renderlayer_node.layer]
-        view_layer.luxcore.aovs.avg_shading_normal = True
-        view_layer.luxcore.aovs.albedo = True
+        view_layer.superluxcore.aovs.avg_shading_normal = True
+        view_layer.superluxcore.aovs.albedo = True
 
         # Refresh render layer node to make sure its output names are synced to the light group names
         renderlayer_node.layer = renderlayer_node.layer
@@ -326,7 +326,7 @@ class LUXCORE_OT_create_lightgroup_nodes(bpy.types.Operator):
 
             # Disable inputs of unused light groups
             for i in range(MAX_LIGHTGROUPS):
-                enabled = i <= len(scene.luxcore.lightgroups.custom)
+                enabled = i <= len(scene.superluxcore.lightgroups.custom)
                 for j in range(MIXER_SOCKET_INDEX_STEP):
                     mixer_node.inputs[MIXER_SOCKET_INDEX_START + i * MIXER_SOCKET_INDEX_STEP + j].enabled = enabled
 

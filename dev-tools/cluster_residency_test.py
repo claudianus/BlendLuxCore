@@ -1,7 +1,7 @@
 """
 Ray-driven residency proof for .lxm v2 cluster index.
 
-    python3 dev-tools/cluster_residency_test.py   (with pyluxcore on
+    python3 dev-tools/cluster_residency_test.py   (with pysuperluxcore on
     PYTHONPATH + DYLD_LIBRARY_PATH)
 
 Builds a large mesh, saves .lxm (v2 clustered), loads it and creates a
@@ -12,7 +12,7 @@ cluster bounds, never the mapped vertex/triangle pages.
 
 import os, math, struct, time, subprocess
 
-import pyluxcore
+import pysuperluxcore
 
 PLY = "/tmp/cluster_residency_src.ply"
 LXM = "/tmp/cluster_residency.lxm"
@@ -52,7 +52,7 @@ def make_ply(n=1200):
 
 
 def scene_props(mesh_path):
-    p = pyluxcore.Properties()
+    p = pysuperluxcore.Properties()
     p.SetFromString(f"""
 scene.camera.lookat.orig = 0 -14 6
 scene.camera.lookat.target = 0 0 0
@@ -72,7 +72,7 @@ def main():
         make_ply()
 
     # --- bake .lxm v2 ---
-    sc = pyluxcore.Scene()
+    sc = pysuperluxcore.Scene()
     sc.Parse(scene_props(PLY))
     # The mesh name for a file-backed object is the file path itself
     sc.SaveMesh(PLY, LXM)
@@ -86,13 +86,13 @@ def main():
 
     # --- measure residency across load + accel build ---
     rss0 = rss_mb()
-    sc2 = pyluxcore.Scene()
+    sc2 = pysuperluxcore.Scene()
     sc2.Parse(scene_props(LXM))
     rss_load = rss_mb()
     print(f"[residency] scene+map: +{rss_load - rss0:.1f}MB "
           f"(file {sz:.1f}MB)")
 
-    cfg = pyluxcore.Properties()
+    cfg = pysuperluxcore.Properties()
     cfg.SetFromString("""
 renderengine.type = "PATHCPU"
 sampler.type = "SOBOL"
@@ -104,8 +104,8 @@ film.outputs.0.type = RGB_IMAGEPIPELINE
 film.outputs.0.filename = /tmp/cluster_residency.png
 film.imagepipelines.0.0.type = TONEMAP_AUTOLINEAR
 """)
-    rc = pyluxcore.RenderConfig(cfg, sc2)
-    sess = pyluxcore.RenderSession(rc)
+    rc = pysuperluxcore.RenderConfig(cfg, sc2)
+    sess = pysuperluxcore.RenderSession(rc)
     sess.Start()
     rss_build = rss_mb()
     print(f"[residency] after accel+start: +{rss_build - rss_load:.1f}MB "

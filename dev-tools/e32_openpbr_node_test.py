@@ -4,13 +4,13 @@
 #
 #   Blender -b --python dev-tools/e32_openpbr_node_test.py
 #
-# Creates a luxcore_material_nodes tree with a LuxCoreNodeMatOpenPBR node,
+# Creates a superluxcore_material_nodes tree with a SuperLuxCoreNodeMatOpenPBR node,
 # toggles every optional lobe, exports the material and verifies the emitted
 # properties (type=openpbr, film nm->um conversion, SSS/transmission keys).
 
 import bpy
 
-from bl_ext.user_default.blendluxcore.export import material as export_material
+from bl_ext.user_default.superluxcore.export import material as export_material
 
 
 def get_str(props, key):
@@ -21,12 +21,12 @@ def get_str(props, key):
 
 # --- build the node tree -------------------------------------------------
 mat = bpy.data.materials.new("MatTest")
-nt = bpy.data.node_groups.new("MatTree", "luxcore_material_nodes")
+nt = bpy.data.node_groups.new("MatTree", "superluxcore_material_nodes")
 nt.use_fake_user = True
-mat.luxcore.node_tree = nt
+mat.superluxcore.node_tree = nt
 
-out = nt.nodes.new("LuxCoreNodeMatOutput")
-op = nt.nodes.new("LuxCoreNodeMatOpenPBR")
+out = nt.nodes.new("SuperLuxCoreNodeMatOutput")
+op = nt.nodes.new("SuperLuxCoreNodeMatOpenPBR")
 nt.links.new(op.outputs[0], out.inputs[0])
 
 # enable every optional lobe
@@ -47,11 +47,11 @@ op.inputs["Fuzz Weight"].default_value = 0.3
 depsgraph = bpy.context.evaluated_depsgraph_get()
 exporter = type("DummyExporter", (),
                 {"lightgroup_cache": set(), "node_cache": {}})()
-luxcore_name, props = export_material.convert(
+superluxcore_name, props = export_material.convert(
     exporter, depsgraph, mat, False, "ObjTest")
 
-prefix = f"scene.materials.{luxcore_name}."
-print("== exported material:", luxcore_name)
+prefix = f"scene.materials.{superluxcore_name}."
+print("== exported material:", superluxcore_name)
 for k in sorted(props.GetAllNames()):
     if k.startswith(prefix) or ".MatTest_" in k:
         print("  ", k, "=", get_str(props, k))
@@ -94,7 +94,7 @@ assert get_str(props2, pre2 + "fuzzweight") == "0.2"
 assert get_str(props2, pre2 + "subsurfaceweight") == "0.3"
 
 # disney fallback still works
-mat2.luxcore.principled_target = "disney"
+mat2.superluxcore.principled_target = "disney"
 name3, props3 = export_material.convert(exporter, depsgraph, mat2, False)
 assert get_str(props3, f"scene.materials.{name3}.type") == "disney"
 

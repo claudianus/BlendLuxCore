@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# E2E: Cycles ShaderNodeMath -> LuxCore mathfunc texture -> real render.
+# E2E: Cycles ShaderNodeMath -> SuperLuxCore mathfunc texture -> real render.
 #
 # Builds an emissive cube whose strength is SINE(Generated.x * 6.28),
-# renders with the LuxCore engine and asserts the output brightness
+# renders with the SuperLuxCore engine and asserts the output brightness
 # oscillates (bright and dark columns both exist) — proving the node
 # chain survived scene export, scene parse, and kernel evaluation.
 #
@@ -21,7 +21,7 @@ _EXT_DIR = os.path.expanduser(
 if _EXT_DIR not in sys.path:
     sys.path.insert(0, _EXT_DIR)
 
-# The extension registers the LUXCORE engine at Blender startup; do NOT
+# The extension registers the SUPERLUXCORE engine at Blender startup; do NOT
 # call read_factory_settings() — it tears the registration down.
 
 RESULTS = []
@@ -79,7 +79,7 @@ def main():
     for me in list(bpy.data.meshes):
         bpy.data.meshes.remove(me)
     scene = bpy.context.scene
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
 
     # Two cubes side by side: left gets emission=sin(pi/2)=1 (bright),
     # right gets emission=sin(0)=0 (dark). A/B proves mathfunc survives
@@ -112,14 +112,14 @@ def main():
     cam.rotation_euler = (1.5707963, 0, 0)
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.device = "OCL"
+    scene.render.engine = "SUPERLUXCORE"
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.device = "OCL"
     scene.render.resolution_x = 128
     scene.render.resolution_y = 128
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_samples = True
-    scene.luxcore.halt.samples = 32
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_samples = True
+    scene.superluxcore.halt.samples = 32
     out_png = "/tmp/e10_mathfunc_e2e.png"
     scene.render.filepath = out_png
     bpy.ops.render.render(write_still=True)

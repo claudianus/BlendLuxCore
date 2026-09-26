@@ -7,11 +7,11 @@ def calc_power_correction_factor(spread_angle):
     return (2 * math.pi * (1 - math.cos(spread_angle / 2)))
 
 
-class LUXCORE_OT_convert_to_v23(bpy.types.Operator):
-    bl_idname = "luxcore.convert_to_v23"
+class SUPERLUXCORE_OT_convert_to_v23(bpy.types.Operator):
+    bl_idname = "superluxcore.convert_to_v23"
     bl_label = "Convert Scene From v2.2 or Earlier to v2.3"
     bl_description = ("Convert various settings (e.g. light brightness, world settings) so scenes "
-                      "created with LuxCore v2.2 or earlier appear the same when rendered in v2.3")
+                      "created with SuperLuxCore v2.2 or earlier appear the same when rendered in v2.3")
     bl_options = {"UNDO"}
 
     was_executed = False
@@ -28,31 +28,31 @@ class LUXCORE_OT_convert_to_v23(bpy.types.Operator):
 
         for light in bpy.data.lights:
             if light.type == "SUN":
-                if light.luxcore.light_type == "sun":
+                if light.superluxcore.light_type == "sun":
                     # Sun and sky now have a separate gain property with default 0.00002 to prevent overexposion
                     # with default tonemapper settings. In old scenes, copy the old gain value.
-                    light.luxcore.sun_sky_gain = light.luxcore.gain
-                elif light.luxcore.light_type == "distant":
+                    light.superluxcore.sun_sky_gain = light.superluxcore.gain
+                elif light.superluxcore.light_type == "distant":
                     # The distant light is now normalized by default. For scenes created in older versions,
                     # disable the normalize option to get the same result
-                    light.luxcore.normalize_distant = False
+                    light.superluxcore.normalize_distant = False
             else:
-                # LuxCore behaviour is to use only the gain if power or efficacy are 0, so in this case
+                # SuperLuxCore behaviour is to use only the gain if power or efficacy are 0, so in this case
                 # it is ok to leave the new default "artistic" which uses only gain
-                if light.luxcore.power != 0 and light.luxcore.efficacy != 0:
-                    light.luxcore.light_unit = "power"
-                    light.luxcore.power *= light.luxcore.gain
+                if light.superluxcore.power != 0 and light.superluxcore.efficacy != 0:
+                    light.superluxcore.light_unit = "power"
+                    light.superluxcore.power *= light.superluxcore.gain
 
-                    if light.type == "AREA" and not light.luxcore.is_laser:
-                        light.luxcore.power *= calc_power_correction_factor(light.luxcore.spread_angle)
+                    if light.type == "AREA" and not light.superluxcore.is_laser:
+                        light.superluxcore.power *= calc_power_correction_factor(light.superluxcore.spread_angle)
 
             light.update_tag()
 
         for world in bpy.data.worlds:
-            if world.luxcore.light == "sky2":
+            if world.superluxcore.light == "sky2":
                 # Sun and sky now have a separate gain property with default 0.00002 to prevent overexposion
                 # with default tonemapper settings. In old scenes, copy the old gain value.
-                world.luxcore.sun_sky_gain = world.luxcore.gain
+                world.superluxcore.sun_sky_gain = world.superluxcore.gain
                 world.update_tag()
 
         for node_tree in bpy.data.node_groups:
@@ -61,8 +61,8 @@ class LUXCORE_OT_convert_to_v23(bpy.types.Operator):
 
             # Note: for some reason we don't have to disable the new normalize option.
 
-            for emission_node in find_nodes(node_tree, "LuxCoreNodeMatEmission", False):
-                # LuxCore behaviour is to use only the gain if power or efficacy are 0, so in this case
+            for emission_node in find_nodes(node_tree, "SuperLuxCoreNodeMatEmission", False):
+                # SuperLuxCore behaviour is to use only the gain if power or efficacy are 0, so in this case
                 # it is ok to leave the new default "artistic" which uses only gain
                 if emission_node.power != 0 and emission_node.efficacy != 0:
                     emission_node.emission_unit = "power"
@@ -70,7 +70,7 @@ class LUXCORE_OT_convert_to_v23(bpy.types.Operator):
                     emission_node.normalizebycolor = True
 
         if context.scene.camera:
-            tonemapper = context.scene.camera.data.luxcore.imagepipeline.tonemapper
+            tonemapper = context.scene.camera.data.superluxcore.imagepipeline.tonemapper
             # When the tonemapper settings are set to our new defaults, this could mean two things:
             # a) The user has chosen these settings in v2.2 on his own. In this case they shouldn't be changed.
             # b) The user has never touched these settings and they were automatically changed to the new defaults
@@ -85,5 +85,5 @@ class LUXCORE_OT_convert_to_v23(bpy.types.Operator):
                                        "was using the old default settings (Auto enabled, gain 0.5), you "
                                        "will have to restore them manually")
 
-        LUXCORE_OT_convert_to_v23.was_executed = True
+        SUPERLUXCORE_OT_convert_to_v23.was_executed = True
         return {"FINISHED"}

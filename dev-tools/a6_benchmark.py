@@ -11,7 +11,7 @@
 #   B5  material node edit        -> Scene.Parse material delta
 #   B6  object added              -> full export (rebuild) reference
 #
-# Reports scene.luxcore.statistics export times per stage plus the
+# Reports scene.superluxcore.statistics export times per stage plus the
 # wall-clock render time. Render time is kept tiny (halt time) so the
 # export share dominates the difference.
 #
@@ -42,12 +42,12 @@ def find_addon_key():
     return next(
         a.module
         for a in bpy.context.preferences.addons
-        if "luxcore" in a.module.lower()
+        if "superluxcore" in a.module.lower()
     )
 
 
 def export_stats(scene):
-    stats = scene.luxcore.statistics.get_active()
+    stats = scene.superluxcore.statistics.get_active()
     return {
         "export": stats.export_time.value,
         "objects": stats.export_time_objects.value,
@@ -76,14 +76,14 @@ for obj in list(bpy.data.objects):
     bpy.data.objects.remove(obj)
 
 scene = bpy.context.scene
-scene.luxcore.config.engine = "PATH"
-scene.luxcore.config.device = "OCL"
-scene.luxcore.devices.use_native_cpu = False
-scene.luxcore.halt.enable = True
-scene.luxcore.halt.use_time = True
-scene.luxcore.halt.time = 2
-scene.luxcore.halt.use_samples = False
-scene.render.engine = "LUXCORE"
+scene.superluxcore.config.engine = "PATH"
+scene.superluxcore.config.device = "OCL"
+scene.superluxcore.devices.use_native_cpu = False
+scene.superluxcore.halt.enable = True
+scene.superluxcore.halt.use_time = True
+scene.superluxcore.halt.time = 2
+scene.superluxcore.halt.use_samples = False
+scene.render.engine = "SUPERLUXCORE"
 scene.render.resolution_x = 200
 scene.render.resolution_y = 150
 scene.render.resolution_percentage = 100

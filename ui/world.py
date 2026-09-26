@@ -11,26 +11,26 @@ from .light import draw_envlight_cache_ui
 from ..utils.node import get_active_output
 
 
-class LUXCORE_PT_context_world(WorldButtonsPanel, Panel):
+class SUPERLUXCORE_PT_context_world(WorldButtonsPanel, Panel):
     """
     World UI Panel
     """
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "World Light"
     bl_order = 1
 
     @classmethod
     def poll(cls, context):
         engine = context.scene.render.engine
-        return context.world and engine == "LUXCORE"
+        return context.world and engine == "SUPERLUXCORE"
     
     def draw(self, context):
-        self.layout.prop(context.world.luxcore, "use_cycles_settings")
+        self.layout.prop(context.world.superluxcore, "use_cycles_settings")
 
-        if context.world.luxcore.use_cycles_settings:
+        if context.world.superluxcore.use_cycles_settings:
             self.draw_cycles_settings(context)
         else:
-            self.draw_luxcore_settings(context)
+            self.draw_superluxcore_settings(context)
 
     def draw_cycles_settings(self, context):
         layout = self.layout
@@ -39,76 +39,76 @@ class LUXCORE_PT_context_world(WorldButtonsPanel, Panel):
         if not panel_node_draw(layout, world, "OUTPUT_WORLD", "Surface"):
             layout.prop(world, "color")
 
-    def draw_luxcore_settings(self, context):
+    def draw_superluxcore_settings(self, context):
         layout = self.layout
         world = context.world
 
-        layout.row().prop(world.luxcore, "light", expand=True)
+        layout.row().prop(world.superluxcore, "light", expand=True)
 
         layout.use_property_split = True
         layout.use_property_decorate = False       
 
-        if world.luxcore.light != "none":
-            is_sky = world.luxcore.light == "sky2"
-            if (is_sky or (world.luxcore.light == "infinite" and world.luxcore.image)):
+        if world.superluxcore.light != "none":
+            is_sky = world.superluxcore.light == "sky2"
+            if (is_sky or (world.superluxcore.light == "infinite" and world.superluxcore.image)):
                 rgb_gain_label = "Tint"
             else:
                 rgb_gain_label = "Color"
 
             col = layout.column()
             row = col.row()
-            row.prop(world.luxcore, "color_mode", expand=True)
+            row.prop(world.superluxcore, "color_mode", expand=True)
 
-            if world.luxcore.color_mode == "rgb":
-                col.prop(world.luxcore, "rgb_gain", text=rgb_gain_label)
-            elif world.luxcore.color_mode == "temperature":
-                col.prop(world.luxcore, "temperature", slider=True)
+            if world.superluxcore.color_mode == "rgb":
+                col.prop(world.superluxcore, "rgb_gain", text=rgb_gain_label)
+            elif world.superluxcore.color_mode == "temperature":
+                col.prop(world.superluxcore, "temperature", slider=True)
             else:
                 raise Exception("Unknown color mode")
 
-            has_sun = world.luxcore.sun and world.luxcore.sun.type == "LIGHT"
+            has_sun = world.superluxcore.sun and world.superluxcore.sun.type == "LIGHT"
 
             col = layout.column(align=True)
-            if is_sky and has_sun and world.luxcore.use_sun_gain_for_sky:
-                sun = world.luxcore.sun.data
-                if sun.type == "SUN" and sun.luxcore.light_type == "sun":
-                    col.prop(sun.luxcore, "sun_sky_gain")
+            if is_sky and has_sun and world.superluxcore.use_sun_gain_for_sky:
+                sun = world.superluxcore.sun.data
+                if sun.type == "SUN" and sun.superluxcore.light_type == "sun":
+                    col.prop(sun.superluxcore, "sun_sky_gain")
                 else:
-                    col.prop(sun.luxcore, "gain")
-                col.prop(world.luxcore.sun.data.luxcore, "exposure", slider=True)
+                    col.prop(sun.superluxcore, "gain")
+                col.prop(world.superluxcore.sun.data.superluxcore, "exposure", slider=True)
             else:
                 if is_sky:
-                    col.prop(world.luxcore, "sun_sky_gain")
+                    col.prop(world.superluxcore, "sun_sky_gain")
                 else:
-                    col.prop(world.luxcore, "gain")
-                col.prop(world.luxcore, "exposure", slider=True)
+                    col.prop(world.superluxcore, "gain")
+                col.prop(world.superluxcore, "exposure", slider=True)
 
             if is_sky and has_sun:
-                col.prop(world.luxcore, "use_sun_gain_for_sky")
+                col.prop(world.superluxcore, "use_sun_gain_for_sky")
 
             col = layout.column(align=True)
-            op = col.operator("luxcore.switch_space_data_context", text="Show Light Groups")
+            op = col.operator("superluxcore.switch_space_data_context", text="Show Light Groups")
             op.target = "SCENE"
-            lightgroups = context.scene.luxcore.lightgroups
-            col.prop_search(world.luxcore, "lightgroup",
+            lightgroups = context.scene.superluxcore.lightgroups
+            col.prop_search(world.superluxcore, "lightgroup",
                             lightgroups, "custom",
                             icon=icons.LIGHTGROUP, text="")
 
 
-class LUXCORE_WORLD_PT_sky2(WorldButtonsPanel, Panel):
+class SUPERLUXCORE_WORLD_PT_sky2(WorldButtonsPanel, Panel):
     """
     Sky2 UI Panel
     """
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Sky Settings"
-    bl_parent_id = "LUXCORE_PT_context_world"
+    bl_parent_id = "SUPERLUXCORE_PT_context_world"
     
     @classmethod
     def poll(cls, context):
         engine = context.scene.render.engine
         world = context.world
-        return (world and not world.luxcore.use_cycles_settings
-                and engine == "LUXCORE" and world.luxcore.light == "sky2")
+        return (world and not world.superluxcore.use_cycles_settings
+                and engine == "SUPERLUXCORE" and world.superluxcore.light == "sky2")
     
     def draw(self, context):
         layout = self.layout
@@ -117,41 +117,41 @@ class LUXCORE_WORLD_PT_sky2(WorldButtonsPanel, Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
         
-        layout.prop(world.luxcore, "sun")
-        sun = world.luxcore.sun
+        layout.prop(world.superluxcore, "sun")
+        sun = world.superluxcore.sun
         if sun:
             is_really_a_sun = sun.type == "LIGHT" and sun.data and sun.data.type == "SUN"
 
             if is_really_a_sun:
                 layout.label(text="Using turbidity of sun light:", icon=icons.INFO)
-                layout.prop(sun.data.luxcore, "turbidity")
+                layout.prop(sun.data.superluxcore, "turbidity")
             else:
                 layout.label(text="Not a sun lamp", icon=icons.WARNING)
         else:
-            layout.prop(world.luxcore, "turbidity")
+            layout.prop(world.superluxcore, "turbidity")
 
         # Note: ground albedo can be used without ground color
-        layout.prop(world.luxcore, "groundalbedo")
-        layout.prop(world.luxcore, "ground_enable")
+        layout.prop(world.superluxcore, "groundalbedo")
+        layout.prop(world.superluxcore, "ground_enable")
 
-        if world.luxcore.ground_enable:
-            layout.prop(world.luxcore, "ground_color")
+        if world.superluxcore.ground_enable:
+            layout.prop(world.superluxcore, "ground_color")
 
 
-class LUXCORE_WORLD_PT_infinite(WorldButtonsPanel, Panel):
+class SUPERLUXCORE_WORLD_PT_infinite(WorldButtonsPanel, Panel):
     """
     Infinite UI Panel
     """
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "HDRI Settings"
-    bl_parent_id = "LUXCORE_PT_context_world"
+    bl_parent_id = "SUPERLUXCORE_PT_context_world"
 
     @classmethod
     def poll(cls, context):
         engine = context.scene.render.engine
         world = context.world
-        return (world and not world.luxcore.use_cycles_settings
-                and engine == "LUXCORE" and world.luxcore.light == "infinite")
+        return (world and not world.superluxcore.use_cycles_settings
+                and engine == "SUPERLUXCORE" and world.superluxcore.light == "infinite")
 
     def draw(self, context):
         layout = self.layout
@@ -159,24 +159,24 @@ class LUXCORE_WORLD_PT_infinite(WorldButtonsPanel, Panel):
 
         layout.use_property_split = True
         layout.use_property_decorate = False       
-        layout.template_ID(world.luxcore, "image", open="image.open")
+        layout.template_ID(world.superluxcore, "image", open="image.open")
 
         sub = layout.column(align=True)
-        sub.enabled = world.luxcore.image is not None
-        sub.prop(world.luxcore, "gamma")
-        world.luxcore.image_user.draw(sub, context.scene)
-        sub.prop(world.luxcore, "rotation")
-        sub.prop(world.luxcore, "sampleupperhemisphereonly")
-        sub.prop(world.luxcore, "cdfdim")
+        sub.enabled = world.superluxcore.image is not None
+        sub.prop(world.superluxcore, "gamma")
+        world.superluxcore.image_user.draw(sub, context.scene)
+        sub.prop(world.superluxcore, "rotation")
+        sub.prop(world.superluxcore, "sampleupperhemisphereonly")
+        sub.prop(world.superluxcore, "cdfdim")
         sub.label(text="For free transformation use a sun light", icon=icons.INFO)
-        sub.operator("luxcore.create_sun_hemi")
+        sub.operator("superluxcore.create_sun_hemi")
 
 
-class LUXCORE_WORLD_PT_volume(WorldButtonsPanel, Panel):
+class SUPERLUXCORE_WORLD_PT_volume(WorldButtonsPanel, Panel):
     """
     World UI Panel, shows world volume settings
     """
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Volume"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 3
@@ -184,7 +184,7 @@ class LUXCORE_WORLD_PT_volume(WorldButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         engine = context.scene.render.engine
-        return context.world and engine == "LUXCORE"
+        return context.world and engine == "SUPERLUXCORE"
 
     def draw_header(self, context):
         layout = self.layout
@@ -197,26 +197,26 @@ class LUXCORE_WORLD_PT_volume(WorldButtonsPanel, Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False       
         layout.label(text="Default Volume (used on materials without attached volume):")
-        utils_ui.template_node_tree(layout, world.luxcore, "volume", icons.NTREE_VOLUME,
-                                    "LUXCORE_VOLUME_MT_world_select_volume_node_tree",
-                                    "luxcore.world_show_volume_node_tree",
-                                    "luxcore.world_new_volume_node_tree",
-                                    "luxcore.world_unlink_volume_node_tree")
+        utils_ui.template_node_tree(layout, world.superluxcore, "volume", icons.NTREE_VOLUME,
+                                    "SUPERLUXCORE_VOLUME_MT_world_select_volume_node_tree",
+                                    "superluxcore.world_show_volume_node_tree",
+                                    "superluxcore.world_new_volume_node_tree",
+                                    "superluxcore.world_unlink_volume_node_tree")
 
-        config = context.scene.luxcore.config
-        if config.photongi.enabled and config.engine == "PATH" and world.luxcore.volume:
-            output_node = get_active_output(world.luxcore.volume)
+        config = context.scene.superluxcore.config
+        if config.photongi.enabled and config.engine == "PATH" and world.superluxcore.volume:
+            output_node = get_active_output(world.superluxcore.volume)
             if output_node and output_node.use_photongi:
                 col = layout.column(align=True)
                 col.label(text="PhotonGI cache enabled on world volume!", icon=icons.WARNING)
                 col.label(text="Can lead to VERY long cache computation time!")
 
 
-class LUXCORE_WORLD_PT_performance(WorldButtonsPanel, Panel):
+class SUPERLUXCORE_WORLD_PT_performance(WorldButtonsPanel, Panel):
     """
     World UI Panel, shows stuff that affects the performance of the render
     """
-    COMPAT_ENGINES = {"LUXCORE"}
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Performance"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 4
@@ -224,7 +224,7 @@ class LUXCORE_WORLD_PT_performance(WorldButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         engine = context.scene.render.engine
-        return context.world and engine == "LUXCORE" and context.world.luxcore.light != "none"
+        return context.world and engine == "SUPERLUXCORE" and context.world.superluxcore.light != "none"
 
     def draw_header(self, context):
         layout = self.layout
@@ -237,12 +237,12 @@ class LUXCORE_WORLD_PT_performance(WorldButtonsPanel, Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
         
-        layout.prop(world.luxcore, "importance")
+        layout.prop(world.superluxcore, "importance")
         draw_envlight_cache_ui(layout, context.scene, world)
     
 
-class LUXCORE_WORLD_PT_visibility(WorldButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_WORLD_PT_visibility(WorldButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Ray Visibility"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 5
@@ -251,8 +251,8 @@ class LUXCORE_WORLD_PT_visibility(WorldButtonsPanel, Panel):
     def poll(cls, context):
         engine = context.scene.render.engine
         world = context.world
-        return (engine == "LUXCORE" and world and world.luxcore.light != "none"
-                and not world.luxcore.use_cycles_settings)
+        return (engine == "SUPERLUXCORE" and world and world.superluxcore.light != "none"
+                and not world.superluxcore.use_cycles_settings)
 
     def draw(self, context):
         layout = self.layout
@@ -262,7 +262,7 @@ class LUXCORE_WORLD_PT_visibility(WorldButtonsPanel, Panel):
         layout.use_property_decorate = False
 
         # These settings only work with PATH and TILEPATH, not with BIDIR
-        enabled = context.scene.luxcore.config.engine == "PATH"
+        enabled = context.scene.superluxcore.config.engine == "PATH"
         layout.use_property_split = True
         layout.use_property_decorate = False
 
@@ -272,11 +272,11 @@ class LUXCORE_WORLD_PT_visibility(WorldButtonsPanel, Panel):
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
 
         col = flow.column()
-        col.prop(world.luxcore, "visibility_indirect_diffuse")
+        col.prop(world.superluxcore, "visibility_indirect_diffuse")
         col = flow.column()
-        col.prop(world.luxcore, "visibility_indirect_glossy")
+        col.prop(world.superluxcore, "visibility_indirect_glossy")
         col = flow.column()
-        col.prop(world.luxcore, "visibility_indirect_specular")
+        col.prop(world.superluxcore, "visibility_indirect_specular")
 
         if not enabled:
             layout.label(text="Only supported by Path engines (not by Bidir)", icon=icons.INFO)
@@ -292,9 +292,9 @@ def compatible_panels():
 
 def register():
     for panel in compatible_panels():
-        panel.COMPAT_ENGINES.add("LUXCORE")
+        panel.COMPAT_ENGINES.add("SUPERLUXCORE")
 
 
 def unregister():
     for panel in compatible_panels():
-        panel.COMPAT_ENGINES.remove("LUXCORE")
+        panel.COMPAT_ENGINES.remove("SUPERLUXCORE")

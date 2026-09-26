@@ -3,7 +3,7 @@
 import os, sys, math, time
 sys.path.insert(0, os.path.expanduser(
     "~/Library/Application Support/Blender/5.2/extensions/.local/lib/python3.13/site-packages"))
-import pyluxcore as plc
+import pysuperluxcore as plc
 
 N = 600
 

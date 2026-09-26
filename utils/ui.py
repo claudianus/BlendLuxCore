@@ -9,11 +9,11 @@ def template_node_tree(layout, data, property, icon,
                        operator_unlink=""):
     """
     Example usage:
-    utils_ui.template_node_tree(layout, cam.luxcore, "volume", icons.NTREE_VOLUME,
-                                "LUXCORE_VOLUME_MT_camera_select_volume_node_tree",
-                                "luxcore.camera_show_volume_node_tree",
-                                "luxcore.camera_new_volume_node_tree",
-                                "luxcore.camera_unlink_volume_node_tree")
+    utils_ui.template_node_tree(layout, cam.superluxcore, "volume", icons.NTREE_VOLUME,
+                                "SUPERLUXCORE_VOLUME_MT_camera_select_volume_node_tree",
+                                "superluxcore.camera_show_volume_node_tree",
+                                "superluxcore.camera_new_volume_node_tree",
+                                "superluxcore.camera_unlink_volume_node_tree")
     """
     node_tree = getattr(data, property)
 

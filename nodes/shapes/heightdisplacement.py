@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import IntProperty, FloatProperty, BoolProperty
-from ..base import LuxCoreNodeShape
+from ..base import SuperLuxCoreNodeShape
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeShapeHeightDisplacement(LuxCoreNodeShape, bpy.types.Node):
+class SuperLuxCoreNodeShapeHeightDisplacement(SuperLuxCoreNodeShape, bpy.types.Node):
     bl_label = "Height Displacement"
     bl_width_default = 150
 
@@ -13,9 +13,9 @@ class LuxCoreNodeShapeHeightDisplacement(LuxCoreNodeShape, bpy.types.Node):
     normal_smooth: BoolProperty(name="Smooth Normals", default=True, update=utils_node.force_viewport_mesh_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketShape", "Shape")
-        self.add_input("LuxCoreSocketFloatUnbounded", "Height", 0)
-        self.outputs.new("LuxCoreSocketShape", "Shape")
+        self.add_input("SuperLuxCoreSocketShape", "Shape")
+        self.add_input("SuperLuxCoreSocketFloatUnbounded", "Height", 0)
+        self.outputs.new("SuperLuxCoreSocketShape", "Shape")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "scale")

@@ -1,12 +1,12 @@
 import bpy
-import pyluxcore
+import pysuperluxcore
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ExportHelper
 
 from ..export import mesh_converter
 
 
-class LUXCORE_OT_bake_lxm_proxy(bpy.types.Operator, ExportHelper):
+class SUPERLUXCORE_OT_bake_lxm_proxy(bpy.types.Operator, ExportHelper):
     """
     Bake the active object's evaluated mesh into an .lxm proxy file and
     set it as the object's mesh source. The proxy is memory-mapped at
@@ -14,7 +14,7 @@ class LUXCORE_OT_bake_lxm_proxy(bpy.types.Operator, ExportHelper):
     the point for heavy static assets.
     """
 
-    bl_idname = "luxcore.bake_lxm_proxy"
+    bl_idname = "superluxcore.bake_lxm_proxy"
     bl_label = "Bake .lxm Proxy"
     bl_options = {"UNDO"}
 
@@ -27,7 +27,7 @@ class LUXCORE_OT_bake_lxm_proxy(bpy.types.Operator, ExportHelper):
         return (
             obj is not None
             and obj.type == "MESH"
-            and context.scene.render.engine == "LUXCORE"
+            and context.scene.render.engine == "SUPERLUXCORE"
         )
 
     def invoke(self, context, event):
@@ -45,7 +45,7 @@ class LUXCORE_OT_bake_lxm_proxy(bpy.types.Operator, ExportHelper):
         # Single combined submesh (material slot 0): an .lxm proxy is a
         # single-material mesh. use_instancing=True keeps the mesh in
         # local space — the object's own transform still applies.
-        scene = pyluxcore.Scene()
+        scene = pysuperluxcore.Scene()
         key = "proxybake_" + obj.name
         exported = mesh_converter.convert(
             obj,
@@ -65,7 +65,7 @@ class LUXCORE_OT_bake_lxm_proxy(bpy.types.Operator, ExportHelper):
         path = bpy.path.abspath(self.filepath)
         stride = int(
             getattr(
-                context.scene.luxcore.config, "proxy_cluster_stride", 16
+                context.scene.superluxcore.config, "proxy_cluster_stride", 16
             )
         )
         try:
@@ -74,6 +74,6 @@ class LUXCORE_OT_bake_lxm_proxy(bpy.types.Operator, ExportHelper):
             self.report({"ERROR"}, f"Proxy bake failed: {e}")
             return {"CANCELLED"}
 
-        obj.luxcore.proxy_filepath = self.filepath
+        obj.superluxcore.proxy_filepath = self.filepath
         self.report({"INFO"}, f"Baked {path} — object now renders from proxy")
         return {"FINISHED"}

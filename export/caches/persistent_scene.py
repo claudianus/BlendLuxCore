@@ -1,7 +1,7 @@
-# Persistent LuxCore scene cache for incremental final-render export
+# Persistent SuperLuxCore scene cache for incremental final-render export
 # (A6-II, see doc/incremental_export_design.md).
 #
-# A rendered pyluxcore.Scene normally dies with its RenderSession. Since
+# A rendered pysuperluxcore.Scene normally dies with its RenderSession. Since
 # RenderConfig only *references* the Scene (non-owning constructor), a
 # module-level cache can keep it alive across final renders of the same
 # Blender scene + view layer. The next render then reuses it instead of
@@ -184,13 +184,13 @@ def get(key):
     return _entries.get(key)
 
 
-def store(key, luxcore_scene, exported_objects, member_keys,
+def store(key, superluxcore_scene, exported_objects, member_keys,
           bake_matrices, member_mats, mb_sig, camera_sig, world_sig,
           vis_sig, frame, mat_sig, slot_sig, geo_meta, shape_sig,
           data_ptrs, instancers, dupli_srcs, psys_map,
           instancer_srcs, instancer_singular):
     _entries[key] = {
-        "scene": luxcore_scene,
+        "scene": superluxcore_scene,
         # frame at export time: frame_set() moves animated objects
         # without leaving depsgraph updates, so a changed frame forces
         # the per-member frame_change() re-check below
@@ -218,7 +218,7 @@ def store(key, luxcore_scene, exported_objects, member_keys,
         # property string — same reason: Parse cannot delete stale keys
         "camera_sig": camera_sig,
         "world_sig": world_sig,
-        # {material ptr: luxcore name} — a rename changes the LuxCore
+        # {material ptr: superluxcore name} — a rename changes the SuperLuxCore
         # material name, which objects reference, so it must rebuild;
         # {obj_key: ((mat ptr, slot link), ...)} — slot/link edits are
         # object-side definitions a material delta cannot reach
@@ -584,7 +584,7 @@ def _material_animated(obj):
             return True
         for tree in (
             getattr(mat, "node_tree", None),
-            getattr(getattr(mat, "luxcore", None), "node_tree", None),
+            getattr(getattr(mat, "superluxcore", None), "node_tree", None),
         ):
             if getattr(tree, "animation_data", None) is not None:
                 return True

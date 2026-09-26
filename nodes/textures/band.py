@@ -2,7 +2,7 @@ import bpy
 from bpy.types import PropertyGroup
 from bpy.props import BoolProperty, CollectionProperty, EnumProperty, FloatProperty, FloatVectorProperty, IntProperty, StringProperty
 from bpy_extras import anim_utils
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ... import icons
 from ...utils import node as utils_node
 
@@ -36,7 +36,7 @@ class ColorRampItem(PropertyGroup):
                                    default=False, update=update_remove_keyframe)
 
 
-class LuxCoreNodeTexBand(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexBand(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "ColorRamp"
     bl_width_default = 200
 
@@ -85,9 +85,9 @@ class LuxCoreNodeTexBand(LuxCoreNodeTexture, bpy.types.Node):
     ramp_items: CollectionProperty(type=ColorRampItem)
     
     def init(self, context):
-        self.add_input("LuxCoreSocketFloat0to1", "Amount", 1)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Amount", 1)
 
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
         # Add inital items
         item_0 = self.ramp_items.add()
@@ -158,7 +158,7 @@ class LuxCoreNodeTexBand(LuxCoreNodeTexture, bpy.types.Node):
             else:
                 row.prop(item, "add_keyframe", toggle=True, icon=icons.ADD_KEYFRAME)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "band",
             "interpolation": self.interpolation,
@@ -169,4 +169,4 @@ class LuxCoreNodeTexBand(LuxCoreNodeTexture, bpy.types.Node):
             definitions["offset%d" % index] = item.offset
             definitions["value%d" % index] = list(item.value)
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

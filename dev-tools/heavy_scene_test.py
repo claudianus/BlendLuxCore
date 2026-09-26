@@ -1,5 +1,5 @@
 """
-Heavy-scene integration test (standalone pyluxcore).
+Heavy-scene integration test (standalone pysuperluxcore).
 
     python3 dev-tools/heavy_scene_test.py
 
@@ -17,7 +17,7 @@ import resource
 import sys
 
 import numpy as np
-import pyluxcore
+import pysuperluxcore
 
 LXM = "/tmp/memstage_mesh.lxm"      # from memory_stages_test.py
 PLY = "/tmp/memstage_src.ply"       # same source mesh as plain PLY
@@ -35,10 +35,10 @@ def main():
             sys.exit(f"missing {f} — run memory_stages_test.py and "
                      "envcdf_test.py first")
 
-    pyluxcore.Init()
+    pysuperluxcore.Init()
     base = rss_mb()
 
-    scn = pyluxcore.Properties()
+    scn = pysuperluxcore.Properties()
     scn.SetFromString(f"""
 scene.objects.terrain.ply = "{LXM}"
 scene.objects.terrain.material = "terra"
@@ -58,15 +58,15 @@ scene.camera.lookat.orig = 0 -9 4
 scene.camera.lookat.target = 0 0 0.6
 scene.camera.up = 0 0 1
 """)
-    scene = pyluxcore.Scene()
+    scene = pysuperluxcore.Scene()
     scene.Parse(scn)
 
-    spill = pyluxcore.Properties()
-    spill.Set(pyluxcore.Property("scene.spill.enable", True))
-    spill.Set(pyluxcore.Property("scene.spill.minbytes", 1))
+    spill = pysuperluxcore.Properties()
+    spill.Set(pysuperluxcore.Property("scene.spill.enable", True))
+    spill.Set(pysuperluxcore.Property("scene.spill.minbytes", 1))
     scene.Parse(spill)
 
-    cfg = pyluxcore.Properties()
+    cfg = pysuperluxcore.Properties()
     cfg.SetFromString(f"""
 renderengine.type = "PATHCPU"
 sampler.type = "SOBOL"
@@ -76,8 +76,8 @@ batch.haltspp = 16
 film.outputs.0.type = RGB_IMAGEPIPELINE
 film.outputs.0.filename = {OUT}
 """)
-    rc = pyluxcore.RenderConfig(cfg, scene)
-    session = pyluxcore.RenderSession(rc)
+    rc = pysuperluxcore.RenderConfig(cfg, scene)
+    session = pysuperluxcore.RenderSession(rc)
     session.Start()
 
     import time

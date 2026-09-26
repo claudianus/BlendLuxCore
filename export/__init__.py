@@ -6,11 +6,11 @@ import types
 _needs_reload = "bpy" in locals()
 
 import bpy
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from ..utils import render as utils_render
 from ..utils import compatibility as utils_compatibility
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from . import (
     caches,
     camera,
@@ -161,9 +161,9 @@ class Exporter(object):
         self.object_blur_enabled = False
 
         # A dictionary with the following mapping:
-        # {node_key: luxcore_name}
-        # Most of the time node_key == luxcore_name, but some nodes have to insert
-        # implicit textures n front of themselves which changes their luxcore_name.
+        # {node_key: superluxcore_name}
+        # Most of the time node_key == superluxcore_name, but some nodes have to insert
+        # implicit textures n front of themselves which changes their superluxcore_name.
         # Avoids re-exporting the same node multiple times.
         # TODO: currently the node cache has to be cleared when an output node starts
         # to export, because we don't have one global properties object.
@@ -184,7 +184,7 @@ class Exporter(object):
         result = self.export_scene(depsgraph, context, engine, view_layer)
         if result is None:
             return None
-        luxcore_scene, config_props = result
+        superluxcore_scene, config_props = result
 
         scene = depsgraph.scene_eval
         renderengine_type = config_props.Get("renderengine.type").GetString()
@@ -204,7 +204,7 @@ class Exporter(object):
                 cache_caustics = config_props.Get(
                     "path.photongi.caustic.enabled", [False]
                 ).GetBool()
-                cache_envlight = scene.luxcore.config.envlight_cache.enabled
+                cache_envlight = scene.superluxcore.config.envlight_cache.enabled
                 cache_dls = (
                     config_props.Get("lightstrategy.type", [""]).GetString()
                     == "DLS_CACHE"
@@ -263,15 +263,15 @@ class Exporter(object):
                 )
 
         return self.create_render_session(
-            config_props, luxcore_scene, progress_cb
+            config_props, superluxcore_scene, progress_cb
         )
 
     def export_scene(
         self, depsgraph, context=None, engine=None, view_layer=None
     ):
-        """Convert the Blender scene to a pyluxcore scene + config props.
+        """Convert the Blender scene to a pysuperluxcore scene + config props.
 
-        Returns ``(luxcore_scene, config_props)`` or None when the user
+        Returns ``(superluxcore_scene, config_props)`` or None when the user
         cancelled. Runs on the main thread (depsgraph access); the worker
         takes over from create_render_session() onward.
         """
@@ -300,9 +300,9 @@ class Exporter(object):
 
         # Scene
         image_resize_policy_props = (
-            scene.luxcore.config.image_resize_policy.convert()
+            scene.superluxcore.config.image_resize_policy.convert()
         )
-        scene_props = pyluxcore.Properties()
+        scene_props = pysuperluxcore.Properties()
         is_viewport_render = context is not None
 
         # Camera and world are converted up-front: their signatures are
@@ -326,7 +326,7 @@ class Exporter(object):
         self.world_cache.world_name = scene.world.name_full if scene.world else None
 
         # Persistent-scene reuse (A6-II): a final render can reuse the
-        # pyluxcore.Scene cached from the previous render of the same
+        # pysuperluxcore.Scene cached from the previous render of the same
         # scene + view layer when the accumulated depsgraph dirty set
         # allows it (see doc/incremental_export_design.md). The decision
         # is made before scene creation because the camera has to be
@@ -340,7 +340,7 @@ class Exporter(object):
         camera_sig = None
         world_sig = None
         if not is_viewport_render and utils.is_valid_camera(scene.camera):
-            _blur = scene.camera.data.luxcore.motion_blur
+            _blur = scene.camera.data.superluxcore.motion_blur
             _mb_enabled = (
                 _blur.enable
                 and (_blur.object_blur or _blur.camera_blur)
@@ -355,8 +355,8 @@ class Exporter(object):
             vis_sig = {
                 utils.make_key(o): (
                     o.hide_render,
-                    o.luxcore.exclude_from_render,
-                    getattr(o.luxcore, "is_light_portal", False),
+                    o.superluxcore.exclude_from_render,
+                    getattr(o.superluxcore, "is_light_portal", False),
                     o.visible_camera,
                     o.visible_diffuse,
                     o.visible_glossy,
@@ -366,7 +366,7 @@ class Exporter(object):
                 )
                 for o in scene.objects
             }
-            # Material identity (rename changes the LuxCore name) and
+            # Material identity (rename changes the SuperLuxCore name) and
             # slot layout per member object — both force a rebuild
             # because they change object-side definitions a material
             # delta cannot reach.
@@ -381,7 +381,7 @@ class Exporter(object):
                         continue
                     mptr = str(mat.original.as_pointer())
                     slots.append((mptr, slot.link))
-                    mat_sig[mptr] = utils.get_luxcore_name(
+                    mat_sig[mptr] = utils.get_superluxcore_name(
                         mat.original, is_viewport_render
                     )
                 slot_sig[utils.make_key(o)] = tuple(slots)
@@ -527,17 +527,17 @@ class Exporter(object):
                 if _changed:
                     geometry_keys.add(_key)
 
-        luxcore_scene = (
+        superluxcore_scene = (
             pentry["scene"]
             if pentry is not None
-            else pyluxcore.Scene(
-                pyluxcore.Properties(), image_resize_policy_props
+            else pysuperluxcore.Scene(
+                pysuperluxcore.Properties(), image_resize_policy_props
             )
         )
-        luxcore_scene.Parse(camera_props)
+        superluxcore_scene.Parse(camera_props)
 
         if utils.is_valid_camera(scene.camera):
-            blur_settings = scene.camera.data.luxcore.motion_blur
+            blur_settings = scene.camera.data.superluxcore.motion_blur
             # Don't export camera blur in viewport
             camera_blur = blur_settings.camera_blur and not context
             self.motion_blur_enabled = (
@@ -565,22 +565,22 @@ class Exporter(object):
                     # leave the transform-delta set.
                     _subsumed = self._apply_geometry_deltas(
                         pentry, geometry_keys, depsgraph,
-                        luxcore_scene, view_layer, engine
+                        superluxcore_scene, view_layer, engine
                     )
                     transform_deltas -= _subsumed
                 self._apply_transform_deltas(
-                    pentry, transform_deltas, depsgraph, luxcore_scene
+                    pentry, transform_deltas, depsgraph, superluxcore_scene
                 )
                 if material_dirty:
                     self._reexport_scene_materials(
-                        depsgraph, luxcore_scene
+                        depsgraph, superluxcore_scene
                     )
                 # Instancer sets are flushed last: refreshed dupli
                 # bases must already exist for DuplicateObject to bind.
                 if instancer_keys:
                     self._refresh_dupli_sets(
                         pentry, instancer_keys, depsgraph,
-                        luxcore_scene
+                        superluxcore_scene
                     )
                 pentry["frame"] = depsgraph.scene.frame_current
                 instances = {}
@@ -603,10 +603,10 @@ class Exporter(object):
                     " falling back to full export"
                 )
                 pentry = None
-                luxcore_scene = pyluxcore.Scene(
-                    pyluxcore.Properties(), image_resize_policy_props
+                superluxcore_scene = pysuperluxcore.Scene(
+                    pysuperluxcore.Properties(), image_resize_policy_props
                 )
-                luxcore_scene.Parse(self.camera_cache.props)
+                superluxcore_scene.Parse(self.camera_cache.props)
 
         if pentry is None:
             instances = self.object_cache2.first_run(
@@ -614,7 +614,7 @@ class Exporter(object):
                 depsgraph,
                 view_layer,
                 engine,
-                luxcore_scene,
+                superluxcore_scene,
                 scene_props,
                 context,
             )
@@ -639,7 +639,7 @@ class Exporter(object):
                     scene,
                     depsgraph,
                     self.object_cache2.exported_objects,
-                    luxcore_scene,
+                    superluxcore_scene,
                     instances,
                 )
 
@@ -660,22 +660,22 @@ class Exporter(object):
         # World (converted above the persistent-scene decision)
         scene_props.Set(world_props)
 
-        # Out-of-core geometry spilling (LuxCore scene.spill.*): mesh
+        # Out-of-core geometry spilling (SuperLuxCore scene.spill.*): mesh
         # buffers over the threshold are file-backed before the BVH is
         # built, so the kernel can evict cold pages under pressure.
-        if scene.luxcore.config.spill_geometry:
-            scene_props.Set(pyluxcore.Property("scene.spill.enable", True))
-            scene_props.Set(pyluxcore.Property(
+        if scene.superluxcore.config.spill_geometry:
+            scene_props.Set(pysuperluxcore.Property("scene.spill.enable", True))
+            scene_props.Set(pysuperluxcore.Property(
                 "scene.spill.minbytes",
-                scene.luxcore.config.spill_geometry_minmb * 1024 * 1024,
+                scene.superluxcore.config.spill_geometry_minmb * 1024 * 1024,
             ))
-            scene_props.Set(pyluxcore.Property(
-                "scene.spill.images", scene.luxcore.config.spill_images
+            scene_props.Set(pysuperluxcore.Property(
+                "scene.spill.images", scene.superluxcore.config.spill_images
             ))
 
         if (
-            scene.luxcore.debug.enabled
-            and scene.luxcore.debug.print_properties
+            scene.superluxcore.debug.enabled
+            and scene.superluxcore.debug.print_properties
         ):
             print("-" * 50)
             print("DEBUG: Scene Properties:\n")
@@ -685,12 +685,12 @@ class Exporter(object):
             print(scene_props)
             print("-" * 50)
         parse_start = time()
-        luxcore_scene.Parse(scene_props)
+        superluxcore_scene.Parse(scene_props)
         if stats:
             stats.export_time_scene_parse.value += time() - parse_start
         # We can only duplicate the instances *after* the scene_props were
-        # parsed so the base objects are available for luxcore_scene
-        self.object_cache2.duplicate_instances(instances, luxcore_scene, stats)
+        # parsed so the base objects are available for superluxcore_scene
+        self.object_cache2.duplicate_instances(instances, superluxcore_scene, stats)
         # Dupli source objects need their "src+dupli" set re-flushed
         # when an instancer changes — keep the source->(ExportedObject,
         # compound obj_key) map for the persistent-scene delta path.
@@ -779,7 +779,7 @@ class Exporter(object):
                         ] = _ok
             persistent_scene.store(
                 pkey,
-                luxcore_scene,
+                superluxcore_scene,
                 self.object_cache2.exported_objects,
                 set(vis_sig),
                 self.object_cache2.bake_matrices,
@@ -829,21 +829,21 @@ class Exporter(object):
         if stats:
             stats.export_time_config.value += time() - config_start
 
-        light_count = luxcore_scene.GetLightCount()
+        light_count = superluxcore_scene.GetLightCount()
         if light_count > 1000:
             msg = (
                 f"The scene contains a lot of light sources ({light_count}), "
                 "performance might suffer "
                 f"(each triangle of a meshlight counts as a separate light)"
             )
-            LuxCoreErrorLog.add_warning(msg)
+            SuperLuxCoreErrorLog.add_warning(msg)
         if stats:
             stats.light_count.value = light_count
 
         # Create the renderconfig
         if (
-            scene.luxcore.debug.enabled
-            and scene.luxcore.debug.print_properties
+            scene.superluxcore.debug.enabled
+            and scene.superluxcore.debug.print_properties
         ):
             print("-" * 50)
             print("DEBUG: Config Properties:\n")
@@ -893,41 +893,41 @@ class Exporter(object):
             self._init_stats(stats, config_props, scene)
 
         # Final renders can release Blender's decoded image buffers:
-        # LuxCore reads images from files and never touches ImBuf, so
+        # SuperLuxCore reads images from files and never touches ImBuf, so
         # the same texture data otherwise sits in RAM twice for the
         # whole render. Only file-backed, unmodified images are freed.
         if not is_viewport_render and getattr(
-            scene.luxcore.config, "free_blender_image_buffers", True
+            scene.superluxcore.config, "free_blender_image_buffers", True
         ):
             image.ImageExporter.free_blender_buffers()
 
         # Do not hold reference to temporary data
         self.scene = None
-        return luxcore_scene, config_props
+        return superluxcore_scene, config_props
 
     def create_render_session(
-        self, config_props, luxcore_scene, progress_cb=None
+        self, config_props, superluxcore_scene, progress_cb=None
     ):
         """RenderConfig + kernel pre-compile + RenderSession.
 
-        Pure pyluxcore - no depsgraph/bpy-scene access, so it is safe on
+        Pure pysuperluxcore - no depsgraph/bpy-scene access, so it is safe on
         the session worker thread (that is where the viewport runs it).
         ``progress_cb`` receives ``(index, count)`` while GPU kernels
         compile; pass None for a silent fill.
         """
         from ..engine.session_worker import precompile_kernels
 
-        renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
+        renderconfig = pysuperluxcore.RenderConfig(config_props, superluxcore_scene)
         precompile_kernels(config_props, renderconfig, progress_cb)
-        return pyluxcore.RenderSession(renderconfig)
+        return pysuperluxcore.RenderSession(renderconfig)
 
     def _apply_transform_deltas(
-        self, pentry, transform_deltas, depsgraph, luxcore_scene
+        self, pentry, transform_deltas, depsgraph, superluxcore_scene
     ):
         """
         Apply transform-only updates to a reused persistent scene.
 
-        For objects exported with a transformation on the LuxCore object
+        For objects exported with a transformation on the SuperLuxCore object
         (instanced/shared/motion-blur exports) the new absolute matrix
         replaces the old one. For objects with the transform baked into
         the mesh vertices, UpdateObjectTransformation applies a relative
@@ -955,7 +955,7 @@ class Exporter(object):
                 delta = new_matrix
             mat_list = matrix_to_list(delta)
             for part in exported.parts:
-                luxcore_scene.UpdateObjectTransformation(
+                superluxcore_scene.UpdateObjectTransformation(
                     part.lux_obj, mat_list
                 )
             pentry["bake"][key] = new_matrix.copy()
@@ -1002,7 +1002,7 @@ class Exporter(object):
             or uses_displacement(obj)
             or (
                 self.motion_blur_enabled
-                and obj.luxcore.enable_motion_blur
+                and obj.superluxcore.enable_motion_blur
             )
         )
         if cur_instancing != use_instancing:
@@ -1019,7 +1019,7 @@ class Exporter(object):
         pentry,
         geometry_keys,
         depsgraph,
-        luxcore_scene,
+        superluxcore_scene,
         view_layer,
         engine,
     ):
@@ -1055,7 +1055,7 @@ class Exporter(object):
                 # the whole dupli set follows the edit (DefineMesh
                 # rewires the dupli base and all duplicates).
                 if not self._dupli_src_inplace(
-                    pentry, key, eval_by_key, depsgraph, luxcore_scene
+                    pentry, key, eval_by_key, depsgraph, superluxcore_scene
                 ):
                     raise ValueError(
                         f"{key}: dupli-source mesh cannot be redefined"
@@ -1083,7 +1083,7 @@ class Exporter(object):
                         obj,
                         mesh_key,
                         depsgraph,
-                        luxcore_scene,
+                        superluxcore_scene,
                         False,
                         use_instancing,
                         obj.matrix_world,
@@ -1114,13 +1114,13 @@ class Exporter(object):
                 subsumed.add(key)
         if reexport_keys:
             self._reexport_objects(
-                pentry, reexport_keys, depsgraph, luxcore_scene,
+                pentry, reexport_keys, depsgraph, superluxcore_scene,
                 view_layer, engine
             )
         return subsumed
 
     def _dupli_src_inplace(
-        self, pentry, key, eval_by_key, depsgraph, luxcore_scene
+        self, pentry, key, eval_by_key, depsgraph, superluxcore_scene
     ):
         """
         In-place ``DefineMesh`` for a dupli source's *instanced* mesh.
@@ -1165,7 +1165,7 @@ class Exporter(object):
                 obj,
                 mesh_key,
                 depsgraph,
-                luxcore_scene,
+                superluxcore_scene,
                 False,
                 use_instancing,
                 obj.matrix_world,
@@ -1185,7 +1185,7 @@ class Exporter(object):
         pentry,
         keys,
         depsgraph,
-        luxcore_scene,
+        superluxcore_scene,
         view_layer,
         engine,
     ):
@@ -1239,12 +1239,12 @@ class Exporter(object):
                 raise ValueError(f"{key}: dupli source re-export unsafe")
             exported = pentry["objects"].get(key)
             if exported is not None:
-                exported.delete(luxcore_scene)
+                exported.delete(superluxcore_scene)
                 # The instancer/pointcloud "dupli" object is a single
                 # scene object, not covered by the indexed names in
                 # delete(); drop it so the re-export can redefine it.
                 for part in getattr(exported, "parts", []):
-                    luxcore_scene.DeleteObject(part.lux_obj + "dupli")
+                    superluxcore_scene.DeleteObject(part.lux_obj + "dupli")
             # Drop stale cache entries so the re-export is fresh:
             # mesh cache by mesh_key, hair cache by key prefix.
             meta = pentry["geo_meta"].pop(key, None)
@@ -1263,13 +1263,13 @@ class Exporter(object):
                     cache.exported_hair.pop(
                         make_psys_key(eval_obj, _psys, _inst), None
                     )
-            scratch = pyluxcore.Properties()
+            scratch = pysuperluxcore.Properties()
             new_exported = cache._convert_obj(
                 self,
                 dg_inst,
                 dg_inst.object,
                 depsgraph,
-                luxcore_scene,
+                superluxcore_scene,
                 scratch,
                 False,
                 view_layer,
@@ -1277,9 +1277,9 @@ class Exporter(object):
             )
             if new_exported is None:
                 raise ValueError(f"{key}: re-export produced nothing")
-            luxcore_scene.Parse(scratch)
+            superluxcore_scene.Parse(scratch)
             # Pointcloud dupis are staged for the post-Parse flush.
-            cache.duplicate_instances({}, luxcore_scene, None)
+            cache.duplicate_instances({}, superluxcore_scene, None)
             # Refresh the entry's per-object records. _convert_obj
             # already wrote exported_objects and bake_matrices — those
             # dicts are shared with the cache, while the entry keeps
@@ -1317,19 +1317,19 @@ class Exporter(object):
                     continue
                 mptr = str(mat.original.as_pointer())
                 slots.append((mptr, slot.link))
-                pentry["mat_sig"][mptr] = utils.get_luxcore_name(
+                pentry["mat_sig"][mptr] = utils.get_superluxcore_name(
                     mat.original, False
                 )
             pentry["slot_sig"][key] = tuple(slots)
 
     def _refresh_dupli_sets(
-        self, pentry, instancer_keys, depsgraph, luxcore_scene
+        self, pentry, instancer_keys, depsgraph, superluxcore_scene
     ):
         """
         Re-flush the dupli objects of every source instanced by a dirty
         or moved instancer.
 
-        LuxCore stores a source's dupli instances as a single scene
+        SuperLuxCore stores a source's dupli instances as a single scene
         object per part (``src+dupli``) holding the flattened transform
         list of *all* its instances — so the set is rebuilt wholesale:
         collect every current instance of the source, update the base
@@ -1344,7 +1344,7 @@ class Exporter(object):
             raise ValueError(
                 "instancer delta unsupported with object motion blur"
             )
-        mat_to_list = pyluxcore.BlenderMatrix4x4ToList
+        mat_to_list = pysuperluxcore.BlenderMatrix4x4ToList
         # One pass over the instance list: collect each dirty
         # instancer's current source set plus, per source, the flat
         # matrix list and object IDs of its visible instances — the
@@ -1363,7 +1363,7 @@ class Exporter(object):
             cur_srcs.setdefault(pkey, set()).add(sptr)
             if not (dg_inst.show_self or dg_inst.show_particles):
                 continue
-            obj_id = dg_inst.object.original.luxcore.id
+            obj_id = dg_inst.object.original.superluxcore.id
             if obj_id == -1:
                 obj_id = dg_inst.random_id & 0xFFFFFFFE
             inst_ids.setdefault(sptr, []).append(obj_id)
@@ -1402,14 +1402,14 @@ class Exporter(object):
                         f"{key}: dupli set {src_key} not refreshable"
                     )
                 for part in exported.parts:
-                    luxcore_scene.DeleteObject(part.lux_obj + "dupli")
-                    luxcore_scene.UpdateObjectTransformation(
+                    superluxcore_scene.DeleteObject(part.lux_obj + "dupli")
+                    superluxcore_scene.UpdateObjectTransformation(
                         part.lux_obj, mats[:16]
                     )
                     if count > 1:
                         # DuplicateObject wants typed buffers, same as
                         # Duplis.matrices/object_ids in first_run.
-                        luxcore_scene.DuplicateObject(
+                        superluxcore_scene.DuplicateObject(
                             part.lux_obj,
                             part.lux_obj + "dupli",
                             count - 1,
@@ -1423,7 +1423,7 @@ class Exporter(object):
         would produce today.
 
         Material edits can change the shape stack — adding a
-        displacement link or a luxcore shape node means a *new* wrapper
+        displacement link or a superluxcore shape node means a *new* wrapper
         shape is required, which a material re-export alone cannot
         create. Replaying the same functions the export path uses into
         a scratch Properties catches both name-level (added/removed
@@ -1432,12 +1432,12 @@ class Exporter(object):
         sentinel rather than an error.
         """
         try:
-            scratch = pyluxcore.Properties()
+            scratch = pysuperluxcore.Properties()
             shapes = []
             for base_name, mat_index in base_list:
                 mat = get_material(obj, mat_index, depsgraph)
                 node_tree = (
-                    mat.original.luxcore.node_tree
+                    mat.original.superluxcore.node_tree
                     if mat is not None
                     else None
                 )
@@ -1454,7 +1454,7 @@ class Exporter(object):
         except Exception:
             return None
 
-    def _reexport_scene_materials(self, depsgraph, luxcore_scene):
+    def _reexport_scene_materials(self, depsgraph, superluxcore_scene):
         """
         Re-export every member material into the cached scene.
 
@@ -1478,7 +1478,7 @@ class Exporter(object):
                 _lux_name, mat_props = material.convert(
                     self, depsgraph, mat.original, False, obj.name
                 )
-                luxcore_scene.Parse(mat_props)
+                superluxcore_scene.Parse(mat_props)
         print(
             "[Exporter] Re-exported"
             f" {len(done)} material(s) into cached scene"
@@ -1547,7 +1547,7 @@ class Exporter(object):
         """Prepare deferred session work for the session worker.
 
         Runs on the main thread (depsgraph access) but never touches the
-        live pyluxcore session: scene mutations are recorded on a
+        live pysuperluxcore session: scene mutations are recorded on a
         RecordedScene and session-level parses become props payloads.
         Returns a list of ``(kind, payload)`` jobs - ``("edit", ops)``
         and/or ``("parse", props)`` - for the caller to submit.
@@ -1571,7 +1571,7 @@ class Exporter(object):
                 jobs.append(("edit", recorded.drain()))
 
             if changes & Change.REQUIRES_SESSION_PARSE:
-                props = pyluxcore.Properties()
+                props = pysuperluxcore.Properties()
                 if changes & Change.IMAGEPIPELINE:
                     props.Set(self.imagepipeline_cache.props)
                 if changes & Change.HALT:
@@ -1589,8 +1589,8 @@ class Exporter(object):
         if changes & Change.HALT:
             session.Parse(self.halt_cache.props)
 
-    def _update_scene(self, depsgraph, context, changes, luxcore_scene):
-        props = pyluxcore.Properties()
+    def _update_scene(self, depsgraph, context, changes, superluxcore_scene):
+        props = pysuperluxcore.Properties()
 
         if changes & Change.CAMERA:
             # We already converted the new camera settings during
@@ -1599,7 +1599,7 @@ class Exporter(object):
 
         if changes & Change.OBJECT:
             self.object_cache2.update(
-                self, depsgraph, luxcore_scene, props, context
+                self, depsgraph, superluxcore_scene, props, context
             )
 
         if changes & Change.MATERIAL:
@@ -1611,23 +1611,23 @@ class Exporter(object):
 
                 try:
                     exported_obj = self.object_cache2.exported_objects.pop(key)
-                    exported_obj.delete(luxcore_scene)
+                    exported_obj.delete(superluxcore_scene)
                 except KeyError:
                     # This is ok, not every exportable object is added to exported_objects
                     pass
 
             if self.visibility_cache.objects_to_remove:
-                # luxcore_scene.RemoveUnusedMeshes()  # TODO for some reason this deletes even some meshes that are still in use
-                luxcore_scene.RemoveUnusedMaterials()
-                luxcore_scene.RemoveUnusedTextures()
-                luxcore_scene.RemoveUnusedImageMaps()
+                # superluxcore_scene.RemoveUnusedMeshes()  # TODO for some reason this deletes even some meshes that are still in use
+                superluxcore_scene.RemoveUnusedMaterials()
+                superluxcore_scene.RemoveUnusedTextures()
+                superluxcore_scene.RemoveUnusedImageMaps()
 
         if changes & Change.WORLD:
             if (
                 not context.scene.world
-                or context.scene.world.luxcore.light == "none"
+                or context.scene.world.superluxcore.light == "none"
             ):
-                luxcore_scene.DeleteLight(WORLD_BACKGROUND_LIGHT_NAME)
+                superluxcore_scene.DeleteLight(WORLD_BACKGROUND_LIGHT_NAME)
 
             world_props = world.convert(
                 self, depsgraph, context.scene, is_viewport_render=True
@@ -1643,7 +1643,7 @@ class Exporter(object):
         # film-level test (batch.haltnoisethreshold, exported via the legacy
         # batch.haltthreshold alias) is opt-in through the noise-threshold
         # halt condition; -1 renders as "n/a" and is never overwritten by
-        # update_from_luxcore_stats.
+        # update_from_superluxcore_stats.
         has_noise_test = (
             "TILE" in render_engine
             or config_props.Get("batch.haltnoisethreshold", [-1]).GetFloat() > 0
@@ -1653,7 +1653,7 @@ class Exporter(object):
         sampler = config_props.Get("sampler.type").GetString()
         stats.sampler.value = utils_render.sampler_to_str(sampler)
 
-        config_settings = scene.luxcore.config
+        config_settings = scene.superluxcore.config
         path_settings = config_settings.path
 
         if render_engine == "BIDIRCPU":

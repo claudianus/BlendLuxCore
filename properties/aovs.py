@@ -4,7 +4,7 @@ from bpy.types import PropertyGroup
 
 
 # Attached to view layer
-class LuxCoreAOVSettings(PropertyGroup):
+class SuperLuxCoreAOVSettings(PropertyGroup):
     # Basic Information
     rgb: BoolProperty(name="RGB", default=False,
                        description="Raw RGB values (HDR)")

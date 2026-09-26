@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import EnumProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexObjectID(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexObjectID(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Object ID"
     bl_width_default = 150
 
@@ -30,16 +30,16 @@ class LuxCoreNodeTexObjectID(LuxCoreNodeTexture, bpy.types.Node):
                         update=change_mode)
 
     def init(self, context):
-        self.outputs.new("LuxCoreSocketColor", "Color")
-        self.outputs.new("LuxCoreSocketFloatUnbounded", "Value")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketFloatUnbounded", "Value")
         self.outputs["Value"].enabled = False
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "mode")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": self.mode,
         }
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

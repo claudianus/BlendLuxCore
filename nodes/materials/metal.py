@@ -1,13 +1,13 @@
 import bpy
 from bpy.props import FloatProperty, BoolProperty, EnumProperty
-from ..base import LuxCoreNodeMaterial
+from ..base import SuperLuxCoreNodeMaterial
 from ... import utils
 from ...utils import node as utils_node
 from ...utils.node import Roughness
 from .glossytranslucent import (DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION,
                               MULTIBOUNCE_DESCRIPTION)
 
-class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
+class SuperLuxCoreNodeMatMetal(SuperLuxCoreNodeMaterial, bpy.types.Node):
     """metal material node"""
     bl_label = "Metal Material"
     bl_width_default = 200
@@ -29,7 +29,7 @@ class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
         if is_fresnel and self.is_first_input_change:
             self.is_first_input_change = False
             node_tree = self.id_data
-            fresnel_tex = node_tree.nodes.new("LuxCoreNodeTexFresnel")
+            fresnel_tex = node_tree.nodes.new("SuperLuxCoreNodeTexFresnel")
             fresnel_tex.location = (self.location.x - 300, self.location.y)
             node_tree.links.new(fresnel_tex.outputs[0], self.inputs["Fresnel"])
         utils_node.force_viewport_update(self, context)
@@ -56,14 +56,14 @@ class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
                               description=MULTIBOUNCE_DESCRIPTION)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Color", (0.7, 0.7, 0.7))
-        self.inputs.new("LuxCoreSocketFresnel", "Fresnel")
+        self.add_input("SuperLuxCoreSocketColor", "Color", (0.7, 0.7, 0.7))
+        self.inputs.new("SuperLuxCoreSocketFresnel", "Fresnel")
         self.inputs["Fresnel"].enabled = False
         Roughness.init(self, 0.05)
         
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "input_type", expand=True)
@@ -72,7 +72,7 @@ class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
             layout.prop(self, "multibounce")
         Roughness.draw(self, context, layout)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "metal2",
             "distribution": self.distribution,
@@ -95,4 +95,4 @@ class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
             
         Roughness.export(self, exporter, depsgraph, props, definitions)
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

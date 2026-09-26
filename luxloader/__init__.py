@@ -1,4 +1,4 @@
-"""This module deals with loading/downloading pyluxcore."""
+"""This module deals with loading/downloading pysuperluxcore."""
 
 import pathlib
 import os
@@ -23,11 +23,11 @@ from _bpy_internal.extensions import wheel_manager
 
 from .. import utils
 
-# The variable PYLUXCORE_VERSION specifies the release version of pyluxcore
+# The variable PYSUPERLUXCORE_VERSION specifies the release version of pysuperluxcore
 # that will be downloaded from PyPi during the standard installation of
-# BlendLuxCore. Please update this variable ONLY AFTER the targeted version of
-# pyluxcore has been released on PyPi.
-PYLUXCORE_VERSION = "2.11.2"
+# SuperLuxCore. Please update this variable ONLY AFTER the targeted version of
+# pysuperluxcore has been released on PyPi.
+PYSUPERLUXCORE_VERSION = "2.11.2"
 
 # Module folders
 ROOT_FOLDER = utils.get_module_path()  # The root dir of the package
@@ -39,7 +39,7 @@ EXTENSIONS_FOLDER = pathlib.Path(bpy.utils.user_resource("EXTENSIONS"))
 
 # Settings file
 SETTINGS_FOLDER = pathlib.Path(
-    bpy.utils.user_resource("CONFIG", path="blendluxcore", create=True)
+    bpy.utils.user_resource("CONFIG", path="superluxcore", create=True)
 )
 SETTINGS_FILENAME = "blc_settings.json"
 SETTINGS_FILEPATH = SETTINGS_FOLDER / SETTINGS_FILENAME
@@ -49,8 +49,8 @@ def _hash_wheels(wheels):
     """Hash a collection of wheel requirements.
 
     Wheel requirement valid types are `pathlib.Path` or `str`:
-    - Path('/tmp/pyluxcore-2.11.0-cp313-cp313-linux_x86_64.whl')
-    - str("pyluxcore==2.10.1")
+    - Path('/tmp/pysuperluxcore-2.11.0-cp313-cp313-linux_x86_64.whl')
+    - str("pysuperluxcore==2.10.1")
     - ...
 
     """
@@ -98,7 +98,7 @@ def _download_wheels(wheel_requirements, no_deps, no_index):
         except subprocess.CalledProcessError as err:
             print(err.stdout)
             raise RuntimeError(
-                "[BLC] Failed to download LuxCore "
+                "[BLC] Failed to download SuperLuxCore "
                 f"with return code {err.returncode} "
                 f"and return message {err.stdout}"
             ) from err
@@ -108,7 +108,7 @@ def _download_wheels(wheel_requirements, no_deps, no_index):
 
 
 INSTALL_INFO_HEADER = """\
-# This file is intended to store information about pyluxcore installation.
+# This file is intended to store information about pysuperluxcore installation.
 # It is used to determine whether a new installation is necessary at each
 # startup.
 # Only one entry should be different from 'None', it indicates from which
@@ -125,7 +125,7 @@ def _save_installation_info(whl_hash):
     to ensure that the type of installation is saved implicitly as well.
     """
     assert whl_hash
-    info_file = ROOT_FOLDER / "pyluxcore_installation_info.txt"
+    info_file = ROOT_FOLDER / "pysuperluxcore_installation_info.txt"
     config = configparser.ConfigParser()
     config["WHEELS"] = {"hash": whl_hash}
 
@@ -141,7 +141,7 @@ def _get_installation_info():
     last install. If they match, installation is skipped for efficiency.
     """
     # Read the file
-    info_file = ROOT_FOLDER / "pyluxcore_installation_info.txt"
+    info_file = ROOT_FOLDER / "pysuperluxcore_installation_info.txt"
     print(f"[BLC] Checking installation info ('{info_file}')")
 
     if not info_file.exists():
@@ -201,11 +201,11 @@ def _check_offline_content(install_offline_folder):
     files = os.listdir(install_offline_folder)
     if len(files) == 0:
         raise RuntimeError(
-            "BlendLuxCore Installation Error: "
+            "SuperLuxCore Installation Error: "
             "The install_offline/ directory exists but is empty!"
         )
 
-    versions = (f.split("-")[1] for f in files if f.startswith("pyluxcore"))
+    versions = (f.split("-")[1] for f in files if f.startswith("pysuperluxcore"))
     for version in versions:
         break
     else:
@@ -238,7 +238,7 @@ DEFAULT_SETTINGS = {
 
 
 def _get_settings():
-    """Get pyluxcore loading settings from settings file.
+    """Get pysuperluxcore loading settings from settings file.
 
     We first try to import a settings file (typically provided by
     BlendLuxHelper) and, if it fails, we fall back to default settings.
@@ -277,7 +277,7 @@ def _update_manifest(wheel_list):
     # Compute statement
     wheel_abs_paths = list(
         itertools.chain.from_iterable(
-            entry[1] for entry in wheel_list if entry[0] == "blendluxcore"
+            entry[1] for entry in wheel_list if entry[0] == "superluxcore"
         )
     )
     wheel_rel_paths = ", ".join(
@@ -349,11 +349,11 @@ def _install_wheels():
     """
 
     # Get the wheel list
-    if not (wheel_list := [("blendluxcore", list(WHEEL_DL_FOLDER.iterdir()))]):
+    if not (wheel_list := [("superluxcore", list(WHEEL_DL_FOLDER.iterdir()))]):
         raise ValueError("[BLC] ERROR - No wheel to install.")
 
     # Remove previous wheels
-    _apply_wheels([("blendluxcore", [])])
+    _apply_wheels([("superluxcore", [])])
 
     # Install new wheels
     _apply_wheels(wheel_list)
@@ -379,7 +379,7 @@ class FetchWheelStatus(IntEnum):
 
 
 ENSURE_ERROR_MSG = """\
-[BLC] WARNING: Download of pyluxcore not successful... Falling back to wheels
+[BLC] WARNING: Download of pysuperluxcore not successful... Falling back to wheels
 already in cache."""
 
 
@@ -416,12 +416,12 @@ def _fetch_wheels():
     # Case #1 (standard case): Get wheel from PyPI
     if wheel_source == WheelSource.PYPI:
         # Compute required version
-        pyluxcore_version = settings.get("wheel_version") or PYLUXCORE_VERSION
+        pysuperluxcore_version = settings.get("wheel_version") or PYSUPERLUXCORE_VERSION
 
-        wheels = [f"pyluxcore=={pyluxcore_version}"]
+        wheels = [f"pysuperluxcore=={pysuperluxcore_version}"]
 
         print("[BLC] Fetching wheels from PyPi")
-        print("[BLC] Targeting pyluxcore version:", pyluxcore_version)
+        print("[BLC] Targeting pysuperluxcore version:", pysuperluxcore_version)
 
     # Case #2: Get from local source (1 file)
     elif wheel_source == WheelSource.LOCAL:
@@ -454,7 +454,7 @@ def _fetch_wheels():
         wheels = additional_deps + [path_to_wheel]
 
         print(
-            f"[BLC] Installing local version of pyluxcore ('{path_to_wheel}')"
+            f"[BLC] Installing local version of pysuperluxcore ('{path_to_wheel}')"
         )
 
     # No other case
@@ -464,12 +464,12 @@ def _fetch_wheels():
     # Check cache (hash and compare)
     wheel_hash = _hash_wheels(wheels)
     if not reinstall_upon_reloading and wheel_hash == old_wheel_hash:
-        # We check there is no desync and pyluxcore is available
+        # We check there is no desync and pysuperluxcore is available
         try:
-            import pyluxcore
+            import pysuperluxcore
         except ModuleNotFoundError:
             print(
-                "[BLC] Warning: pyluxcore should already be installed, "
+                "[BLC] Warning: pysuperluxcore should already be installed, "
                 "but it is not possible to find it! Reinstalling..."
             )
         else:
@@ -492,18 +492,18 @@ def _fetch_wheels():
     return result
 
 
-def ensure_pyluxcore():
-    """Ensure pyluxcore is duly installed.
+def ensure_pysuperluxcore():
+    """Ensure pysuperluxcore is duly installed.
 
-    This is a prerequisite for being able to import pyluxcore into the rest of
-    BlendLuxCore.
-    We cannot 'pip install' directly, as it would install pyluxcore
+    This is a prerequisite for being able to import pysuperluxcore into the rest of
+    SuperLuxCore.
+    We cannot 'pip install' directly, as it would install pysuperluxcore
     system-wide, not just in Blender environment. Blender has got its own logic
     for wheel installation, we must rely on it.
     The source which we must fetch wheels from is to be found in settings.
     """
 
-    print("[BLC] Ensuring pyluxcore")
+    print("[BLC] Ensuring pysuperluxcore")
 
     # Fetch wheels (download or copy from local source, depending on settings)
     # and install them
@@ -515,14 +515,14 @@ def ensure_pyluxcore():
         try:
             _install_wheels()
         except ValueError:
-            print("[BLC] No wheel installed - BlendLuxCore may be unusable")
+            print("[BLC] No wheel installed - SuperLuxCore may be unusable")
         else:
             _save_installation_info(wheel_hash)
     elif fetch_result == FetchWheelStatus.CACHE:
         # Wheels have been found in cache and thus are already installed:
         # => Nothing to do
         print(
-            "[BLC] Skipping pyluxcore installation. Similar wheel(s) already "
+            "[BLC] Skipping pysuperluxcore installation. Similar wheel(s) already "
             "installed."
         )
     elif fetch_result == FetchWheelStatus.ERROR:

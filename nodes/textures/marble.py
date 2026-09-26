@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import EnumProperty, FloatProperty, IntProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexMarble(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexMarble(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Marble"
     bl_width_default = 200
 
@@ -15,9 +15,9 @@ class LuxCoreNodeTexMarble(LuxCoreNodeTexture, bpy.types.Node):
     variation: FloatProperty(update=utils_node.force_viewport_update, name="Variation", default=0.2, min=0, max=1)
     
     def init(self, context):
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
 
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "octaves")
@@ -25,7 +25,7 @@ class LuxCoreNodeTexMarble(LuxCoreNodeTexture, bpy.types.Node):
         layout.prop(self, "scale")
         layout.prop(self, "variation")
     
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "marble",
             "octaves": self.octaves,
@@ -34,4 +34,4 @@ class LuxCoreNodeTexMarble(LuxCoreNodeTexture, bpy.types.Node):
             "variation": self.variation,
         }
         definitions.update(self.inputs["3D Mapping"].export(exporter, depsgraph, props))
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import EnumProperty, FloatProperty, BoolProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexWireframe(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexWireframe(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Wireframe"
     bl_width_default = 200
 
@@ -17,15 +17,15 @@ class LuxCoreNodeTexWireframe(LuxCoreNodeTexture, bpy.types.Node):
                                                 "applies to all other wireframe nodes in this material as well")
     
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Border", (0.7, 0.7, 0.7))
-        self.add_input("LuxCoreSocketColor", "Inside", (0.2, 0.2, 0.2))
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.add_input("SuperLuxCoreSocketColor", "Border", (0.7, 0.7, 0.7))
+        self.add_input("SuperLuxCoreSocketColor", "Inside", (0.2, 0.2, 0.2))
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "width")
         layout.prop(self, "hide_planar_edges")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         
         definitions = {
             "type": "wireframe",
@@ -34,4 +34,4 @@ class LuxCoreNodeTexWireframe(LuxCoreNodeTexture, bpy.types.Node):
             "inside": self.inputs["Inside"].export(exporter, depsgraph, props),
         }
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

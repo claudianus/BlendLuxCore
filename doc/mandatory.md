@@ -18,7 +18,7 @@ rank.
 The hierarchy is as follows, from lowest to highest rank:
 0. `icons`
 1. `utils`
-2. `pyluxcore`
+2. `pysuperluxcore`
 3. `properties`
 4. `export`
 5. `nodes`

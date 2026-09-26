@@ -4,8 +4,8 @@ External-process render regression test.
     Blender -b --python dev-tools/external_render_test.py
 
 Builds the same multi-material scene as memory_submesh_test.py, enables
-scene.luxcore.config.external_process and renders at 720p. The render()
-call returns right after the detached pyluxcore process is spawned, so
+scene.superluxcore.config.external_process and renders at 720p. The render()
+call returns right after the detached pysuperluxcore process is spawned, so
 this script polls for the workdir __done__ marker, then copies the
 beauty output for visual inspection.
 
@@ -29,7 +29,7 @@ import mathutils
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from memory_submesh_test import build_multimat_mesh, mat_diffuse, mat_emission, add_textured_card
 
-OUT = "/tmp/luxcore_extrender_720p.png"
+OUT = "/tmp/superluxcore_extrender_720p.png"
 WORKGLOB = os.path.join(
     __import__("tempfile").gettempdir(), "blc_extrender_*")
 
@@ -58,27 +58,27 @@ def main():
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.filepath = OUT
     scene.render.image_settings.file_format = "PNG"
 
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.sampler = "SOBOL"
-    scene.luxcore.config.external_process = True
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.sampler = "SOBOL"
+    scene.superluxcore.config.external_process = True
     # get_halt_conditions() prefers the view layer's halt when its enable
     # flag is on (default True) — disable it so the scene settings apply
     for vl in scene.view_layers:
-        vl.luxcore.halt.enable = False
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 25
+        vl.superluxcore.halt.enable = False
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 25
     # Keep the test short: small sample cap + noise threshold off
-    scene.luxcore.halt.use_samples = True
-    scene.luxcore.halt.samples = 48
-    scene.luxcore.halt.use_noise_thresh = False
+    scene.superluxcore.halt.use_samples = True
+    scene.superluxcore.halt.samples = 48
+    scene.superluxcore.halt.use_noise_thresh = False
 
     before = set(glob.glob(WORKGLOB))
     print("[ExtTest] Rendering 1280x720 via external process ...")

@@ -5,14 +5,14 @@ from .. import utils
 from .. import icons
 from ..icons import icon_manager
 
-class LUXCORE_OBJECT_PT_object(ObjectButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_OBJECT_PT_object(ObjectButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_context = "object"
-    bl_label = "LuxCore Object Settings"
+    bl_label = "SuperLuxCore Object Settings"
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        return context.scene.render.engine == "SUPERLUXCORE"
 
     def draw_header(self, context):
         layout = self.layout
@@ -31,16 +31,16 @@ class LUXCORE_OBJECT_PT_object(ObjectButtonsPanel, Panel):
             col = layout.column()
             col.active = False
 
-        col.prop(obj.luxcore, "id")
-        col.prop(obj.luxcore, "visible_to_camera")
-        col.prop(obj.luxcore, "exclude_from_render")
+        col.prop(obj.superluxcore, "id")
+        col.prop(obj.superluxcore, "visible_to_camera")
+        col.prop(obj.superluxcore, "exclude_from_render")
         if obj.type == "MESH":
-            col.prop(obj.luxcore, "is_light_portal")
+            col.prop(obj.superluxcore, "is_light_portal")
 
         # Motion blur settings
         cam = context.scene.camera
         if cam:
-            motion_blur = cam.data.luxcore.motion_blur
+            motion_blur = cam.data.superluxcore.motion_blur
             object_blur = motion_blur.enable and motion_blur.object_blur
 
             if not motion_blur.enable:
@@ -53,7 +53,7 @@ class LUXCORE_OBJECT_PT_object(ObjectButtonsPanel, Panel):
 
         sub = col.column(align=True)
         sub.enabled = object_blur
-        sub.prop(obj.luxcore, "enable_motion_blur")
+        sub.prop(obj.superluxcore, "enable_motion_blur")
         
         # Instancing can cost performance, so inform the user when it happens
         if utils.use_obj_motion_blur(obj, context.scene):
@@ -64,9 +64,9 @@ class LUXCORE_OBJECT_PT_object(ObjectButtonsPanel, Panel):
             box = layout.box()
             box.label(text="Mesh Proxy", icon=icons.INFO)
             row = box.row(align=True)
-            row.prop(obj.luxcore, "proxy_filepath", text="")
-            row.operator("luxcore.bake_lxm_proxy", text="", icon="EXPORT")
-            if obj.luxcore.proxy_filepath:
+            row.prop(obj.superluxcore, "proxy_filepath", text="")
+            row.operator("superluxcore.bake_lxm_proxy", text="", icon="EXPORT")
+            if obj.superluxcore.proxy_filepath:
                 box.label(text="Mesh data stays on disk (mmap, out-of-core)",
                           icon=icons.INFO)
                 box.label(text="First material slot only; no displacement "
@@ -101,9 +101,9 @@ def compatible_panels():
 
 def register():
     for panel in compatible_panels():
-        panel.COMPAT_ENGINES.add("LUXCORE")
+        panel.COMPAT_ENGINES.add("SUPERLUXCORE")
 
 
 def unregister():
     for panel in compatible_panels():
-        panel.COMPAT_ENGINES.remove("LUXCORE")
+        panel.COMPAT_ENGINES.remove("SUPERLUXCORE")

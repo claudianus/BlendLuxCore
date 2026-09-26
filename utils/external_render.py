@@ -1,7 +1,7 @@
 """
 External-process rendering.
 
-The exported LuxCore scene is serialized to a binary .bcf and rendered
+The exported SuperLuxCore scene is serialized to a binary .bcf and rendered
 by a detached Python process. Blender's render() call returns right
 after the spawn, so the dependency graph and all evaluated scene
 memory are released while the heavy render runs outside — the only way
@@ -19,7 +19,7 @@ import sys
 import tempfile
 
 import bpy
-import pyluxcore
+import pysuperluxcore
 
 RUNNER = os.path.join(os.path.dirname(__file__), "external_render_runner.py")
 DONE_MARK = "__done__"
@@ -39,7 +39,7 @@ class _Job:
 _jobs = []
 
 
-def run(config_props, luxcore_scene, scene):
+def run(config_props, superluxcore_scene, scene):
     """Serialize the render config, spawn the detached renderer and
     return immediately. Called on the main thread during render()."""
     workdir = tempfile.mkdtemp(prefix="blc_extrender_")
@@ -50,14 +50,14 @@ def run(config_props, luxcore_scene, scene):
     if "opencl.devices.select" in config_props.GetAllNames():
         config_props.Delete("opencl.devices.select")
 
-    renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
+    renderconfig = pysuperluxcore.RenderConfig(config_props, superluxcore_scene)
     renderconfig.Save(bcf_path)
     # Release the in-process scene + parsed config before spawning:
     # the external process rebuilds everything from the .bcf.
     del renderconfig
-    del luxcore_scene
+    del superluxcore_scene
 
-    site_packages = os.path.dirname(os.path.dirname(pyluxcore.__file__))
+    site_packages = os.path.dirname(os.path.dirname(pysuperluxcore.__file__))
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(
         [site_packages, env.get("PYTHONPATH", "")]

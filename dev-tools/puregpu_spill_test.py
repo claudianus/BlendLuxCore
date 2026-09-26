@@ -21,7 +21,7 @@ import bpy
 import mathutils
 import numpy as np
 
-OUT = "/tmp/luxcore_puregpu_spill_720p.png"
+OUT = "/tmp/superluxcore_puregpu_spill_720p.png"
 
 
 def mat_textured(name, image):
@@ -100,23 +100,23 @@ def main():
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.filepath = OUT
     scene.render.image_settings.file_format = "PNG"
 
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.device = "OCL"
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.device = "OCL"
     # Pure GPU: no native CPU threads -> all accelerators spillable
-    scene.luxcore.devices.use_native_cpu = False
-    scene.luxcore.config.spill_geometry = True
-    scene.luxcore.config.spill_geometry_minmb = 1
-    scene.luxcore.config.spill_images = True
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 15
+    scene.superluxcore.devices.use_native_cpu = False
+    scene.superluxcore.config.spill_geometry = True
+    scene.superluxcore.config.spill_geometry_minmb = 1
+    scene.superluxcore.config.spill_images = True
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 15
 
     print("[PureGPUSpillTest] Rendering 1280x720 on pure OCL device ...")
     bpy.ops.render.render(write_still=True)

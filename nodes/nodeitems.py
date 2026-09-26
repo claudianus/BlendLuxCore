@@ -17,7 +17,7 @@ class Separator(NodeItemCustom):
 class NodeItemMultiImageImport(NodeItemCustom):
     # NodeItemCustom is not documented anywhere so this code is a bit of guesswork
     def draw_operator(self, self2, layout, context):
-        layout.operator("luxcore.import_multiple_images")
+        layout.operator("superluxcore.import_multiple_images")
 
     def __init__(self, poll=None, draw=None):
         if draw is None:

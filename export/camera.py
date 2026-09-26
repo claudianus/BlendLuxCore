@@ -1,9 +1,9 @@
 import math
 from mathutils import Vector, Matrix
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from ..utils.node import get_active_output
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from .image import ImageExporter
 
 
@@ -143,7 +143,7 @@ def _final(scene, definitions):
 
 def _depth_of_field(scene, definitions, context=None):
     camera = scene.camera
-    settings = camera.data.luxcore
+    settings = camera.data.superluxcore
 
     if not camera.data.dof.use_dof or utils.in_material_shading_mode(context):
         return
@@ -196,7 +196,7 @@ def _depth_of_field(scene, definitions, context=None):
                                                 scene)
                 definitions["bokeh.distribution.image"] = filepath
             except OSError as error:
-                LuxCoreErrorLog.add_warning("Camera: %s" % error)
+                SuperLuxCoreErrorLog.add_warning("Camera: %s" % error)
                 definitions["bokeh.distribution.type"] = "UNIFORM"
 
 
@@ -206,7 +206,7 @@ def _clipping(scene, definitions):
         # Viewport render should work without camera
         return
 
-    if camera.data.luxcore.use_clipping:
+    if camera.data.superluxcore.use_clipping:
         clip_start = camera.data.clip_start
         clip_end = camera.data.clip_end
 
@@ -222,14 +222,14 @@ def _clipping(scene, definitions):
 
         if warning:
             msg = 'Camera: %s' % warning
-            LuxCoreErrorLog.add_warning(msg, obj_name=camera.name)
+            SuperLuxCoreErrorLog.add_warning(msg, obj_name=camera.name)
 
 
 def _clipping_plane(scene, definitions):
     if not utils.is_valid_camera(scene.camera):
         # Viewport render should work without camera
         return
-    cam_settings = scene.camera.data.luxcore
+    cam_settings = scene.camera.data.superluxcore
 
     if cam_settings.use_clipping_plane and cam_settings.clipping_plane:
         plane = cam_settings.clipping_plane
@@ -253,7 +253,7 @@ def _motion_blur(scene, definitions, context, is_camera_moving):
         # Viewport render should work without camera
         return
 
-    moblur_settings = scene.camera.data.luxcore.motion_blur
+    moblur_settings = scene.camera.data.superluxcore.motion_blur
     if not moblur_settings.enable:
         return
 
@@ -294,25 +294,25 @@ def _calc_lookat(cam_matrix, scene):
 
 
 def _get_volume_props(exporter, scene, depsgraph):
-    props = pyluxcore.Properties()
+    props = pysuperluxcore.Properties()
 
     if not utils.is_valid_camera(scene.camera):
         # Viewport render should work without camera
         return props
 
-    cam_settings = scene.camera.data.luxcore
+    cam_settings = scene.camera.data.superluxcore
     volume_node_tree = cam_settings.volume
 
     if volume_node_tree:
-        luxcore_name = utils.get_luxcore_name(volume_node_tree)
+        superluxcore_name = utils.get_superluxcore_name(volume_node_tree)
         active_output = get_active_output(volume_node_tree)
 
         try:
-            active_output.export(exporter, depsgraph, props, luxcore_name)
-            props.Set(pyluxcore.Property("scene.camera.volume", luxcore_name))
+            active_output.export(exporter, depsgraph, props, superluxcore_name)
+            props.Set(pysuperluxcore.Property("scene.camera.volume", superluxcore_name))
         except Exception as error:
             msg = 'Camera: %s' % error
-            LuxCoreErrorLog.add_warning(msg, obj_name=scene.camera.name)
+            SuperLuxCoreErrorLog.add_warning(msg, obj_name=scene.camera.name)
 
-    props.Set(pyluxcore.Property("scene.camera.autovolume.enable", cam_settings.auto_volume))
+    props.Set(pysuperluxcore.Property("scene.camera.autovolume.enable", cam_settings.auto_volume))
     return props

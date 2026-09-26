@@ -1,5 +1,5 @@
 """
-.lxm mesh proxy round-trip test (standalone pyluxcore).
+.lxm mesh proxy round-trip test (standalone pysuperluxcore).
 
     PYTHONPATH=<site-packages> python3.13 dev-tools/lxm_proxy_test.py
 
@@ -14,15 +14,15 @@
 import os
 import sys
 import time
-import pyluxcore
+import pysuperluxcore
 
-pyluxcore.Init()
+pysuperluxcore.Init()
 
 WIDTH, HEIGHT = 1280, 720
 PLY = "/tmp/spill_edit_floor.ply"   # written by spill_edit_test.py
 LXM = "/tmp/spill_edit_floor.lxm"
-OUT_PLY = "/tmp/luxcore_lxm_ply_720p.png"
-OUT_LXM = "/tmp/luxcore_lxm_lxm_720p.png"
+OUT_PLY = "/tmp/superluxcore_lxm_ply_720p.png"
+OUT_LXM = "/tmp/superluxcore_lxm_lxm_720p.png"
 
 SCN_TMPL = """
 scene.camera.lookat.orig = 0 -7 3.5
@@ -56,18 +56,18 @@ batch.haltspp = 64
 
 
 def build_scene(mesh_path):
-    scn = pyluxcore.Properties()
+    scn = pysuperluxcore.Properties()
     scn.SetFromString(SCN_TMPL.format(mesh=mesh_path))
-    scene = pyluxcore.Scene()
+    scene = pysuperluxcore.Scene()
     scene.Parse(scn)
     return scene
 
 
 def render(scene, out):
-    cfg = pyluxcore.Properties()
+    cfg = pysuperluxcore.Properties()
     cfg.SetFromString(CFG_TMPL.format(w=WIDTH, h=HEIGHT, out=out))
-    config = pyluxcore.RenderConfig(cfg, scene)
-    session = pyluxcore.RenderSession(config)
+    config = pysuperluxcore.RenderConfig(cfg, scene)
+    session = pysuperluxcore.RenderSession(config)
     session.Start()
     # Poll HasDone + UpdateStats (halt conditions run inside UpdateFilm)
     for _ in range(600):
@@ -79,7 +79,7 @@ def render(scene, out):
     film = session.GetFilm()
     film.SaveOutputs()
     # Float radiance output for pixel-level comparison
-    t = pyluxcore.FilmOutputType.RGB_IMAGEPIPELINE
+    t = pysuperluxcore.FilmOutputType.RGB_IMAGEPIPELINE
     buf = bytearray(film.GetOutputSize(t) * 4)
     film.GetOutputFloat(t, buf, 0, True)
     return buf
@@ -210,8 +210,8 @@ with open(LAYERED_PLY, "wb") as f:
     for v in tri_aov:
         f.write(struct.pack("<f", v))
 
-scn3 = pyluxcore.Scene()
-p3 = pyluxcore.Properties()
+scn3 = pysuperluxcore.Scene()
+p3 = pysuperluxcore.Properties()
 p3.SetFromString(
     SCN_TMPL.format(mesh=LAYERED_PLY).replace(
         "scene.objects.floor", "scene.objects.layfloor")

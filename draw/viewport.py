@@ -11,14 +11,14 @@ import numpy as np
 import tempfile
 from shutil import which
 from os.path import dirname
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from ..utils import pfm
 
 if _needs_reload:
     import importlib
 
-    importlib.reload(pyluxcore)
+    importlib.reload(pysuperluxcore)
     importlib.reload(utils)
 
 
@@ -42,10 +42,10 @@ def _mutation_seq(engine):
 
 
 def _fetch_pixels(output_type, width, height, transparent,
-                  luxcore_session, execute_imagepipeline, lock=None,
+                  superluxcore_session, execute_imagepipeline, lock=None,
                   seq_probe=None):
     """Blocking film readback + imagepipeline. Runs the device-queue
-    drain; with the GIL released by pyluxcore this is safe to call on a
+    drain; with the GIL released by pysuperluxcore this is safe to call on a
     worker thread. ``lock`` (the session worker's session_lock) keeps
     the read from racing a scene edit / session stop on the worker.
 
@@ -62,13 +62,13 @@ def _fetch_pixels(output_type, width, height, transparent,
     data = np.empty(size, dtype=np.float32)
     seq = None
     if lock is None:
-        luxcore_session.GetFilm().GetOutputFloat(
+        superluxcore_session.GetFilm().GetOutputFloat(
             output_type, data, 0, execute_imagepipeline
         )
         seq = seq_probe() if seq_probe else None
     else:
         with lock:
-            luxcore_session.GetFilm().GetOutputFloat(
+            superluxcore_session.GetFilm().GetOutputFloat(
                 output_type, data, 0, execute_imagepipeline
             )
             seq = seq_probe() if seq_probe else None
@@ -114,14 +114,14 @@ class FrameBuffer:
         self._width, self._height = filmsize
         self._border = utils.calc_blender_border(scene, context)
         self._view_rect = self._calc_view_rect(context, scene, self._border)
-        self._pixel_size = int(scene.luxcore.viewport.pixel_size)
+        self._pixel_size = int(scene.superluxcore.viewport.pixel_size)
 
         self._transparent = self._initialize_transparency(scene, context)
         bufferdepth = 4 if self._transparent else 3
         self._output_type = (
-            pyluxcore.FilmOutputType.RGBA_IMAGEPIPELINE
+            pysuperluxcore.FilmOutputType.RGBA_IMAGEPIPELINE
             if self._transparent
-            else pyluxcore.FilmOutputType.RGB_IMAGEPIPELINE
+            else pysuperluxcore.FilmOutputType.RGB_IMAGEPIPELINE
         )
 
         self.buffer = gpu.types.Buffer(
@@ -204,7 +204,7 @@ class FrameBuffer:
         if utils.is_valid_camera(
             scene.camera
         ) and not utils.in_material_shading_mode(context):
-            return scene.camera.data.luxcore.imagepipeline.transparent_film
+            return scene.camera.data.superluxcore.imagepipeline.transparent_film
         return False
 
     def _init_opengl(self):
@@ -247,7 +247,7 @@ class FrameBuffer:
         if valid_cam:
             if (
                 self._transparent
-                != scene.camera.data.luxcore.imagepipeline.transparent_film
+                != scene.camera.data.superluxcore.imagepipeline.transparent_film
             ):
                 return True
         elif self._transparent:
@@ -255,7 +255,7 @@ class FrameBuffer:
             return True
         if self._border != utils.calc_blender_border(scene, context):
             return True
-        if self._pixel_size != int(scene.luxcore.viewport.pixel_size):
+        if self._pixel_size != int(scene.superluxcore.viewport.pixel_size):
             return True
         return False
 
@@ -316,7 +316,7 @@ class FrameBuffer:
             target=run_denoiser,
             args=(sess, _session_lock(engine), self._denoise_box),
             daemon=True,
-            name="LuxCoreViewportDenoise",
+            name="SuperLuxCoreViewportDenoise",
         )
         self._denoiser_thread.start()
 
@@ -467,7 +467,7 @@ class FrameBuffer:
 
     def update(
         self,
-        luxcore_session,
+        superluxcore_session,
         engine=None,
         execute_imagepipeline=True,
         force=False,
@@ -496,7 +496,7 @@ class FrameBuffer:
                 self._width,
                 self._height,
                 self._transparent,
-                luxcore_session,
+                superluxcore_session,
                 execute_imagepipeline,
                 None,  # already holding the lock
                 seq_probe=lambda: (
@@ -509,7 +509,7 @@ class FrameBuffer:
         return self._accept_pixels(data, force, mut_seq=mut_seq)
 
     def start_async_update(
-        self, luxcore_session, engine=None, execute_imagepipeline=True
+        self, superluxcore_session, engine=None, execute_imagepipeline=True
     ):
         """Kick off a background film readback; the result lands in a box
         dict consumed by consume_async_update() on the main thread. No-op
@@ -519,7 +519,7 @@ class FrameBuffer:
             return False
         box = {"done": False, "data": None, "mut_seq": None}
         self._read_box = box
-        self._read_session = luxcore_session
+        self._read_session = superluxcore_session
         self._last_update = time.time()
         worker = getattr(engine, "session_worker", None)
         lock = getattr(worker, "session_lock", None) if worker else None
@@ -538,7 +538,7 @@ class FrameBuffer:
                 # pixels from the kickoff→lock window).
                 box["data"], box["mut_seq"] = _fetch_pixels(
                     output_type, width, height, transparent,
-                    luxcore_session, execute_imagepipeline, lock,
+                    superluxcore_session, execute_imagepipeline, lock,
                     seq_probe=lambda: getattr(worker, "mutation_seq", 0),
                 )
             except Exception:
@@ -548,12 +548,12 @@ class FrameBuffer:
             box["done"] = True
 
         self._read_thread = threading.Thread(
-            target=work, daemon=True, name="LuxCoreViewportReadback"
+            target=work, daemon=True, name="SuperLuxCoreViewportReadback"
         )
         self._read_thread.start()
         return True
 
-    def consume_async_update(self, luxcore_session, engine=None):
+    def consume_async_update(self, superluxcore_session, engine=None):
         """Main thread: pick up a finished async readback. Returns True when
         a fresh frame was swapped into the buffer."""
         box = self._read_box
@@ -561,17 +561,17 @@ class FrameBuffer:
             return False
         self._read_box = None
         self._read_thread = None
-        if self._read_session is not luxcore_session or box["data"] is None:
+        if self._read_session is not superluxcore_session or box["data"] is None:
             return False
         return self._accept_pixels(box["data"], mut_seq=box["mut_seq"])
 
     def update_async(
-        self, luxcore_session, engine=None, execute_imagepipeline=True
+        self, superluxcore_session, engine=None, execute_imagepipeline=True
     ):
         """Non-blocking readback driver for view_draw: consumes a finished
         read, otherwise starts a new one. Reads run at 20 Hz for a short
         window after each edit (fast first frame), then at 10 Hz."""
-        if self.consume_async_update(luxcore_session, engine):
+        if self.consume_async_update(superluxcore_session, engine):
             return True
         now = time.time()
         interval = (
@@ -582,7 +582,7 @@ class FrameBuffer:
         if now - self._last_update < interval:
             return False
         return self.start_async_update(
-            luxcore_session, engine, execute_imagepipeline
+            superluxcore_session, engine, execute_imagepipeline
         )
 
     def interactive_denoise_tick(self, engine, min_samples):

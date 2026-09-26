@@ -1,26 +1,26 @@
 import bpy
 import mathutils
-import pyluxcore
-from .errorlog import LuxCoreErrorLog
+import pysuperluxcore
+from .errorlog import SuperLuxCoreErrorLog
 from .. import icons
 
 
 OUTPUT_MAP = {
-    "luxcore_material_nodes": "LuxCoreNodeMatOutput",
-    "luxcore_texture_nodes": "LuxCoreNodeTexOutput",
-    "luxcore_volume_nodes": "LuxCoreNodeVolOutput",
+    "superluxcore_material_nodes": "SuperLuxCoreNodeMatOutput",
+    "superluxcore_texture_nodes": "SuperLuxCoreNodeTexOutput",
+    "superluxcore_volume_nodes": "SuperLuxCoreNodeVolOutput",
 }
 
 TREE_TYPES = {
-    "luxcore_material_nodes",
-    "luxcore_texture_nodes",
-    "luxcore_volume_nodes",
+    "superluxcore_material_nodes",
+    "superluxcore_texture_nodes",
+    "superluxcore_volume_nodes",
 }
 
 TREE_ICONS = {
-    "luxcore_material_nodes": icons.NTREE_MATERIAL,
-    "luxcore_texture_nodes": icons.NTREE_TEXTURE,
-    "luxcore_volume_nodes": icons.NTREE_VOLUME,
+    "superluxcore_material_nodes": icons.NTREE_MATERIAL,
+    "superluxcore_texture_nodes": icons.NTREE_TEXTURE,
+    "superluxcore_volume_nodes": icons.NTREE_VOLUME,
 }
 
 
@@ -99,18 +99,18 @@ def draw_transmission_info(node, layout):
         layout.label(text="Transmitted: %.2f" % transmitted, icon=icons.INFO)
 
 
-def export_material_input(input, exporter, depsgraph, props, luxcore_name=None):
-    material_name = input.export(exporter, depsgraph, props, luxcore_name)
+def export_material_input(input, exporter, depsgraph, props, superluxcore_name=None):
+    material_name = input.export(exporter, depsgraph, props, superluxcore_name)
 
     if material_name:
         return material_name
     else:
-        LuxCoreErrorLog.add_warning(f"WARNING: No material linked on input {input.name} of node {input.node.name}")
-        if luxcore_name is None:
-            luxcore_name = "__BLACK__"
-        props.Set(pyluxcore.Property("scene.materials.%s.type" % luxcore_name, "matte"))
-        props.Set(pyluxcore.Property("scene.materials.%s.kd" % luxcore_name, [0, 0, 0]))
-        return luxcore_name
+        SuperLuxCoreErrorLog.add_warning(f"WARNING: No material linked on input {input.name} of node {input.node.name}")
+        if superluxcore_name is None:
+            superluxcore_name = "__BLACK__"
+        props.Set(pysuperluxcore.Property("scene.materials.%s.type" % superluxcore_name, "matte"))
+        props.Set(pysuperluxcore.Property("scene.materials.%s.kd" % superluxcore_name, [0, 0, 0]))
+        return superluxcore_name
 
 
 def get_link(socket):
@@ -140,7 +140,7 @@ def get_link(socket):
                 else:
                     return None
             else:
-                if not link.from_socket.bl_idname.startswith("LuxCoreSocket") or not node.inputs:
+                if not link.from_socket.bl_idname.startswith("SuperLuxCoreSocket") or not node.inputs:
                     return None
 
                 # We can't define internal_links, so try to make up a link that makes sense.
@@ -180,13 +180,13 @@ def find_nodes(node_tree, bl_idname, follow_pointers):
     result = []
 
     for node in node_tree.nodes:
-        if follow_pointers and node.bl_idname == "LuxCoreNodeTreePointer" and node.node_tree:
+        if follow_pointers and node.bl_idname == "SuperLuxCoreNodeTreePointer" and node.node_tree:
             try:
                 result += find_nodes(node.node_tree, bl_idname, follow_pointers)
             except RecursionError:
                 msg = (f'Pointer nodes in node trees "{node_tree.name}" and "{node.node_tree.name}" '
                        "create a dependency cycle! Delete one of them.")
-                LuxCoreErrorLog.add_error(msg)
+                SuperLuxCoreErrorLog.add_error(msg)
                 # Mark the faulty nodes in red
                 node.use_custom_color = True
                 node.color = (0.9, 0, 0)
@@ -201,13 +201,13 @@ def find_nodes_multi(node_tree, bl_idname_set, follow_pointers):
     result = []
 
     for node in node_tree.nodes:
-        if follow_pointers and node.bl_idname == "LuxCoreNodeTreePointer" and node.node_tree:
+        if follow_pointers and node.bl_idname == "SuperLuxCoreNodeTreePointer" and node.node_tree:
             try:
                 result += find_nodes_multi(node.node_tree, bl_idname_set, follow_pointers)
             except RecursionError:
                 msg = (f'Pointer nodes in node trees "{node_tree.name}" and "{node.node_tree.name}" '
                        "create a dependency cycle! Delete one of them.")
-                LuxCoreErrorLog.add_error(msg)
+                SuperLuxCoreErrorLog.add_error(msg)
                 # Mark the faulty nodes in red
                 node.use_custom_color = True
                 node.color = (0.9, 0, 0)
@@ -220,14 +220,14 @@ def find_nodes_multi(node_tree, bl_idname_set, follow_pointers):
 
 def has_nodes(node_tree, bl_idname, follow_pointers):
     for node in node_tree.nodes:
-        if follow_pointers and node.bl_idname == "LuxCoreNodeTreePointer" and node.node_tree:
+        if follow_pointers and node.bl_idname == "SuperLuxCoreNodeTreePointer" and node.node_tree:
             try:
                 if has_nodes(node.node_tree, bl_idname, follow_pointers):
                     return True
             except RecursionError:
                 msg = (f'Pointer nodes in node trees "{node_tree.name}" and "{node.node_tree.name}" '
                        "create a dependency cycle! Delete one of them.")
-                LuxCoreErrorLog.add_error(msg)
+                SuperLuxCoreErrorLog.add_error(msg)
                 # Mark the faulty nodes in red
                 node.use_custom_color = True
                 node.color = (0.9, 0, 0)
@@ -240,14 +240,14 @@ def has_nodes(node_tree, bl_idname, follow_pointers):
 
 def has_nodes_multi(node_tree, bl_idname_set, follow_pointers):
     for node in node_tree.nodes:
-        if follow_pointers and node.bl_idname == "LuxCoreNodeTreePointer" and node.node_tree:
+        if follow_pointers and node.bl_idname == "SuperLuxCoreNodeTreePointer" and node.node_tree:
             try:
                 if has_nodes_multi(node.node_tree, bl_idname_set, follow_pointers):
                     return True
             except RecursionError:
                 msg = (f'Pointer nodes in node trees "{node_tree.name}" and "{node.node_tree.name}" '
                        "create a dependency cycle! Delete one of them.")
-                LuxCoreErrorLog.add_error(msg)
+                SuperLuxCoreErrorLog.add_error(msg)
                 # Mark the faulty nodes in red
                 node.use_custom_color = True
                 node.color = (0.9, 0, 0)
@@ -291,7 +291,7 @@ def force_viewport_mesh_update2(node_tree):
         for slot in obj.material_slots:
             if slot.material is None:
                 continue
-            if slot.material.luxcore.node_tree == node_tree:
+            if slot.material.superluxcore.node_tree == node_tree:
                 if obj.data:
                     obj.data.update_tag()
                     break
@@ -309,7 +309,7 @@ def update_opengl_materials(_, context):
         return
 
     try:
-        node_tree = mat.luxcore.node_tree
+        node_tree = mat.superluxcore.node_tree
     except AttributeError:
         return
 
@@ -414,8 +414,8 @@ class ThinFilmCoating:
     
     @staticmethod
     def init(node):
-        node.add_input("LuxCoreSocketFilmThickness", ThinFilmCoating.THICKNESS_NAME, 300, enabled=False)
-        node.add_input("LuxCoreSocketFilmIOR", ThinFilmCoating.IOR_NAME, 1.5, enabled=False)
+        node.add_input("SuperLuxCoreSocketFilmThickness", ThinFilmCoating.THICKNESS_NAME, 300, enabled=False)
+        node.add_input("SuperLuxCoreSocketFilmIOR", ThinFilmCoating.IOR_NAME, 1.5, enabled=False)
 
     @staticmethod
     def toggle(node, context):
@@ -513,13 +513,13 @@ class Roughness:
 
     @staticmethod
     def init(node, default=0.05, init_enabled=True):
-        node.add_input("LuxCoreSocketRoughness", "Roughness", default, enabled=init_enabled)
-        node.add_input("LuxCoreSocketRoughness", "V-Roughness", default, enabled=False)
+        node.add_input("SuperLuxCoreSocketRoughness", "Roughness", default, enabled=init_enabled)
+        node.add_input("SuperLuxCoreSocketRoughness", "V-Roughness", default, enabled=False)
 
     @staticmethod
     def init_backface(node, default=0.05, init_enabled=False):
-        node.add_input("LuxCoreSocketRoughness", "BF Roughness", default, enabled=init_enabled)
-        node.add_input("LuxCoreSocketRoughness", "BF V-Roughness", default, enabled=False)
+        node.add_input("SuperLuxCoreSocketRoughness", "BF Roughness", default, enabled=init_enabled)
+        node.add_input("SuperLuxCoreSocketRoughness", "BF V-Roughness", default, enabled=False)
 
     @staticmethod
     def draw(node, context, layout):

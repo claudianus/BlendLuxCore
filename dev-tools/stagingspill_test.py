@@ -4,7 +4,7 @@ OCL host-staging spilling regression test (PATHOCL / Metal).
     Blender -b --python dev-tools/stagingspill_test.py
 
 Builds a moderately heavy scene (subdivided textured floor, ~460k tris)
-on the GPU device with scene.luxcore.config.spill_geometry enabled.
+on the GPU device with scene.superluxcore.config.spill_geometry enabled.
 
 What it verifies:
   * The log shows "Host staging spilled to disk: <N> MB" — the
@@ -24,7 +24,7 @@ import bpy
 import mathutils
 import numpy as np
 
-OUT = "/tmp/luxcore_stagingspill_720p.png"
+OUT = "/tmp/superluxcore_stagingspill_720p.png"
 
 
 def mat_textured(name, image):
@@ -104,21 +104,21 @@ def main():
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.filepath = OUT
     scene.render.image_settings.file_format = "PNG"
 
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.device = "OCL"   # force GPU (Metal) path
-    scene.luxcore.config.spill_geometry = True
-    scene.luxcore.config.spill_geometry_minmb = 1
-    scene.luxcore.config.spill_images = True
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 15
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.device = "OCL"   # force GPU (Metal) path
+    scene.superluxcore.config.spill_geometry = True
+    scene.superluxcore.config.spill_geometry_minmb = 1
+    scene.superluxcore.config.spill_images = True
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 15
 
     print("[StagingSpillTest] Rendering 1280x720 on OCL device with "
           "staging spilling ...")

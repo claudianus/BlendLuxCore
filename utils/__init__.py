@@ -3,10 +3,10 @@
 # DO NOT IMPORT ANY OF OTHER MODULES IN THIS MODULE AND ITS SUBMODULES
 #
 # This module should be importable without further dependence to other
-# modules of BlendLuxCore (
+# modules of SuperLuxCore (
 #
-# Please note this module is imported before pyluxcore is loaded, therefore it
-# must not contain any call to pyluxcore. For utilities that rely on pyluxcore,
+# Please note this module is imported before pysuperluxcore is loaded, therefore it
+# must not contain any call to pysuperluxcore. For utilities that rely on pysuperluxcore,
 # please use `luxutils` submodule
 
 
@@ -46,11 +46,11 @@ NON_DEFORMING_MODIFIERS = {
 }
 
 
-def sanitize_luxcore_name(string):
+def sanitize_superluxcore_name(string):
     """ This is just a regex that removes non-allowed characters.
 
-    Do NOT use this function to create a luxcore name for an
-    object/material/etc.! Use the function get_luxcore_name() instead.
+    Do NOT use this function to create a superluxcore name for an
+    object/material/etc.! Use the function get_superluxcore_name() instead.
     """
     return re.sub("[^_0-9a-zA-Z]+", "__", string)
 
@@ -80,7 +80,7 @@ def make_key_from_instance(dg_obj_instance):
 
 
 def make_name_from_instance(dg_obj_instance):
-    return sanitize_luxcore_name(make_key_from_instance(dg_obj_instance))
+    return sanitize_superluxcore_name(make_key_from_instance(dg_obj_instance))
 
 
 def get_pretty_name(datablock):
@@ -92,9 +92,9 @@ def get_pretty_name(datablock):
     return name
 
 
-def get_luxcore_name(datablock, is_viewport_render=True):
+def get_superluxcore_name(datablock, is_viewport_render=True):
     """
-    This is the function you should use to get a unique luxcore name
+    This is the function you should use to get a unique superluxcore name
     for a datablock (object, lamp, material etc.).
     If is_viewport_render is True, the name is persistent even if
     the user renames the datablock.
@@ -109,7 +109,7 @@ def get_luxcore_name(datablock, is_viewport_render=True):
         # Final render - we can use pretty names
         key = get_pretty_name(datablock) + key
 
-    return sanitize_luxcore_name(key)
+    return sanitize_superluxcore_name(key)
 
 
 def obj_from_key(key, objects):
@@ -126,7 +126,7 @@ def persistent_id_to_str(persistent_id):
 
 
 def make_object_id(dg_obj_instance):
-    chosen_id = dg_obj_instance.object.original.luxcore.id
+    chosen_id = dg_obj_instance.object.original.superluxcore.id
     if chosen_id != -1:
         return chosen_id
 
@@ -140,8 +140,8 @@ def make_object_id(dg_obj_instance):
     # frames and between re-renders (as long as the object is not renamed).
     digest = hashlib.md5(key.encode("utf-8")).digest()
     as_int = int.from_bytes(digest, byteorder="little")
-    # Truncate to 4 bytes because LuxCore uses unsigned int for the object ID.
-    # Make sure it's not exactly 0xffffffff because that's LuxCore's Null index for object IDs.
+    # Truncate to 4 bytes because SuperLuxCore uses unsigned int for the object ID.
+    # Make sure it's not exactly 0xffffffff because that's SuperLuxCore's Null index for object IDs.
     return min(as_int & 0xFFFFFFFF, 0xFFFFFFFF - 1)
 
 
@@ -206,7 +206,7 @@ def calc_filmsize(scene, context=None):
                 frame_h * border_min_y
             )
 
-        pixel_size = int(scene.luxcore.viewport.pixel_size)
+        pixel_size = int(scene.superluxcore.viewport.pixel_size)
         width //= pixel_size
         height //= pixel_size
     else:
@@ -493,13 +493,13 @@ def is_instance_visible(dg_obj_instance, obj, context):
 
 
 def is_obj_visible(obj):
-    if obj.luxcore.exclude_from_render:
+    if obj.superluxcore.exclude_from_render:
         return False
 
     # Light portals are pure sampling guides: they mark apertures for the
     # path tracer but must never appear as render geometry (a plane placed
     # inside an opening would physically block the light it guides).
-    if getattr(obj.luxcore, "is_light_portal", False):
+    if getattr(obj.superluxcore, "is_light_portal", False):
         return False
 
     if obj.type not in EXPORTABLE_OBJECTS and (
@@ -531,7 +531,7 @@ def visible_to_camera(dg_obj_instance, is_viewport_render, view_layer=None):
         if dg_obj_instance.is_instance
         else dg_obj_instance.object
     )
-    if not obj.luxcore.visible_to_camera:
+    if not obj.superluxcore.visible_to_camera:
         return False
     if is_viewport_render:
         obj = obj.original
@@ -598,10 +598,10 @@ def use_obj_motion_blur(obj, scene):
     if cam is None:
         return False
 
-    motion_blur = cam.data.luxcore.motion_blur
+    motion_blur = cam.data.superluxcore.motion_blur
     object_blur = motion_blur.enable and motion_blur.object_blur
 
-    return object_blur and obj.luxcore.enable_motion_blur
+    return object_blur and obj.superluxcore.enable_motion_blur
 
 
 def has_deforming_modifiers(obj):
@@ -645,18 +645,18 @@ def clamp(value, _min=0, _max=1):
 
 
 def using_filesaver(is_viewport_render, scene):
-    return not is_viewport_render and scene.luxcore.config.use_filesaver
+    return not is_viewport_render and scene.superluxcore.config.use_filesaver
 
 
 def using_bidir_in_viewport(scene):
     return (
-        scene.luxcore.config.engine == "BIDIR"
-        and scene.luxcore.viewport.use_bidir
+        scene.superluxcore.config.engine == "BIDIR"
+        and scene.superluxcore.viewport.use_bidir
     )
 
 
 def using_hybridbackforward(scene):
-    config = scene.luxcore.config
+    config = scene.superluxcore.config
     return (
         config.engine == "PATH"
         and not config.use_tiles
@@ -667,21 +667,21 @@ def using_hybridbackforward(scene):
 def using_hybridbackforward_in_viewport(scene):
     return (
         using_hybridbackforward(scene)
-        and scene.luxcore.viewport.add_light_tracing
+        and scene.superluxcore.viewport.add_light_tracing
     )
 
 
 def using_photongi_debug_mode(is_viewport_render, scene):
     if is_viewport_render:
         return False
-    config = scene.luxcore.config
+    config = scene.superluxcore.config
     if config.engine != "PATH":
         return False
     return config.photongi.enabled and config.photongi.debug != "off"
 
 
 def is_pixel_filtering_forced_disabled(scene, denoiser_enabled):
-    config = scene.luxcore.config
+    config = scene.superluxcore.config
 
     if denoiser_enabled:
         # Bidir renders are not properly denoised with pixel filtering
@@ -696,20 +696,20 @@ def is_pixel_filtering_forced_disabled(scene, denoiser_enabled):
 def get_halt_conditions(scene):
     render_layer = view_layer.get_current_view_layer(scene)
 
-    if render_layer and render_layer.luxcore.halt.enable:
+    if render_layer and render_layer.superluxcore.halt.enable:
         # Global halt conditions are overridden by this render layer
-        return render_layer.luxcore.halt
+        return render_layer.superluxcore.halt
     else:
         # Use global halt conditions
-        return scene.luxcore.halt
+        return scene.superluxcore.halt
 
 
 def use_two_tiled_passes(scene):
     # When combining the BCD denoiser with tilepath in singlepass mode, we have to render
     # two passes (twice as many samples) because the first pass is needed as denoiser
     # warmup, and only during the second pass can the denoiser collect sample information.
-    config = scene.luxcore.config
-    denoiser = scene.luxcore.denoiser
+    config = scene.superluxcore.config
+    denoiser = scene.superluxcore.denoiser
     using_tilepath = config.engine == "PATH" and config.use_tiles
     return (
         denoiser.enabled
@@ -817,7 +817,7 @@ def get_persistent_cache_file_path(
         else:
             if os.path.isfile(file_path) and save_or_overwrite:
                 # To overwrite the file, we first have to delete it, otherwise
-                # LuxCore loads the cache from this file
+                # SuperLuxCore loads the cache from this file
                 os.remove(file_path)
             return file_path_abs
 
@@ -857,7 +857,7 @@ def get_addon_preferences(context):
 
 
 def get_version_string():
-    """Get BlendLuxCore version string.
+    """Get SuperLuxCore version string.
 
     Load version information from blender_manifest.toml, which replaces the old
     "bl_info" dictionary.
@@ -896,7 +896,7 @@ def register_module(module_name, classes, submodules=[]):
         try:
             bpy.utils.register_class(cls)
         except Exception as err:
-            errorlog.LuxCoreErrorLog.add_warning(err, "\n")
+            errorlog.SuperLuxCoreErrorLog.add_warning(err, "\n")
 
 
 def unregister_module(module_name, classes, submodules=[]):

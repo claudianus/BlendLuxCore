@@ -15,28 +15,28 @@ from bl_ui.properties_render import RenderButtonsPanel
 
 def advanced_panels_visible(context):
     """Should the advanced render panels be drawn?"""
-    simple = context.scene.luxcore.config.simple
+    simple = context.scene.superluxcore.config.simple
     if not simple.enabled:
         return True
     return simple.show_advanced
 
 
-class LUXCORE_RENDER_PT_simple(RenderButtonsPanel, Panel):
+class SUPERLUXCORE_RENDER_PT_simple(RenderButtonsPanel, Panel):
     """Corona-style simplified setup: quality slider + few switches."""
     bl_label = "Quick Setup"
     bl_order = 0  # show first in the render tab
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        return context.scene.render.engine == "SUPERLUXCORE"
 
     def draw_header(self, context):
-        self.layout.prop(context.scene.luxcore.config.simple, "enabled",
+        self.layout.prop(context.scene.superluxcore.config.simple, "enabled",
                          text="")
 
     def draw(self, context):
         layout = self.layout
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
 
         if not simple.enabled:
             layout.label(
@@ -47,9 +47,9 @@ class LUXCORE_RENDER_PT_simple(RenderButtonsPanel, Panel):
 
         # Named presets on top of the quality slider
         row = layout.row(align=True)
-        row.operator("luxcore.set_quality_preset", text="Draft").quality = 0.15
-        row.operator("luxcore.set_quality_preset", text="Standard").quality = 0.5
-        row.operator("luxcore.set_quality_preset", text="Final").quality = 0.9
+        row.operator("superluxcore.set_quality_preset", text="Draft").quality = 0.15
+        row.operator("superluxcore.set_quality_preset", text="Standard").quality = 0.5
+        row.operator("superluxcore.set_quality_preset", text="Final").quality = 0.9
 
         # Quality preset slider: the one control that matters
         col = layout.column(align=True)

@@ -4,7 +4,7 @@ import mathutils
 import numpy as np
 
 from .. import utils
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from .caches.exported_data import ExportedObject
 
 
@@ -103,7 +103,7 @@ def _point_matrices(positions, radii, matrix_world):
 
 
 def _point_matrices_flat(positions, radii, matrix_world):
-    """_point_matrices() flattened the way LuxCore wants (transposed)."""
+    """_point_matrices() flattened the way SuperLuxCore wants (transposed)."""
     mats = _point_matrices(positions, radii, matrix_world)
     return np.ascontiguousarray(
         mats.transpose(0, 2, 1).reshape(-1), dtype=np.float32
@@ -116,7 +116,7 @@ def convert_pointcloud_obj(
     obj,
     obj_key,
     depsgraph,
-    luxcore_scene,
+    superluxcore_scene,
     scene_props,
     is_viewport_render,
     view_layer,
@@ -131,7 +131,7 @@ def convert_pointcloud_obj(
     """
     positions, radii = _read_pointcloud_data(obj)
     if positions is None:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             'Point cloud object "%s" has no points' % obj.name
         )
         return None
@@ -145,7 +145,7 @@ def convert_pointcloud_obj(
 
     matrix_world = dg_obj_instance.matrix_world.copy()
 
-    # World-space point matrices; LuxCore wants them transposed + flattened
+    # World-space point matrices; SuperLuxCore wants them transposed + flattened
     mats = _point_matrices(positions, radii, matrix_world)
     mats_flat = np.ascontiguousarray(
         mats.transpose(0, 2, 1).reshape(-1), dtype=np.float32
@@ -153,9 +153,9 @@ def convert_pointcloud_obj(
 
     # Shared icosphere mesh (one per scene)
     mesh_name = "BLC_PointCloudSphere"
-    if not luxcore_scene.IsMeshDefined(mesh_name):
+    if not superluxcore_scene.IsMeshDefined(mesh_name):
         loop_points, loop_normals, triangles = _build_icosphere(subdivisions=1)
-        luxcore_scene.DefineMeshExt(
+        superluxcore_scene.DefineMeshExt(
             name=mesh_name,
             points=loop_points,
             triangles=triangles,

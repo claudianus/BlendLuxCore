@@ -5,7 +5,7 @@ Out-of-core geometry spilling regression test.
 
 Builds a heavy smooth-shaded mesh (~1M tris) so the welded vertex,
 triangle and normal buffers all exceed the spill threshold, enables
-scene.luxcore.config.spill_geometry and renders at 720p.
+scene.superluxcore.config.spill_geometry and renders at 720p.
 
 What it verifies:
   * The log shows "Geometry spilled to disk: <N> MB" — mesh buffers were
@@ -23,7 +23,7 @@ import bpy
 import mathutils
 import numpy as np
 
-OUT = "/tmp/luxcore_geospill_720p.png"
+OUT = "/tmp/superluxcore_geospill_720p.png"
 
 
 def mat_diffuse(name, color):
@@ -99,20 +99,20 @@ def main():
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
 
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.resolution_percentage = 100
     scene.render.filepath = OUT
     scene.render.image_settings.file_format = "PNG"
 
-    scene.luxcore.config.engine = "PATH"
-    scene.luxcore.config.sampler = "SOBOL"
-    scene.luxcore.config.spill_geometry = True
-    scene.luxcore.config.spill_geometry_minmb = 1
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_time = True
-    scene.luxcore.halt.time = 20
+    scene.superluxcore.config.engine = "PATH"
+    scene.superluxcore.config.sampler = "SOBOL"
+    scene.superluxcore.config.spill_geometry = True
+    scene.superluxcore.config.spill_geometry_minmb = 1
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_time = True
+    scene.superluxcore.halt.time = 20
 
     print("[SpillTest] Rendering 1280x720 with geometry spilling ...")
     bpy.ops.render.render(write_still=True)

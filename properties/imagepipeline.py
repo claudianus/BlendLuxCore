@@ -9,17 +9,17 @@ from bpy.props import (
 )
 from bpy.types import PropertyGroup, Image
 from .light import GAMMA_DESCRIPTION
-from .image_user import LuxCoreImageUser
+from .image_user import SuperLuxCoreImageUser
 
 
-class LuxCoreImagepipelinePluginMixin:
+class SuperLuxCoreImagepipelinePluginMixin:
 
     def is_enabled(self, context):
         # Note: We don't need this check for the OptiX denoiser because it is
         # not executed after the whole imagepipeline like OIDN
         using_OIDN_in_viewport = (
             context
-            and context.scene.luxcore.viewport.get_denoiser(context) == "OIDN"
+            and context.scene.superluxcore.viewport.get_denoiser(context) == "OIDN"
         )
         if (
             using_OIDN_in_viewport
@@ -29,8 +29,8 @@ class LuxCoreImagepipelinePluginMixin:
         return self.enabled
 
 
-class LuxCoreImagepipelineTonemapper(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineTonemapper(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "Tonemapper"
     enabled: BoolProperty(
@@ -138,8 +138,8 @@ class LuxCoreImagepipelineTonemapper(
         return autolinear or self.type == "TONEMAP_REINHARD02"
 
 
-class LuxCoreImagepipelineBloom(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineBloom(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "Bloom"
     enabled: BoolProperty(
@@ -167,7 +167,7 @@ class LuxCoreImagepipelineBloom(
     )
 
 
-class LuxCoreImagepipelineMist(PropertyGroup, LuxCoreImagepipelinePluginMixin):
+class SuperLuxCoreImagepipelineMist(PropertyGroup, SuperLuxCoreImagepipelinePluginMixin):
     NAME = "Mist"
     enabled: BoolProperty(
         name=NAME, default=False, description="Enable/disable " + NAME
@@ -209,8 +209,8 @@ class LuxCoreImagepipelineMist(PropertyGroup, LuxCoreImagepipelinePluginMixin):
     )
 
 
-class LuxCoreImagepipelineVignetting(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineVignetting(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "Vignetting"
     enabled: BoolProperty(
@@ -230,8 +230,8 @@ class LuxCoreImagepipelineVignetting(
     )
 
 
-class LuxCoreImagepipelineColorAberration(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineColorAberration(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "Color Aberration"
     enabled: BoolProperty(
@@ -262,8 +262,8 @@ class LuxCoreImagepipelineColorAberration(
     )
 
 
-class LuxCoreImagepipelineBackgroundImage(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineBackgroundImage(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "Background Image"
     enabled: BoolProperty(
@@ -275,7 +275,7 @@ class LuxCoreImagepipelineBackgroundImage(
         self.image_user.update(self.image)
 
     image: PointerProperty(name="Image", type=Image, update=update_image)
-    image_user: PointerProperty(type=LuxCoreImageUser)
+    image_user: PointerProperty(type=SuperLuxCoreImageUser)
     gamma: FloatProperty(
         name="Gamma", default=2.2, min=0, description=GAMMA_DESCRIPTION
     )
@@ -297,8 +297,8 @@ class LuxCoreImagepipelineBackgroundImage(
     storage: EnumProperty(name="Storage", items=storage_items, default="byte")
 
 
-class LuxCoreImagepipelineWhiteBalance(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineWhiteBalance(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "White Balance"
     enabled: BoolProperty(
@@ -316,8 +316,8 @@ class LuxCoreImagepipelineWhiteBalance(
     reverse: BoolProperty(name="Reverse", default=True)
 
 
-class LuxCoreImagepipelineCameraResponseFunc(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineCameraResponseFunc(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "Analog Film Simulation"
     enabled: BoolProperty(
@@ -347,12 +347,12 @@ class LuxCoreImagepipelineCameraResponseFunc(
         subtype="FILE_PATH",
         description="Path to the external .crf file",
     )
-    # Internal, not shown to the user (set by operator "luxcore.select_crf")
+    # Internal, not shown to the user (set by operator "superluxcore.select_crf")
     preset: StringProperty(name="")
 
 
-class LuxCoreImagepipelineColorLUT(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineColorLUT(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "LUT"
     enabled: BoolProperty(
@@ -400,8 +400,8 @@ class LuxCoreImagepipelineColorLUT(
     )
 
 
-class LuxCoreImagepipelineContourLines(
-    PropertyGroup, LuxCoreImagepipelinePluginMixin
+class SuperLuxCoreImagepipelineContourLines(
+    PropertyGroup, SuperLuxCoreImagepipelinePluginMixin
 ):
     NAME = "Irradiance Contour Lines"
     enabled: BoolProperty(
@@ -439,7 +439,7 @@ class LuxCoreImagepipelineContourLines(
     )
 
 
-class LuxCoreImagepipeline(PropertyGroup):
+class SuperLuxCoreImagepipeline(PropertyGroup):
     """
     Used (and initialized) in properties/camera.py
     The UI elements are located in ui/camera.py
@@ -451,15 +451,15 @@ class LuxCoreImagepipeline(PropertyGroup):
         description="Make the world background transparent",
     )
 
-    tonemapper: PointerProperty(type=LuxCoreImagepipelineTonemapper)
-    bloom: PointerProperty(type=LuxCoreImagepipelineBloom)
-    mist: PointerProperty(type=LuxCoreImagepipelineMist)
-    vignetting: PointerProperty(type=LuxCoreImagepipelineVignetting)
-    coloraberration: PointerProperty(type=LuxCoreImagepipelineColorAberration)
-    backgroundimage: PointerProperty(type=LuxCoreImagepipelineBackgroundImage)
-    white_balance: PointerProperty(type=LuxCoreImagepipelineWhiteBalance)
+    tonemapper: PointerProperty(type=SuperLuxCoreImagepipelineTonemapper)
+    bloom: PointerProperty(type=SuperLuxCoreImagepipelineBloom)
+    mist: PointerProperty(type=SuperLuxCoreImagepipelineMist)
+    vignetting: PointerProperty(type=SuperLuxCoreImagepipelineVignetting)
+    coloraberration: PointerProperty(type=SuperLuxCoreImagepipelineColorAberration)
+    backgroundimage: PointerProperty(type=SuperLuxCoreImagepipelineBackgroundImage)
+    white_balance: PointerProperty(type=SuperLuxCoreImagepipelineWhiteBalance)
     camera_response_func: PointerProperty(
-        type=LuxCoreImagepipelineCameraResponseFunc
+        type=SuperLuxCoreImagepipelineCameraResponseFunc
     )
-    color_LUT: PointerProperty(type=LuxCoreImagepipelineColorLUT)
-    contour_lines: PointerProperty(type=LuxCoreImagepipelineContourLines)
+    color_LUT: PointerProperty(type=SuperLuxCoreImagepipelineColorLUT)
+    contour_lines: PointerProperty(type=SuperLuxCoreImagepipelineContourLines)

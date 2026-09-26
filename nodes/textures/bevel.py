@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import FloatProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexBevel(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexBevel(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Bevel"
     bl_width_default = 160
 
@@ -16,15 +16,15 @@ class LuxCoreNodeTexBevel(LuxCoreNodeTexture, bpy.types.Node):
         subtype="DISTANCE", unit="LENGTH", default=0.025)
 
     def init(self, context):
-        self.outputs.new("LuxCoreSocketBump", "Bump")
+        self.outputs.new("SuperLuxCoreSocketBump", "Bump")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "radius")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "bevel",
             "radius": self.radius,
         }
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

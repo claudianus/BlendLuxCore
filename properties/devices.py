@@ -1,19 +1,19 @@
 import bpy
 from bpy.props import StringProperty, CollectionProperty, BoolProperty
 from bpy.types import PropertyGroup
-import pyluxcore
+import pysuperluxcore
 from ..utils import get_addon_preferences
 
 
-class LuxCoreOpenCLDevice(PropertyGroup):
+class SuperLuxCoreOpenCLDevice(PropertyGroup):
     enabled: BoolProperty(default=True)
     name: StringProperty()
     type: StringProperty()
 
 
-class LuxCoreDeviceSettings(PropertyGroup):
+class SuperLuxCoreDeviceSettings(PropertyGroup):
     # A collection of devices (can be enabled/disabled and have a name and type)
-    devices: CollectionProperty(type=LuxCoreOpenCLDevice)
+    devices: CollectionProperty(type=SuperLuxCoreOpenCLDevice)
     # To check on .blend file loading if the devices are correct for this computer
     devices_hash: StringProperty()
 
@@ -87,7 +87,7 @@ class LuxCoreDeviceSettings(PropertyGroup):
 
     def get_device_props(self):
         """
-        Returns pyluxcore.Properties() of the following form:
+        Returns pysuperluxcore.Properties() of the following form:
         
         opencl.device.0.platform.name = "NVIDIA Corporation
         opencl.device.0.platform.version = "OpenCL 1.2 CUDA 10.2.141
@@ -112,4 +112,4 @@ class LuxCoreDeviceSettings(PropertyGroup):
         opencl.device.1.localmemory = 32768
         opencl.device.1.constmemory = 131072
         """
-        return pyluxcore.GetOpenCLDeviceDescs()
+        return pysuperluxcore.GetOpenCLDeviceDescs()

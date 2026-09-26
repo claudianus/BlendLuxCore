@@ -30,8 +30,8 @@ MIN_NOISE_SIZE = 0.0001
 COLORDEPTH_DESC = "Depth at which white light is turned into the absorption color"
 
 
-class LuxCoreNodeTree:
-    """Base class for LuxCore node trees"""
+class SuperLuxCoreNodeTree:
+    """Base class for SuperLuxCore node trees"""
     requested_links = set()
 
     def acknowledge_connection(self, context):
@@ -45,7 +45,7 @@ class LuxCoreNodeTree:
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        return context.scene.render.engine == "SUPERLUXCORE"
 
     def update(self):
         # Create all links that were requested by insert_link method calls of nodes
@@ -62,8 +62,8 @@ class LuxCoreNodeTree:
 
 
 
-class LuxCoreNode:
-    """Base class for LuxCore nodes (material, volume and texture)"""
+class SuperLuxCoreNode:
+    """Base class for SuperLuxCore nodes (material, volume and texture)"""
     bl_label = ""
 
     @classmethod
@@ -107,32 +107,32 @@ class LuxCoreNode:
     def make_name(self):
         return utils.make_key_from_bpy_struct(self)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         raise NotImplementedError("Subclasses have to implement this method!")
 
-    def export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         """ This method is an abstraction layer that handles the caching. """
         cache_key = self.make_name()
         if output_socket:
-            cache_key += utils.sanitize_luxcore_name(output_socket.name)
+            cache_key += utils.sanitize_superluxcore_name(output_socket.name)
 
-        if luxcore_name is None:
-            luxcore_name = cache_key
+        if superluxcore_name is None:
+            superluxcore_name = cache_key
 
         if cache_key in exporter.node_cache:
             return exporter.node_cache[cache_key]
         else:
-            # Nodes can return a different luxcore_name than the one that
+            # Nodes can return a different superluxcore_name than the one that
             # is passed in to sub_export, for example when an implicit scale
             # texture is added.
-            luxcore_name = self.sub_export(exporter, depsgraph, props, luxcore_name, output_socket)
-            exporter.node_cache[cache_key] = luxcore_name
-            return luxcore_name
+            superluxcore_name = self.sub_export(exporter, depsgraph, props, superluxcore_name, output_socket)
+            exporter.node_cache[cache_key] = superluxcore_name
+            return superluxcore_name
 
-    def create_props(self, props, definitions, luxcore_name):
-        prefix = self.prefix + luxcore_name + "."
+    def create_props(self, props, definitions, superluxcore_name):
+        prefix = self.prefix + superluxcore_name + "."
         props.Set(utils.luxutils.create_props(prefix, definitions))
-        return luxcore_name
+        return superluxcore_name
 
     def free(self):
         # This method implements a workaround to have "delete and reconnect" functionality.
@@ -150,16 +150,16 @@ class LuxCoreNode:
                             node_tree.links.new(from_socket, to_socket)
 
 
-class LuxCoreNodeMaterial(LuxCoreNode, bpy.types.Node): 
+class SuperLuxCoreNodeMaterial(SuperLuxCoreNode, bpy.types.Node): 
     """Base class for material nodes"""
     suffix = "mat"  # To avoid collisions with volume names
     prefix = "scene.materials."
 
     def add_common_inputs(self):
         """ Call from derived classes (in init method) """
-        self.add_input("LuxCoreSocketFloat0to1", "Opacity", 1)
-        self.add_input("LuxCoreSocketBump", "Bump")
-        self.add_input("LuxCoreSocketMatEmission", "Emission")
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Opacity", 1)
+        self.add_input("SuperLuxCoreSocketBump", "Bump")
+        self.add_input("SuperLuxCoreSocketMatEmission", "Emission")
 
     def export_common_inputs(self, exporter, depsgraph, props, definitions):
         """ Call from derived classes (in export method) """
@@ -176,7 +176,7 @@ class LuxCoreNodeMaterial(LuxCoreNode, bpy.types.Node):
             definitions["bumptex"] = bump
 
             from_node = bump_socket.links[0].from_node
-            if from_node.bl_idname in {"LuxCoreNodeTexBump", "LuxCoreNodeTexTriplanarBump"}:
+            if from_node.bl_idname in {"SuperLuxCoreNodeTexBump", "SuperLuxCoreNodeTexTriplanarBump"}:
                 definitions["bumpsamplingdistance"] = from_node.sampling_distance
 
         # The emission socket and node are special cases
@@ -184,35 +184,35 @@ class LuxCoreNodeMaterial(LuxCoreNode, bpy.types.Node):
         id = self.inputs.find("Emission")
         self.inputs[id].export_emission(exporter, depsgraph, props, definitions)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         raise NotImplementedError("Subclasses have to implement this method!")
 
 
-class LuxCoreNodeTexture(LuxCoreNode, bpy.types.Node):
+class SuperLuxCoreNodeTexture(SuperLuxCoreNode, bpy.types.Node):
     """Base class for texture nodes"""
     suffix = ""
     prefix = "scene.textures."
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         raise NotImplementedError("Subclasses have to implement this method!")
 
 
-class LuxCoreNodeVolume(LuxCoreNode, bpy.types.Node):
+class SuperLuxCoreNodeVolume(SuperLuxCoreNode, bpy.types.Node):
     """Base class for volume nodes"""
     suffix = "vol"  # To avoid collisions with material names
     prefix = "scene.volumes."
 
     INCOMPATIBLE_TEXTURE_NODES = {
-        "LuxCoreNodeTexCheckerboard2D",
-        "LuxCoreNodeTexDots",
-        "LuxCoreNodeTexHitpoint",
-        "LuxCoreNodeTexImagemap",
-        "LuxCoreNodeTexMapping2D",
-        "LuxCoreNodeTexObjectID",
-        "LuxCoreNodeTexPointiness",
-        "LuxCoreNodeTexRandomPerIsland",
-        "LuxCoreNodeTexUV",
-        "LuxCoreNodeTexWireframe",
+        "SuperLuxCoreNodeTexCheckerboard2D",
+        "SuperLuxCoreNodeTexDots",
+        "SuperLuxCoreNodeTexHitpoint",
+        "SuperLuxCoreNodeTexImagemap",
+        "SuperLuxCoreNodeTexMapping2D",
+        "SuperLuxCoreNodeTexObjectID",
+        "SuperLuxCoreNodeTexPointiness",
+        "SuperLuxCoreNodeTexRandomPerIsland",
+        "SuperLuxCoreNodeTexUV",
+        "SuperLuxCoreNodeTexWireframe",
     }
 
     # Common properties that every derived class needs to add
@@ -225,7 +225,7 @@ class LuxCoreNodeVolume(LuxCoreNode, bpy.types.Node):
 
         emission_socket = self.inputs["Emission"]
         if emission_socket.is_linked or emission_socket.default_value != Color((0.0, 0.0, 0.0)):
-            lightgroups = context.scene.luxcore.lightgroups
+            lightgroups = context.scene.superluxcore.lightgroups
             layout.prop_search(self, "lightgroup",
                                lightgroups, "custom",
                                icon=icons.LIGHTGROUP, text="")
@@ -253,9 +253,9 @@ class LuxCoreNodeVolume(LuxCoreNode, bpy.types.Node):
 
     def add_common_inputs(self):
         """ Call from derived classes (in init method) """
-        self.add_input("LuxCoreSocketColor", "Absorption", (1, 1, 1))
-        self.add_input("LuxCoreSocketIOR", "IOR", 1.5)
-        self.add_input("LuxCoreSocketColor", "Emission", (0, 0, 0))
+        self.add_input("SuperLuxCoreSocketColor", "Absorption", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketIOR", "IOR", 1.5)
+        self.add_input("SuperLuxCoreSocketColor", "Emission", (0, 0, 0))
 
     def export_common_inputs(self, exporter, depsgraph, props, definitions):
         """ Call from derived classes (in export method) """
@@ -287,7 +287,7 @@ class LuxCoreNodeVolume(LuxCoreNode, bpy.types.Node):
         definitions["absorption"] = abs_col
         definitions["emission"] = self.inputs["Emission"].export(exporter, depsgraph, props)
 
-        lightgroups = exporter.scene.luxcore.lightgroups
+        lightgroups = exporter.scene.superluxcore.lightgroups
         lightgroup_id = lightgroups.get_id_by_name(self.lightgroup)
         definitions["emission.id"] = lightgroup_id
         exporter.lightgroup_cache.add(lightgroup_id)
@@ -317,11 +317,11 @@ class LuxCoreNodeVolume(LuxCoreNode, bpy.types.Node):
 
         return scattering_col
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         raise NotImplementedError("Subclasses have to implement this method!")
 
 
-class LuxCoreNodeShape(LuxCoreNode, bpy.types.Node):
+class SuperLuxCoreNodeShape(SuperLuxCoreNode, bpy.types.Node):
     """Base class for shape nodes"""
     suffix = ""
     prefix = "scene.shapes."
@@ -333,7 +333,7 @@ class LuxCoreNodeShape(LuxCoreNode, bpy.types.Node):
         raise NotImplementedError("Subclasses have to implement this method!")
 
 
-class LuxCoreNodeTreePointer(LuxCoreNode, bpy.types.Node):
+class SuperLuxCoreNodeTreePointer(SuperLuxCoreNode, bpy.types.Node):
     """ Pointer to a node tree """
     bl_label = "Pointer"
     bl_width_default = 250
@@ -342,11 +342,11 @@ class LuxCoreNodeTreePointer(LuxCoreNode, bpy.types.Node):
     def update_node_tree(self, context):
         if self.node_tree:
             id = self.outputs.find("Material")
-            self.outputs[id].enabled = self.node_tree.bl_idname == "luxcore_material_nodes"
+            self.outputs[id].enabled = self.node_tree.bl_idname == "superluxcore_material_nodes"
             id = self.outputs.find("Color")
-            self.outputs[id].enabled = self.node_tree.bl_idname == "luxcore_texture_nodes"
+            self.outputs[id].enabled = self.node_tree.bl_idname == "superluxcore_texture_nodes"
             id = self.outputs.find("Volume")
-            self.outputs[id].enabled = self.node_tree.bl_idname == "luxcore_volume_nodes"
+            self.outputs[id].enabled = self.node_tree.bl_idname == "superluxcore_volume_nodes"
         else:
             id = self.outputs.find("Material")
             self.outputs[id].enabled = True
@@ -359,19 +359,19 @@ class LuxCoreNodeTreePointer(LuxCoreNode, bpy.types.Node):
                                 description="Use the output of the selected node tree in this node tree")
 
     filter_items = [
-        ("luxcore_material_nodes", "Materials", "Only show material nodes", icons.NTREE_MATERIAL, 0),
-        ("luxcore_volume_nodes", "Volumes", "Only show volume nodes", icons.NTREE_VOLUME, 1),
-        ("luxcore_texture_nodes", "Textures", "Only show texture nodes", icons.NTREE_TEXTURE, 2),
+        ("superluxcore_material_nodes", "Materials", "Only show material nodes", icons.NTREE_MATERIAL, 0),
+        ("superluxcore_volume_nodes", "Volumes", "Only show volume nodes", icons.NTREE_VOLUME, 1),
+        ("superluxcore_texture_nodes", "Textures", "Only show texture nodes", icons.NTREE_TEXTURE, 2),
     ]
-    filter: EnumProperty(name="Filter", items=filter_items, default="luxcore_volume_nodes",
+    filter: EnumProperty(name="Filter", items=filter_items, default="superluxcore_volume_nodes",
                           description="Filter for the node tree selection menu below")
 
     def init(self, context):
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
         self.outputs["Material"].enabled = False
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
         self.outputs["Color"].enabled = False
-        self.outputs.new("LuxCoreSocketVolume", "Volume")
+        self.outputs.new("SuperLuxCoreSocketVolume", "Volume")
         self.outputs["Volume"].enabled = False
         self.update_node_tree(context)
 
@@ -390,15 +390,15 @@ class LuxCoreNodeTreePointer(LuxCoreNode, bpy.types.Node):
             icon = "NODETREE"
 
         utils_ui.template_node_tree(layout, self, "node_tree", icon,
-                                    "LUXCORE_MT_pointer_select_node_tree",
-                                    "luxcore.pointer_show_node_tree",
+                                    "SUPERLUXCORE_MT_pointer_select_node_tree",
+                                    "superluxcore.pointer_show_node_tree",
                                     "",  # Do not offer to create a node tree
-                                    "luxcore.pointer_unlink_node_tree")
+                                    "superluxcore.pointer_unlink_node_tree")
 
         if self.node_tree == self.id_data:
             layout.label(text="Recursion!", icon=icons.WARNING)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.node_tree == self.id_data:
             raise Exception("Recursion (pointer referencing its own node tree)")
 
@@ -408,10 +408,10 @@ class LuxCoreNodeTreePointer(LuxCoreNode, bpy.types.Node):
             print("ERROR: no active output found in node tree", self.node_tree.name)
             return None
 
-        # Ignore the passed-in luxcore_name here.
+        # Ignore the passed-in superluxcore_name here.
         # Not a shader instance (if we ever support inputs, we will need to make
         # different shader instances for different sets of input parameters)
-        luxcore_name = utils.get_luxcore_name(self.node_tree)
+        superluxcore_name = utils.get_superluxcore_name(self.node_tree)
 
-        output.export(exporter, depsgraph, props, luxcore_name)
-        return luxcore_name
+        output.export(exporter, depsgraph, props, superluxcore_name)
+        return superluxcore_name

@@ -1,7 +1,7 @@
 import bpy
 from bpy.props import FloatProperty, EnumProperty
-from ..base import LuxCoreNodeMaterial
-from ..sockets import LuxCoreSocketFloat
+from ..base import SuperLuxCoreNodeMaterial
+from ..sockets import SuperLuxCoreSocketFloat
 from .glossytranslucent import DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION
 from ... import icons
 from ...utils import node as utils_node
@@ -9,14 +9,14 @@ from ...utils import node as utils_node
 REFLECTION_DESCRIPTION = "Glossy layer reflection value"
 
 
-class LuxCoreSocketReflection(bpy.types.NodeSocket, LuxCoreSocketFloat):
+class SuperLuxCoreSocketReflection(bpy.types.NodeSocket, SuperLuxCoreSocketFloat):
     # Reflections look weird when roughness gets too small
     default_value: FloatProperty(min=0.00001, max=1, description=REFLECTION_DESCRIPTION,
                                  update=utils_node.force_viewport_update)
     slider = True
 
 
-class LuxCoreNodeMatCarpaint(LuxCoreNodeMaterial, bpy.types.Node):
+class SuperLuxCoreNodeMatCarpaint(SuperLuxCoreNodeMaterial, bpy.types.Node):
     """
     carpaint material node
 
@@ -58,29 +58,29 @@ class LuxCoreNodeMatCarpaint(LuxCoreNodeMaterial, bpy.types.Node):
                                update=utils_node.force_viewport_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Diffuse Color", (0.3, 0.3, 0.3))
-        self.add_input("LuxCoreSocketColor", "Specular Color 1", (1, 1, 1))
-        self.add_input("LuxCoreSocketReflection", "R1", 0.95)
-        self.add_input("LuxCoreSocketRoughness", "M1", 0.25)
-        self.add_input("LuxCoreSocketColor", "Specular Color 2", (1, 1, 1))
-        self.add_input("LuxCoreSocketReflection", "R2", 0.9)
-        self.add_input("LuxCoreSocketRoughness", "M2", 0.1)
-        self.add_input("LuxCoreSocketColor", "Specular Color 3", (1, 1, 1))
-        self.add_input("LuxCoreSocketReflection", "R3", 0.7)
-        self.add_input("LuxCoreSocketRoughness", "M3", 0.015)
-        self.add_input("LuxCoreSocketColor", "Absorption Color", (0, 0, 0))
-        self.add_input("LuxCoreSocketFloatPositive", "Absorption Depth (nm)", 0)
+        self.add_input("SuperLuxCoreSocketColor", "Diffuse Color", (0.3, 0.3, 0.3))
+        self.add_input("SuperLuxCoreSocketColor", "Specular Color 1", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketReflection", "R1", 0.95)
+        self.add_input("SuperLuxCoreSocketRoughness", "M1", 0.25)
+        self.add_input("SuperLuxCoreSocketColor", "Specular Color 2", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketReflection", "R2", 0.9)
+        self.add_input("SuperLuxCoreSocketRoughness", "M2", 0.1)
+        self.add_input("SuperLuxCoreSocketColor", "Specular Color 3", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketReflection", "R3", 0.7)
+        self.add_input("SuperLuxCoreSocketRoughness", "M3", 0.015)
+        self.add_input("SuperLuxCoreSocketColor", "Absorption Color", (0, 0, 0))
+        self.add_input("SuperLuxCoreSocketFloatPositive", "Absorption Depth (nm)", 0)
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
-        op = layout.operator("luxcore.open_website", text="Open Wiki Page", icon=icons.URL)
+        op = layout.operator("superluxcore.open_website", text="Open Wiki Page", icon=icons.URL)
         op.url = "https://wiki.luxcorerender.org/LuxCoreRender_Materials_Car_Paint"
         layout.prop(self, "preset")
         layout.prop(self, "distribution")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if self.preset != "manual":
             definitions = {
                 "type": "carpaint",
@@ -108,4 +108,4 @@ class LuxCoreNodeMatCarpaint(LuxCoreNodeMaterial, bpy.types.Node):
             }
 
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

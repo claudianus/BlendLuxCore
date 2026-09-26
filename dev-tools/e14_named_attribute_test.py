@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # E2E: generic named attributes (Geometry Nodes "Store Named Attribute"
-# output / mesh.attributes) -> LuxCore vertex-AOV / triangle-AOV / color
+# output / mesh.attributes) -> SuperLuxCore vertex-AOV / triangle-AOV / color
 # layers -> Cycles Attribute node shading.
 #
 # Scene A: a grid whose POINT-domain float attribute "hot" is 0 on
@@ -132,7 +132,7 @@ def build_material(attr_name, tint_attr=None):
 def build_scene(face_attr):
     reset_scene()
     scene = bpy.context.scene
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
 
     if face_attr:
         # Grid with faces on both sides of x=0; FACE attr "facehot" is 0
@@ -166,17 +166,17 @@ def build_scene(face_attr):
     scene.collection.objects.link(cam)
     scene.camera = cam
 
-    scene.luxcore.config.engine = "PATH"
+    scene.superluxcore.config.engine = "PATH"
     scene.render.resolution_x = 64
     scene.render.resolution_y = 64
-    scene.luxcore.halt.enable = True
-    scene.luxcore.halt.use_samples = True
-    scene.luxcore.halt.samples = 32
+    scene.superluxcore.halt.enable = True
+    scene.superluxcore.halt.use_samples = True
+    scene.superluxcore.halt.samples = 32
     return scene
 
 
 def render(scene, device, path):
-    scene.luxcore.config.device = device
+    scene.superluxcore.config.device = device
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     return decode_png(path)
@@ -190,7 +190,7 @@ def sides(px, w, h, ch=0):
 
 
 def main():
-    import blendluxcore  # registers the engine
+    import superluxcore  # registers the engine
 
     # Scene A: vertex AOV (float) + extra color layer (vector)
     scene = build_scene(face_attr=False)

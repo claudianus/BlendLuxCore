@@ -1,5 +1,5 @@
 """
-Infinite-light CDF resolution cap test (standalone pyluxcore).
+Infinite-light CDF resolution cap test (standalone pysuperluxcore).
 
     python3 dev-tools/envcdf_test.py
 
@@ -20,7 +20,7 @@ import resource
 import sys
 
 import numpy as np
-import pyluxcore
+import pysuperluxcore
 
 IMG = "/tmp/envcdf_hdri.png"
 OUT_FULL = "/tmp/envcdf_full.png"
@@ -47,7 +47,7 @@ def write_envmap():
 
 
 def build_scene(cdfdim):
-    p = pyluxcore.Properties()
+    p = pysuperluxcore.Properties()
     p.SetFromString(f"""
 scene.lights.env.type = "infinite"
 scene.lights.env.file = "{IMG}"
@@ -66,9 +66,9 @@ scene.camera.up = 0 0 1
 
 
 def render(cdfdim, out, haltspp):
-    scene = pyluxcore.Scene()
+    scene = pysuperluxcore.Scene()
     scene.Parse(build_scene(cdfdim))
-    cfg = pyluxcore.Properties()
+    cfg = pysuperluxcore.Properties()
     cfg.SetFromString(f"""
 renderengine.type = "PATHCPU"
 sampler.type = "SOBOL"
@@ -79,8 +79,8 @@ film.outputs.0.type = RGB_IMAGEPIPELINE
 film.outputs.0.filename = {out}
 film.imagepipelines.0.0.type = NOP
 """)
-    rc = pyluxcore.RenderConfig(cfg, scene)
-    session = pyluxcore.RenderSession(rc)
+    rc = pysuperluxcore.RenderConfig(cfg, scene)
+    session = pysuperluxcore.RenderSession(rc)
     session.Start()
     peak = rss_mb()
     while not session.HasDone():
@@ -104,7 +104,7 @@ def mean_rgb(path):
 
 def main():
     write_envmap()
-    pyluxcore.Init()
+    pysuperluxcore.Init()
     base = rss_mb()
 
     peak_full = render(0, OUT_FULL, 64)

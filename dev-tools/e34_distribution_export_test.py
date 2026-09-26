@@ -11,7 +11,7 @@
 
 import bpy
 
-from bl_ext.user_default.blendluxcore.export import material as export_material
+from bl_ext.user_default.superluxcore.export import material as export_material
 
 
 def get_str(props, key):
@@ -27,10 +27,10 @@ exporter = type("DummyExporter", (),
 
 def export_node(node_cls, configure=None):
     mat = bpy.data.materials.new("Mat_" + node_cls)
-    nt = bpy.data.node_groups.new("Tree_" + node_cls, "luxcore_material_nodes")
+    nt = bpy.data.node_groups.new("Tree_" + node_cls, "superluxcore_material_nodes")
     nt.use_fake_user = True
-    mat.luxcore.node_tree = nt
-    out = nt.nodes.new("LuxCoreNodeMatOutput")
+    mat.superluxcore.node_tree = nt
+    out = nt.nodes.new("SuperLuxCoreNodeMatOutput")
     n = nt.nodes.new(node_cls)
     nt.links.new(n.outputs[0], out.inputs[0])
     if configure:
@@ -42,18 +42,18 @@ def export_node(node_cls, configure=None):
 fails = []
 
 # --- glossy2 -------------------------------------------------------------
-n, name, props = export_node("LuxCoreNodeMatGlossy2")
+n, name, props = export_node("SuperLuxCoreNodeMatGlossy2")
 pre = f"scene.materials.{name}."
 assert get_str(props, pre + "type") == "glossy2"
 assert get_str(props, pre + "distribution") == "schlick", "default must be schlick"
 
-n, name, props = export_node("LuxCoreNodeMatGlossy2",
+n, name, props = export_node("SuperLuxCoreNodeMatGlossy2",
                              lambda n: setattr(n, "distribution", "ggx"))
 assert get_str(props, f"scene.materials.{name}.distribution") == "ggx", \
     "glossy2 ggx export failed"
 
 # --- metal2 ---------------------------------------------------------------
-n, name, props = export_node("LuxCoreNodeMatMetal",
+n, name, props = export_node("SuperLuxCoreNodeMatMetal",
                              lambda n: setattr(n, "distribution", "ggx"))
 pre = f"scene.materials.{name}."
 if not (get_str(props, pre + "type") == "metal2"
@@ -64,7 +64,7 @@ def cfg_metal_mb(n):
     n.distribution = "ggx"
     n.multibounce = True
 
-n, name, props = export_node("LuxCoreNodeMatMetal", cfg_metal_mb)
+n, name, props = export_node("SuperLuxCoreNodeMatMetal", cfg_metal_mb)
 pre = f"scene.materials.{name}."
 if get_str(props, pre + "multibounce") != "1":
     fails.append("metal2 multibounce export failed: "
@@ -75,14 +75,14 @@ def cfg_glass(n):
     n.rough = True
     n.distribution = "ggx"
 
-n, name, props = export_node("LuxCoreNodeMatGlass", cfg_glass)
+n, name, props = export_node("SuperLuxCoreNodeMatGlass", cfg_glass)
 pre = f"scene.materials.{name}."
 if not (get_str(props, pre + "type") == "roughglass"
         and get_str(props, pre + "distribution") == "ggx"):
     fails.append(f"roughglass distribution export failed: type={get_str(props, pre + 'type')}")
 
 # smooth glass must not emit a distribution key
-n, name, props = export_node("LuxCoreNodeMatGlass")
+n, name, props = export_node("SuperLuxCoreNodeMatGlass")
 pre = f"scene.materials.{name}."
 if any(k == pre + "distribution" for k in props.GetAllNames()):
     fails.append("smooth glass emitted distribution property")
@@ -90,12 +90,12 @@ if any(k == pre + "distribution" for k in props.GetAllNames()):
 # --- glossycoating (needs a linked base material) ---------------------------
 def export_glossycoating(distribution):
     mat = bpy.data.materials.new("Mat_GC")
-    nt = bpy.data.node_groups.new("Tree_GC", "luxcore_material_nodes")
+    nt = bpy.data.node_groups.new("Tree_GC", "superluxcore_material_nodes")
     nt.use_fake_user = True
-    mat.luxcore.node_tree = nt
-    out = nt.nodes.new("LuxCoreNodeMatOutput")
-    base = nt.nodes.new("LuxCoreNodeMatMatte")
-    n = nt.nodes.new("LuxCoreNodeMatGlossyCoating")
+    mat.superluxcore.node_tree = nt
+    out = nt.nodes.new("SuperLuxCoreNodeMatOutput")
+    base = nt.nodes.new("SuperLuxCoreNodeMatMatte")
+    n = nt.nodes.new("SuperLuxCoreNodeMatGlossyCoating")
     n.distribution = distribution
     nt.links.new(base.outputs[0], n.inputs["Base Material"])
     nt.links.new(n.outputs[0], out.inputs[0])
@@ -113,7 +113,7 @@ if get_str(props, f"scene.materials.{name}.distribution") != "schlick":
     fails.append("glossycoating default distribution broken")
 
 # --- glossytranslucent ------------------------------------------------------
-n, name, props = export_node("LuxCoreNodeMatGlossyTranslucent",
+n, name, props = export_node("SuperLuxCoreNodeMatGlossyTranslucent",
                              lambda n: setattr(n, "distribution", "ggx"))
 pre = f"scene.materials.{name}."
 if not (get_str(props, pre + "type") == "glossytranslucent"
@@ -121,7 +121,7 @@ if not (get_str(props, pre + "type") == "glossytranslucent"
     fails.append("glossytranslucent distribution export failed")
 
 # --- carpaint (manual + preset paths) --------------------------------------
-n, name, props = export_node("LuxCoreNodeMatCarpaint",
+n, name, props = export_node("SuperLuxCoreNodeMatCarpaint",
                              lambda n: setattr(n, "distribution", "ggx"))
 pre = f"scene.materials.{name}."
 if not (get_str(props, pre + "type") == "carpaint"
@@ -132,7 +132,7 @@ def cfg_carpaint_preset(n):
     n.preset = "polaris_silber"
     n.distribution = "ggx"
 
-n, name, props = export_node("LuxCoreNodeMatCarpaint", cfg_carpaint_preset)
+n, name, props = export_node("SuperLuxCoreNodeMatCarpaint", cfg_carpaint_preset)
 pre = f"scene.materials.{name}."
 if not (get_str(props, pre + "preset") == "polaris silber"
         and get_str(props, pre + "distribution") == "ggx"):

@@ -4,15 +4,15 @@ import threading
 _needs_reload = "bpy" in locals()
 
 import bpy
-import pyluxcore
+import pysuperluxcore
 from . import final, preview, viewport
 from .. import icons, utils, properties
 from ..utils.statistics import TileStats
-from ..utils.log import LuxCoreLog
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.log import SuperLuxCoreLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from ..utils import view_layer as utils_view_layer
 from ..utils import get_addon_preferences
-from ..properties.display import LuxCoreDisplaySettings
+from ..properties.display import SuperLuxCoreDisplaySettings
 
 
 if _needs_reload:
@@ -23,8 +23,8 @@ if _needs_reload:
         importlib.reload(module)
 
 
-class LuxCoreRenderEngine(bpy.types.RenderEngine):
-    bl_idname = "LUXCORE"
+class SuperLuxCoreRenderEngine(bpy.types.RenderEngine):
+    bl_idname = "SUPERLUXCORE"
     bl_label = "SuperLuxCore"
 
     # Apply compositing on render results.
@@ -47,7 +47,7 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
 
     # Texture previews are disabled intentionally. It is faster and easier to let
     # Blender Internal render them. They are only shown for brush textures,
-    # displacement textures etc., not for LuxCore textures.
+    # displacement textures etc., not for SuperLuxCore textures.
     bl_use_texture_preview = False
 
     # Use Eevee nodes in look dev ("MATERIAL") shading mode in the viewport.
@@ -117,11 +117,11 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
             sleep(0.01)
 
     def render(self, depsgraph):
-        display_luxcore_logs = get_addon_preferences(bpy.context).display_luxcore_logs
-        if display_luxcore_logs:
-            pyluxcore.SetLogHandler(LuxCoreLog.add)
+        display_superluxcore_logs = get_addon_preferences(bpy.context).display_superluxcore_logs
+        if display_superluxcore_logs:
+            pysuperluxcore.SetLogHandler(SuperLuxCoreLog.add)
         else:
-            pyluxcore.SetLogHandler(LuxCoreLog.silent)
+            pysuperluxcore.SetLogHandler(SuperLuxCoreLog.silent)
         if self.is_preview:
             self.render_preview(depsgraph)
         else:
@@ -129,11 +129,11 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
 
     def render_final(self, depsgraph):
         try:
-            LuxCoreRenderEngine.final_running = True
-            LuxCoreDisplaySettings.paused = False
-            LuxCoreDisplaySettings.stop_requested = False
+            SuperLuxCoreRenderEngine.final_running = True
+            SuperLuxCoreDisplaySettings.paused = False
+            SuperLuxCoreDisplaySettings.stop_requested = False
             TileStats.reset()
-            LuxCoreLog.add_listener(self.log_listener)
+            SuperLuxCoreLog.add_listener(self.log_listener)
             final.render(self, depsgraph)
         except Exception as error:
             error_str = str(error)
@@ -145,7 +145,7 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
             import traceback
             traceback.print_exc()
             # Add error to error log so the user can inspect and copy/paste it
-            LuxCoreErrorLog.add_error(error_str)
+            SuperLuxCoreErrorLog.add_error(error_str)
 
             # Clean up: stop a started session first, otherwise its render
             # threads keep running with no owner (leak).
@@ -158,9 +158,9 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
             self.session = None
         finally:
             utils_view_layer.State.reset()
-            LuxCoreRenderEngine.final_running = False
+            SuperLuxCoreRenderEngine.final_running = False
             TileStats.reset()
-            LuxCoreLog.remove_listener(self.log_listener)
+            SuperLuxCoreLog.remove_listener(self.log_listener)
 
     def render_preview(self, depsgraph):
         try:
@@ -172,7 +172,7 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
                 self.report({"ERROR"}, str(error))
             except Exception:
                 pass
-            LuxCoreErrorLog.add_error(error)
+            SuperLuxCoreErrorLog.add_error(error)
             # Clean up
             del self.session
             self.session = None
@@ -219,14 +219,14 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
         self.register_pass(scene, renderlayer, "Combined", 4, "RGBA", 'COLOR')
 
         # Denoiser
-        if scene.luxcore.denoiser.enabled:
-            transparent = scene.camera.data.luxcore.imagepipeline.transparent_film
+        if scene.superluxcore.denoiser.enabled:
+            transparent = scene.camera.data.superluxcore.imagepipeline.transparent_film
             if transparent:
                 self.register_pass(scene, renderlayer, "DENOISED", 4, "RGBA", "COLOR")
             else:
                 self.register_pass(scene, renderlayer, "DENOISED", 3, "RGB", "COLOR")
 
-        aovs = renderlayer.luxcore.aovs
+        aovs = renderlayer.superluxcore.aovs
 
         # Notes:
         # - It seems like Blender can not handle passes with 2 elements. They must have 1, 3 or 4 elements.
@@ -309,7 +309,7 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
             self.register_pass(scene, renderlayer, "IRRADIANCE", 3, "RGB", "COLOR")
 
         # Light groups
-        lightgroups = scene.luxcore.lightgroups
+        lightgroups = scene.superluxcore.lightgroups
         lightgroup_pass_names = lightgroups.get_pass_names()
         default_group_name = lightgroups.get_lightgroup_pass_name(is_default_group=True)
         # If only the default group is in the list, it doesn't make sense to show lightgroups
@@ -321,7 +321,7 @@ class LuxCoreRenderEngine(bpy.types.RenderEngine):
 
 def template_refresh_button(is_refreshing, operator_name, layout, run_msg="Refreshing..."):
     col = layout.column()
-    col.enabled = LuxCoreRenderEngine.final_running
+    col.enabled = SuperLuxCoreRenderEngine.final_running
 
     col.operator(operator_name, icon=icons.REFRESH)
     if is_refreshing:

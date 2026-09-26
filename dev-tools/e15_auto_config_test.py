@@ -22,10 +22,10 @@ Run:
 import bpy
 import sys
 
-from bl_ext.user_default.blendluxcore.export import (
+from bl_ext.user_default.superluxcore.export import (
     config as export_config,
 )
-from bl_ext.user_default.blendluxcore.export.config import (
+from bl_ext.user_default.superluxcore.export.config import (
     AUTO_LIGHT_STRATEGY_EMITTER_THRESHOLD,
     _auto_light_strategy,
     _count_emitters,
@@ -43,7 +43,7 @@ def check(name, ok, detail=""):
 def fresh_scene():
     bpy.ops.scene.new(type="EMPTY")
     scene = bpy.context.scene
-    scene.render.engine = "LUXCORE"
+    scene.render.engine = "SUPERLUXCORE"
     return scene
 
 
@@ -104,8 +104,8 @@ check(
 # --- end-to-end through config.convert --------------------------------
 
 scene2 = fresh_scene()
-scene2.luxcore.config.engine = "PATH"
-scene2.luxcore.config.device = "CPU"
+scene2.superluxcore.config.engine = "PATH"
+scene2.superluxcore.config.device = "CPU"
 check(
     "convert.sparse-logpower",
     light_strategy_of(scene2) == "LOG_POWER",
@@ -119,20 +119,20 @@ check(
 )
 
 # explicit user choice wins
-scene2.luxcore.config.light_strategy = "POWER"
+scene2.superluxcore.config.light_strategy = "POWER"
 check(
     "convert.explicit-wins",
     light_strategy_of(scene2) == "POWER",
 )
-scene2.luxcore.config.light_strategy = "AUTO"
+scene2.superluxcore.config.light_strategy = "AUTO"
 
 # DLS cache overrides AUTO
-scene2.luxcore.config.dls_cache.enabled = True
+scene2.superluxcore.config.dls_cache.enabled = True
 check(
     "convert.dlsc-override",
     light_strategy_of(scene2) == "DLS_CACHE",
 )
-scene2.luxcore.config.dls_cache.enabled = False
+scene2.superluxcore.config.dls_cache.enabled = False
 
 # --- auto clamping ----------------------------------------------------
 
@@ -142,13 +142,13 @@ check(
     not props.IsDefined("path.clamping.variance.maxvalue"),
 )
 
-scene2.luxcore.config.path.suggested_clamping_value = 42.0
+scene2.superluxcore.config.path.suggested_clamping_value = 42.0
 # Auto-clamp only applies while the scene signature matches the one
 # stamped when the suggestion was measured (5ab09647).
-from bl_ext.user_default.blendluxcore.utils.render import (
+from bl_ext.user_default.superluxcore.utils.render import (
     compute_clamp_signature,
 )
-scene2.luxcore.config.path.suggested_clamping_sig = compute_clamp_signature(
+scene2.superluxcore.config.path.suggested_clamping_sig = compute_clamp_signature(
     scene2
 )
 props = export_config.convert(None, scene2)
@@ -159,46 +159,46 @@ check(
     < 1e-6,
 )
 
-scene2.luxcore.config.path.use_clamping = True
-scene2.luxcore.config.path.clamping = 7.0
+scene2.superluxcore.config.path.use_clamping = True
+scene2.superluxcore.config.path.clamping = 7.0
 props = export_config.convert(None, scene2)
 check(
     "clamp.manual-wins",
     abs(props.Get("path.clamping.variance.maxvalue").GetFloat() - 7.0)
     < 1e-6,
 )
-scene2.luxcore.config.path.use_clamping = False
+scene2.superluxcore.config.path.use_clamping = False
 
-scene2.luxcore.config.path.auto_clamping = False
+scene2.superluxcore.config.path.auto_clamping = False
 props = export_config.convert(None, scene2)
 check(
     "clamp.auto-off",
     not props.IsDefined("path.clamping.variance.maxvalue"),
 )
-scene2.luxcore.config.path.auto_clamping = True
+scene2.superluxcore.config.path.auto_clamping = True
 
 # --- production defaults on a fresh scene -----------------------------
 # NOTE: bpy.ops.scene.new copies the active scene's addon properties even
 # for type="EMPTY" — use bpy.data.scenes.new to get real defaults.
 
 scene3 = bpy.data.scenes.new("defaults-scene")
-scene3.render.engine = "LUXCORE"
-halt = scene3.luxcore.halt
-check("defaults.denoiser", scene3.luxcore.denoiser.enabled)
+scene3.render.engine = "SUPERLUXCORE"
+halt = scene3.superluxcore.halt
+check("defaults.denoiser", scene3.superluxcore.denoiser.enabled)
 check("defaults.halt-enabled", halt.enable)
 check("defaults.halt-noise", halt.use_noise_thresh)
 check("defaults.halt-samples-cap", halt.use_samples and halt.samples >= 256)
-check("defaults.auto-clamp", scene3.luxcore.config.path.auto_clamping)
-check("defaults.strategy-auto", scene3.luxcore.config.light_strategy == "AUTO")
+check("defaults.auto-clamp", scene3.superluxcore.config.path.auto_clamping)
+check("defaults.strategy-auto", scene3.superluxcore.config.light_strategy == "AUTO")
 check(
     "defaults.device-auto",
-    scene3.luxcore.config.device == "AUTO",
-    f"got {scene3.luxcore.config.device}",
+    scene3.superluxcore.config.device == "AUTO",
+    f"got {scene3.superluxcore.config.device}",
 )
 
 # --- device AUTO resolution -------------------------------------------
 
-cfg3 = scene3.luxcore.config
+cfg3 = scene3.superluxcore.config
 resolved = cfg3.effective_device()
 check(
     "device.resolves",
@@ -234,7 +234,7 @@ check("device.ooc-consistency", cfg3.using_out_of_core() == expected_ooc)
 # --- low-resource profile ---------------------------------------------
 
 # Without a detected low-VRAM GPU the wavefront task count stays at the
-# LuxCore default (property left undefined)
+# SuperLuxCore default (property left undefined)
 props = export_config.convert(None, scene3)
 check(
     "lowres.taskcount-untouched",
@@ -307,10 +307,10 @@ check(
     not props.IsDefined("path.restir.gi.enable"),
 )
 
-from bl_ext.user_default.blendluxcore.properties.statistics import (
-    LuxCoreRenderStats,
+from bl_ext.user_default.superluxcore.properties.statistics import (
+    SuperLuxCoreRenderStats,
 )
-slot_stats = LuxCoreRenderStats()
+slot_stats = SuperLuxCoreRenderStats()
 check(
     "stats.convergence-na-default",
     str(slot_stats.convergence) == "n/a",
@@ -320,17 +320,17 @@ check(
 # _init_stats: the convergence row must light up whenever a convergence
 # test actually runs — TILE engines always, PATH engines when the
 # noise-threshold halt (batch.haltthreshold) is configured.
-import pyluxcore
-from bl_ext.user_default.blendluxcore.export import Exporter
+import pysuperluxcore
+from bl_ext.user_default.superluxcore.export import Exporter
 
 
 def init_convergence(engine_type, extra=None):
-    props = pyluxcore.Properties()
-    props.Set(pyluxcore.Property("renderengine.type", [engine_type]))
-    props.Set(pyluxcore.Property("sampler.type", ["SOBOL"]))
+    props = pysuperluxcore.Properties()
+    props.Set(pysuperluxcore.Property("renderengine.type", [engine_type]))
+    props.Set(pysuperluxcore.Property("sampler.type", ["SOBOL"]))
     for key, value in (extra or {}).items():
-        props.Set(pyluxcore.Property(key, [value]))
-    stats = LuxCoreRenderStats()
+        props.Set(pysuperluxcore.Property(key, [value]))
+    stats = SuperLuxCoreRenderStats()
     Exporter._init_stats(None, stats, props, scene3)
     return stats.convergence.value
 

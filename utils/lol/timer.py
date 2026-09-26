@@ -37,11 +37,11 @@ def timer_update():
         asset_type = tcom.passargs['asset type']
 
         if asset_type == 'MODEL':
-            assets = bpy.context.scene.luxcoreOL.model['assets']
+            assets = bpy.context.scene.superluxcoreOL.model['assets']
         elif asset_type == 'SCENE':
-            assets = bpy.context.scene.luxcoreOL.scene['assets']
+            assets = bpy.context.scene.superluxcoreOL.scene['assets']
         elif asset_type == 'MATERIAL':
-            assets = bpy.context.scene.luxcoreOL.material['assets']
+            assets = bpy.context.scene.superluxcoreOL.material['assets']
         else:
             raise ValueError(f"Unhandled asset properties '{asset_type}'")
 

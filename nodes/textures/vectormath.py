@@ -1,12 +1,12 @@
 import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 from ... import icons
 from .math import MIX_DESCRIPTION
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexVectorMath(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexVectorMath(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Vector Math"
     bl_width_default = 200
 
@@ -48,12 +48,12 @@ class LuxCoreNodeTexVectorMath(LuxCoreNodeTexture, bpy.types.Node):
                 return elem[1]
 
     def init(self, context):
-        self.add_input("LuxCoreSocketFloat0to1", "Fac", 1)
+        self.add_input("SuperLuxCoreSocketFloat0to1", "Fac", 1)
         self.inputs["Fac"].enabled = False
-        self.add_input("LuxCoreSocketVector", "Vector 1", (0, 0, 0))
-        self.add_input("LuxCoreSocketVector", "Vector 2", (0, 0, 0))
+        self.add_input("SuperLuxCoreSocketVector", "Vector 1", (0, 0, 0))
+        self.add_input("SuperLuxCoreSocketVector", "Vector 2", (0, 0, 0))
 
-        self.outputs.new("LuxCoreSocketVector", "Vector")
+        self.outputs.new("SuperLuxCoreSocketVector", "Vector")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "mode")
@@ -65,7 +65,7 @@ class LuxCoreNodeTexVectorMath(LuxCoreNodeTexture, bpy.types.Node):
             if self.mode_clamp_min > self.mode_clamp_max:
                 layout.label(text="Min should be smaller than max!", icon=icons.WARNING)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": self.mode,
         }
@@ -83,4 +83,4 @@ class LuxCoreNodeTexVectorMath(LuxCoreNodeTexture, bpy.types.Node):
             if self.mode == "mix":
                 definitions["amount"] = self.inputs["Fac"].export(exporter, depsgraph, props)
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

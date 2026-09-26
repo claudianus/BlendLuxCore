@@ -25,7 +25,7 @@ from ...utils.light_descriptions import (
     CANDELA_DESCRIPTION,
     PER_SQUARE_METER_DESCRIPTION,
 )
-from ...utils.errorlog import LuxCoreErrorLog
+from ...utils.errorlog import SuperLuxCoreErrorLog
 
 if _needs_reload:
     import importlib
@@ -52,7 +52,7 @@ DLS_DISABLED_DESC = (
 )
 
 
-class LuxCoreNodeMatEmission(base.LuxCoreNode, bpy.types.Node):
+class SuperLuxCoreNodeMatEmission(base.SuperLuxCoreNode, bpy.types.Node):
     """
     Emission node.
 
@@ -140,7 +140,7 @@ class LuxCoreNodeMatEmission(base.LuxCoreNode, bpy.types.Node):
     )
     ies: PointerProperty(
         update=utils.node.force_viewport_update,
-        type=properties.ies.LuxCoreIESProps,
+        type=properties.ies.SuperLuxCoreIESProps,
     )
     importance: FloatProperty(
         update=utils.node.force_viewport_update,
@@ -181,9 +181,9 @@ class LuxCoreNodeMatEmission(base.LuxCoreNode, bpy.types.Node):
     # TODO: mapfile and gamma?
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Color", (1, 1, 1))
+        self.add_input("SuperLuxCoreSocketColor", "Color", (1, 1, 1))
 
-        self.outputs.new("LuxCoreSocketMatEmission", "Emission")
+        self.outputs.new("SuperLuxCoreSocketMatEmission", "Emission")
 
     def draw_buttons(self, context, layout):
         col = layout.column(align=True)
@@ -206,7 +206,7 @@ class LuxCoreNodeMatEmission(base.LuxCoreNode, bpy.types.Node):
 
         layout.prop(self, "importance")
 
-        lightgroups = context.scene.luxcore.lightgroups
+        lightgroups = context.scene.superluxcore.lightgroups
         layout.prop_search(
             self,
             "lightgroup",
@@ -248,7 +248,7 @@ class LuxCoreNodeMatEmission(base.LuxCoreNode, bpy.types.Node):
     def export_emission(self, exporter, depsgraph, props, definitions):
         """
         The export method is different because this is not a normal material node.
-        It is called from LuxCoreNodeMaterial.export_common_props()
+        It is called from SuperLuxCoreNodeMaterial.export_common_props()
         """
         definitions["emission"] = self.inputs["Color"].export(
             exporter, depsgraph, props
@@ -301,7 +301,7 @@ class LuxCoreNodeMatEmission(base.LuxCoreNode, bpy.types.Node):
             definitions["emission.gain.normalizebycolor"] = False
         definitions["emission.importance"] = self.importance
         definitions["emission.theta"] = math.degrees(self.spread_angle)
-        lightgroups = exporter.scene.luxcore.lightgroups
+        lightgroups = exporter.scene.superluxcore.lightgroups
         lightgroup_id = lightgroups.get_id_by_name(self.lightgroup)
         definitions["emission.id"] = lightgroup_id
         exporter.lightgroup_cache.add(lightgroup_id)
@@ -321,9 +321,9 @@ class LuxCoreNodeMatEmission(base.LuxCoreNode, bpy.types.Node):
                     self.id_data.name,
                     error,
                 )
-                LuxCoreErrorLog.add_warning(msg)
+                SuperLuxCoreErrorLog.add_warning(msg)
 
     def sub_export(
-        self, exporter, depsgraph, props, luxcore_name=None, output_socket=None
+        self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None
     ):
         raise NotImplementedError("This node uses a special export method.")

@@ -2,16 +2,16 @@
 
 ## Installed Blender extensions
 
-- `extensions/user_default/blendluxcore` — this repo's add-on, synced via
-  `dev-tools/sync_dev_install.sh` (default `EXT_ID=blendluxcore`).
+- `extensions/user_default/superluxcore` — this repo's add-on, synced via
+  `dev-tools/sync_dev_install.sh` (default `EXT_ID=superluxcore`).
 
-## pyluxcore wheel install chain (verified 2026-09)
+## pysuperluxcore wheel install chain (verified 2026-09)
 
 - The add-on's wheel manager runs at startup: it copies the wheel from
-  `LuxCore/out/install/Release/wheel/*.whl` into
-  `extensions/user_default/blendluxcore/wheels/`, then unpacks it into
-  `extensions/.local/lib/python3.13/site-packages/pyluxcore`.
-- It re-does this whenever `pyluxcore_installation_info.txt` is missing
+  `SuperLuxCore/out/install/Release/wheel/*.whl` into
+  `extensions/user_default/superluxcore/wheels/`, then unpacks it into
+  `extensions/.local/lib/python3.13/site-packages/pysuperluxcore`.
+- It re-does this whenever `pysuperluxcore_installation_info.txt` is missing
   or mismatched — so a hand-copied .so in site-packages is silently
   replaced on the next Blender launch. Deploy via
   `dev-tools/sync_dev_install.sh` (updates both site-packages AND the
@@ -24,7 +24,7 @@
 
 ## External-process render
 
-- `scene.luxcore.config.external_process` serializes the scene+config to
+- `scene.superluxcore.config.external_process` serializes the scene+config to
   a .bcf (RenderConfig.Save) and renders it in a detached
   `python3 external_render_runner.py` process; render() returns
   immediately so Blender releases the depsgraph.
@@ -42,7 +42,7 @@
   the mapped addresses); image maps spill AFTER
   `imgMapCache.Preprocess` (resize policies + color conversion done).
 - Spill files are unlinked right after mmap: the mapping stays valid,
-  files self-clean on exit, empty `luxcore-geospill/<ts>-<ptr>/` dirs
+  files self-clean on exit, empty `superluxcore-geospill/<ts>-<ptr>/` dirs
   in TMPDIR are normal.
 - File-backed pages are demand-paged and reclaimable — this is real
   out-of-core capacity, not free RAM: hot pages still occupy memory.
@@ -52,11 +52,11 @@
   round-trips through .bcf.
 
 
-## Standalone pyluxcore notes
+## Standalone pysuperluxcore notes
 
-- `pyluxcore.Scene(props)` single-Properties overload is the
+- `pysuperluxcore.Scene(props)` single-Properties overload is the
   resize-policy ctor (empty scene) — build scenes via
-  `pyluxcore.Scene()` then `scene.Parse(props)`.
+  `pysuperluxcore.Scene()` then `scene.Parse(props)`.
 - `session.Parse(props)` handles FILM properties only; scene edits go
   through `scene.UpdateObjectTransformation()` etc. between
   `session.BeginSceneEdit()/EndSceneEdit()`.
@@ -115,19 +115,19 @@
   unreferenced vertices dropped — page-local reads under memory
   pressure. The loader is order-agnostic; tests verify geometry as
   multisets / via implied permutations, not raw byte order.
-- `dev-tools/imagemap_stream_test.py` — standalone pyluxcore test:
+- `dev-tools/imagemap_stream_test.py` — standalone pysuperluxcore test:
   8192x8192 non-mipped PNG, NONE vs FIXED-256 vs MINMEM; checks the
   "streaming resize" path fires and renders correctly at 1280x720.
 
 ## Mesh proxies (.lxm)
 
-- `obj.luxcore.proxy_filepath` (Object Properties > Mesh Proxy) emits
-  `scene.objects.X.ply` instead of converting the mesh — LuxCore mmaps
-  the .lxm copy-on-write. `luxcore.bake_lxm_proxy` bakes evaluated
+- `obj.superluxcore.proxy_filepath` (Object Properties > Mesh Proxy) emits
+  `scene.objects.X.ply` instead of converting the mesh — SuperLuxCore mmaps
+  the .lxm copy-on-write. `superluxcore.bake_lxm_proxy` bakes evaluated
   geometry. File key = path+mtime+size, so re-bakes re-export.
 - `config.proxy_auto` + `proxy_auto_mintris` (Render Properties >
-  LuxCore Tools > Automatic Mesh Proxy): heavy static meshes are baked
-  per material slot to `tempfile.mkdtemp(luxcore_autoproxy_*)` at
+  SuperLuxCore Tools > Automatic Mesh Proxy): heavy static meshes are baked
+  per material slot to `tempfile.mkdtemp(superluxcore_autoproxy_*)` at
   export. Dedup/staleness signature = data name + vert/poly/tris +
   modifier names + 64 sampled vertex coords (count-preserving edits
   detected). Displacement and deform-motion-blur objects are excluded.
@@ -139,12 +139,12 @@
 
 ## .lxm proxies + auto-proxy
 
-- Manual: `obj.luxcore.proxy_filepath` (Object > Mesh Proxy) or
-  `luxcore.bake_lxm_proxy`. Proxy objects skip mesh conversion entirely
-  — only `scene.objects.X.ply = <path>` is emitted; LuxCore maps the
+- Manual: `obj.superluxcore.proxy_filepath` (Object > Mesh Proxy) or
+  `superluxcore.bake_lxm_proxy`. Proxy objects skip mesh conversion entirely
+  — only `scene.objects.X.ply = <path>` is emitted; SuperLuxCore maps the
   file. Single material only, no displacement/motion blur.
 - Auto: `config.proxy_auto` + `proxy_auto_mintris` bakes heavy
-  evaluated meshes to `tempfile.gettempdir()/luxcore_autoproxy/*.lxm`
+  evaluated meshes to `tempfile.gettempdir()/superluxcore_autoproxy/*.lxm`
   (module-level `_auto_proxies` dict survives cache rebuilds; stale
   `ap_*` files >24h swept once per process). Signature = data name +
   counts + modifier types + 64-vertex position sample hash.
@@ -152,6 +152,6 @@
   persistent-scene reuse stats proxy files; `handlers/proxy_watch.py`
   timer (2s) marks objects updated on change for viewport live reload.
 - bool scene props via SetFromString: use `1` not `true`, or typed
-  `pyluxcore.Property(name, True)` — "true" string fails bool parse.
+  `pysuperluxcore.Property(name, True)` — "true" string fails bool parse.
 - World > HDRI > `cdfdim` caps env importance CDF (block-summed,
   unbiased; default 4096, 0=unlimited).

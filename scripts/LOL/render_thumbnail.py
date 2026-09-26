@@ -4,7 +4,7 @@ from os import listdir
 from os.path import isfile, join, basename, dirname, splitext
 from mathutils import Vector, Matrix
 
-from BlendLuxCore.utils.compatibility import run
+from bl_ext.user_default.superluxcore.utils.compatibility import run
 
 
 def select(objects):
@@ -54,9 +54,9 @@ def render_material_thumbnail(assetname, blendfile, thumbnail, samples):
     context.scene.view_settings.gamma = 1
     context.scene.view_settings.exposure = 1
     context.scene.view_settings.look = 'Very High Contrast'
-    context.scene.luxcore.halt.enable = True
-    context.scene.luxcore.halt.use_samples = True
-    context.scene.luxcore.halt.samples = int(samples)
+    context.scene.superluxcore.halt.enable = True
+    context.scene.superluxcore.halt.use_samples = True
+    context.scene.superluxcore.halt.samples = int(samples)
     context.scene.render.image_settings.file_format = 'JPEG'
     context.scene.render.filepath = thumbnail
 
@@ -123,9 +123,9 @@ def render_model_thumbnail(assetname, blendfile, thumbnail, samples):
     context.scene.view_settings.gamma = 1
     context.scene.view_settings.exposure = 1
     context.scene.view_settings.look = 'Very High Contrast'
-    context.scene.luxcore.halt.enable = True
-    context.scene.luxcore.halt.use_samples = True
-    context.scene.luxcore.halt.samples = int(samples)
+    context.scene.superluxcore.halt.enable = True
+    context.scene.superluxcore.halt.use_samples = True
+    context.scene.superluxcore.halt.samples = int(samples)
     context.scene.render.image_settings.file_format = 'JPEG'
     context.scene.render.filepath = thumbnail
     

@@ -1,13 +1,13 @@
 import bpy
 from bpy.props import BoolProperty, EnumProperty
-from ..base import LuxCoreNodeMaterial
+from ..base import SuperLuxCoreNodeMaterial
 from .glossytranslucent import (IOR_DESCRIPTION, MULTIBOUNCE_DESCRIPTION,
                               DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION)
 from ...utils import node as utils_node
 from ...utils.node import Roughness
 
 
-class LuxCoreNodeMatGlossy2(LuxCoreNodeMaterial, bpy.types.Node):
+class SuperLuxCoreNodeMatGlossy2(SuperLuxCoreNodeMaterial, bpy.types.Node):
     bl_label = "Glossy Material"
     bl_width_default = 160
 
@@ -37,16 +37,16 @@ class LuxCoreNodeMatGlossy2(LuxCoreNodeMaterial, bpy.types.Node):
                                update=utils_node.force_viewport_update)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Diffuse Color", [0.7] * 3)
-        self.add_input("LuxCoreSocketColor", "Specular Color", [0.05] * 3)
-        self.add_input("LuxCoreSocketIOR", "IOR", 1.5)
+        self.add_input("SuperLuxCoreSocketColor", "Diffuse Color", [0.7] * 3)
+        self.add_input("SuperLuxCoreSocketColor", "Specular Color", [0.05] * 3)
+        self.add_input("SuperLuxCoreSocketIOR", "IOR", 1.5)
         self.inputs["IOR"].enabled = False
-        self.add_input("LuxCoreSocketColor", "Absorption Color", [0] * 3)
-        self.add_input("LuxCoreSocketFloatPositive", "Absorption Depth (nm)", 0)
+        self.add_input("SuperLuxCoreSocketColor", "Absorption Color", [0] * 3)
+        self.add_input("SuperLuxCoreSocketFloatPositive", "Absorption Depth (nm)", 0)
         Roughness.init(self, 0.05)
         self.add_common_inputs()
 
-        self.outputs.new("LuxCoreSocketMaterial", "Material")
+        self.outputs.new("SuperLuxCoreSocketMaterial", "Material")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "distribution")
@@ -54,7 +54,7 @@ class LuxCoreNodeMatGlossy2(LuxCoreNodeMaterial, bpy.types.Node):
         layout.prop(self, "use_ior")
         Roughness.draw(self, context, layout)
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "glossy2",
             "kd": self.inputs["Diffuse Color"].export(exporter, depsgraph, props),
@@ -72,4 +72,4 @@ class LuxCoreNodeMatGlossy2(LuxCoreNodeMaterial, bpy.types.Node):
 
         Roughness.export(self, exporter, depsgraph, props, definitions)
         self.export_common_inputs(exporter, depsgraph, props, definitions)
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

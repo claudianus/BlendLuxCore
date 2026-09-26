@@ -3,9 +3,9 @@ from bpy.types import Panel
 from .. import icons
 from ..icons import icon_manager
 
-class LUXCORE_RENDERLAYER_PT_aovs(ViewLayerButtonsPanel, Panel):
-    bl_label = "LuxCore AOVs"
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDERLAYER_PT_aovs(ViewLayerButtonsPanel, Panel):
+    bl_label = "SuperLuxCore AOVs"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_order = 2
 
     def draw_header(self, context):
@@ -15,17 +15,17 @@ class LUXCORE_RENDERLAYER_PT_aovs(ViewLayerButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
 
-        engine_is_path = context.scene.luxcore.config.engine == "PATH"
+        engine_is_path = context.scene.superluxcore.config.engine == "PATH"
 
         if not engine_is_path:
             layout.label(text="The Bidir engine does not support all AOVs", icon=icons.INFO)
 
 
 
-class LUXCORE_RENDERLAYER_PT_aovs_basic(ViewLayerButtonsPanel, Panel):
+class SUPERLUXCORE_RENDERLAYER_PT_aovs_basic(ViewLayerButtonsPanel, Panel):
     bl_label = "Basic Information"
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDERLAYER_PT_aovs"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDERLAYER_PT_aovs"
 
     def draw(self, context):
         layout = self.layout
@@ -33,7 +33,7 @@ class LUXCORE_RENDERLAYER_PT_aovs_basic(ViewLayerButtonsPanel, Panel):
         layout.use_property_decorate = False
         
         active_layer = context.window.view_layer
-        aovs = active_layer.luxcore.aovs
+        aovs = active_layer.superluxcore.aovs
 
         # Supported by BIDIR
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
@@ -46,10 +46,10 @@ class LUXCORE_RENDERLAYER_PT_aovs_basic(ViewLayerButtonsPanel, Panel):
         col.prop(aovs, "albedo")
 
 
-class LUXCORE_RENDERLAYER_PT_aovs_material_object(ViewLayerButtonsPanel, Panel):
+class SUPERLUXCORE_RENDERLAYER_PT_aovs_material_object(ViewLayerButtonsPanel, Panel):
     bl_label = "Material/Object Information"
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDERLAYER_PT_aovs"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDERLAYER_PT_aovs"
 
     def draw(self, context):
         layout = self.layout
@@ -57,7 +57,7 @@ class LUXCORE_RENDERLAYER_PT_aovs_material_object(ViewLayerButtonsPanel, Panel):
         layout.use_property_decorate = False
         
         active_layer = context.window.view_layer
-        aovs = active_layer.luxcore.aovs
+        aovs = active_layer.superluxcore.aovs
 
         # Supported by BIDIR
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
@@ -69,10 +69,10 @@ class LUXCORE_RENDERLAYER_PT_aovs_material_object(ViewLayerButtonsPanel, Panel):
         col.prop(aovs, "object_id")
 
 
-class LUXCORE_RENDERLAYER_PT_aovs_light(ViewLayerButtonsPanel, Panel):
+class SUPERLUXCORE_RENDERLAYER_PT_aovs_light(ViewLayerButtonsPanel, Panel):
     bl_label = "Light Information"
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDERLAYER_PT_aovs"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDERLAYER_PT_aovs"
     
     def draw(self, context):
         layout = self.layout
@@ -80,8 +80,8 @@ class LUXCORE_RENDERLAYER_PT_aovs_light(ViewLayerButtonsPanel, Panel):
         layout.use_property_decorate = False
 
         active_layer = context.window.view_layer
-        aovs = active_layer.luxcore.aovs
-        config = context.scene.luxcore.config
+        aovs = active_layer.superluxcore.aovs
+        config = context.scene.superluxcore.config
         engine_is_path = config.engine == "PATH"
 
         # Not supported by BIDIR
@@ -138,17 +138,17 @@ class LUXCORE_RENDERLAYER_PT_aovs_light(ViewLayerButtonsPanel, Panel):
         row.prop(aovs, "indirect_specular_transmit", toggle=True)
 
 
-class LUXCORE_RENDERLAYER_PT_aovs_shadow(ViewLayerButtonsPanel, Panel):
+class SUPERLUXCORE_RENDERLAYER_PT_aovs_shadow(ViewLayerButtonsPanel, Panel):
     bl_label = "Shadow Information"
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDERLAYER_PT_aovs"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDERLAYER_PT_aovs"
     
     def draw(self, context):
         layout = self.layout
 
         active_layer = context.window.view_layer
-        aovs = active_layer.luxcore.aovs
-        engine_is_path = context.scene.luxcore.config.engine == "PATH"
+        aovs = active_layer.superluxcore.aovs
+        engine_is_path = context.scene.superluxcore.config.engine == "PATH"
 
         # Not supported by BIDIR
         layout.active = engine_is_path
@@ -159,10 +159,10 @@ class LUXCORE_RENDERLAYER_PT_aovs_shadow(ViewLayerButtonsPanel, Panel):
         row.prop(aovs, "indirect_shadow_mask", toggle=True)
 
 
-class LUXCORE_RENDERLAYER_PT_aovs_geometry(ViewLayerButtonsPanel, Panel):
+class SUPERLUXCORE_RENDERLAYER_PT_aovs_geometry(ViewLayerButtonsPanel, Panel):
     bl_label = "Geometry Information"
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDERLAYER_PT_aovs"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDERLAYER_PT_aovs"
     
     def draw(self, context):
         layout = self.layout
@@ -170,7 +170,7 @@ class LUXCORE_RENDERLAYER_PT_aovs_geometry(ViewLayerButtonsPanel, Panel):
         layout.use_property_decorate = False
         
         active_layer = context.window.view_layer
-        aovs = active_layer.luxcore.aovs
+        aovs = active_layer.superluxcore.aovs
         
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
 
@@ -184,10 +184,10 @@ class LUXCORE_RENDERLAYER_PT_aovs_geometry(ViewLayerButtonsPanel, Panel):
         col.prop(aovs, "uv")
 
 
-class LUXCORE_RENDERLAYER_PT_aovs_render(ViewLayerButtonsPanel, Panel):
+class SUPERLUXCORE_RENDERLAYER_PT_aovs_render(ViewLayerButtonsPanel, Panel):
     bl_label = "Render Information"
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDERLAYER_PT_aovs"
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDERLAYER_PT_aovs"
     
     def draw(self, context):
         layout = self.layout
@@ -195,8 +195,8 @@ class LUXCORE_RENDERLAYER_PT_aovs_render(ViewLayerButtonsPanel, Panel):
         layout.use_property_decorate = False
         
         active_layer = context.window.view_layer
-        aovs = active_layer.luxcore.aovs
-        engine_is_path = context.scene.luxcore.config.engine == "PATH"
+        aovs = active_layer.superluxcore.aovs
+        engine_is_path = context.scene.superluxcore.config.engine == "PATH"
 
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
 

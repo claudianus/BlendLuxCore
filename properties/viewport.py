@@ -1,9 +1,9 @@
 import bpy
 from bpy.props import IntProperty, EnumProperty, BoolProperty, FloatProperty
 from .. import utils
-import pyluxcore
+import pysuperluxcore
 
-class LuxCoreViewportSettings(bpy.types.PropertyGroup):
+class SuperLuxCoreViewportSettings(bpy.types.PropertyGroup):
     halt_time: IntProperty(name="Halt Time (s)", default=10, min=1,
                             description="How long to render in the viewport. "
                                         "When this time is reached, the render is paused")
@@ -71,7 +71,7 @@ class LuxCoreViewportSettings(bpy.types.PropertyGroup):
         # TODO Do we need to check here if the film device supports OptiX?
         
         if preferences.gpu_backend == "CUDA" and preferences.film_device != "none":
-            data = pyluxcore.GetOpenCLDeviceDescs()
+            data = pysuperluxcore.GetOpenCLDeviceDescs()
             prefix = 'opencl.device.' + preferences.film_device
 
             if data.Get(prefix + ".cuda.compute.major").GetInt() >= 5:

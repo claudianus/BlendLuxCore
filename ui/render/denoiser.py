@@ -1,35 +1,35 @@
 from bl_ui.properties_render import RenderButtonsPanel
 from bpy.types import Panel
 from ...icons import icon_manager
-from ...engine.base import LuxCoreRenderEngine, template_refresh_button
+from ...engine.base import SuperLuxCoreRenderEngine, template_refresh_button
 from ... import icons
-from ...properties.denoiser import LuxCoreDenoiser
+from ...properties.denoiser import SuperLuxCoreDenoiser
 
 
-class LUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Denoiser"
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 60
 
     @classmethod
     def poll(cls, context):
-        if context.scene.render.engine != "LUXCORE":
+        if context.scene.render.engine != "SUPERLUXCORE":
             return False
         # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         return (not simple.enabled) or simple.show_advanced
 
     def draw_header(self, context):
         layout = self.layout
         layout.label(text="", icon_value=icon_manager.get_icon_id("logotype"))
-        layout.enabled = not LuxCoreRenderEngine.final_running
+        layout.enabled = not SuperLuxCoreRenderEngine.final_running
         col = layout.column(align=True)
-        col.prop(context.scene.luxcore.denoiser, "enabled", text="")
+        col.prop(context.scene.superluxcore.denoiser, "enabled", text="")
 
     def draw(self, context):
-        config = context.scene.luxcore.config
-        denoiser = context.scene.luxcore.denoiser
+        config = context.scene.superluxcore.config
+        denoiser = context.scene.superluxcore.denoiser
         
         layout = self.layout
 
@@ -40,12 +40,12 @@ class LUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
         sub = layout.column(align=True)
         # The user should not be able to request a refresh when denoiser is disabled
         sub.enabled = denoiser.enabled
-        template_refresh_button(LuxCoreDenoiser.refresh, "luxcore.request_denoiser_refresh",
+        template_refresh_button(SuperLuxCoreDenoiser.refresh, "superluxcore.request_denoiser_refresh",
                                 sub, "Running denoiser...")
 
         col = layout.column(align=True)
         col.prop(denoiser, "type", expand=False)
-        col.enabled = denoiser.enabled and not LuxCoreRenderEngine.final_running
+        col.enabled = denoiser.enabled and not SuperLuxCoreRenderEngine.final_running
 
         if denoiser.enabled and denoiser.type == "BCD":
             if config.get_sampler() == "METROPOLIS" and not config.use_tiles:
@@ -71,28 +71,28 @@ class LUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
             sub.prop(denoiser, "prefilter_AOVs")
 
 
-class LUXCORE_RENDER_PT_denoiser_temporal(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_denoiser_temporal(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Temporal Accumulation"
-    bl_parent_id = "LUXCORE_RENDER_PT_denoiser"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_denoiser"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == "LUXCORE"
+        return context.scene.render.engine == "SUPERLUXCORE"
 
     def draw_header(self, context):
         layout = self.layout
-        layout.prop(context.scene.luxcore.denoiser, "temporal_enabled", text="")
+        layout.prop(context.scene.superluxcore.denoiser, "temporal_enabled", text="")
 
     def draw(self, context):
-        config = context.scene.luxcore.config
-        denoiser = context.scene.luxcore.denoiser
+        config = context.scene.superluxcore.config
+        denoiser = context.scene.superluxcore.denoiser
 
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
-        layout.active = denoiser.temporal_enabled and not LuxCoreRenderEngine.final_running
+        layout.active = denoiser.temporal_enabled and not SuperLuxCoreRenderEngine.final_running
 
         if config.engine == "BIDIR":
             layout.label(text="Not supported by the Bidir engine", icon=icons.WARNING)
@@ -108,22 +108,22 @@ class LUXCORE_RENDER_PT_denoiser_temporal(RenderButtonsPanel, Panel):
         col.prop(denoiser, "temporal_statedir")
 
 
-class LUXCORE_RENDER_PT_denoiser_bcd_advanced(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_denoiser_bcd_advanced(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Advanced"
-    bl_parent_id = "LUXCORE_RENDER_PT_denoiser"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_denoiser"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        denoiser = context.scene.luxcore.denoiser
-        return context.scene.render.engine == "LUXCORE" and denoiser.type == "BCD"
+        denoiser = context.scene.superluxcore.denoiser
+        return context.scene.render.engine == "SUPERLUXCORE" and denoiser.type == "BCD"
 
     def draw(self, context):
-        denoiser = context.scene.luxcore.denoiser
+        denoiser = context.scene.superluxcore.denoiser
         
         layout = self.layout
-        layout.enabled = denoiser.enabled and not LuxCoreRenderEngine.final_running
+        layout.enabled = denoiser.enabled and not SuperLuxCoreRenderEngine.final_running
 
         layout.use_property_split = True
         layout.use_property_decorate = False

@@ -130,8 +130,8 @@ def lux_node_header_draw(panel, context):
                 row.template_ID(snode, "node_tree", new="node.new_geometry_nodes_modifier")
 
     ###########################################################################################
-    # Specialized LuxCore code
-    elif snode.tree_type == "luxcore_material_nodes":
+    # Specialized SuperLuxCore code
+    elif snode.tree_type == "superluxcore_material_nodes":
         NODE_MT_editor_menus.draw_collapsible(context, layout)
 
         ob = context.object
@@ -154,9 +154,9 @@ def lux_node_header_draw(panel, context):
             mat = id_from if id_from else ob.active_material
             lux_mat_template_ID(row, mat)
 
-            if mat and (not mat.luxcore.node_tree and not mat.luxcore.use_cycles_nodes):
-                layout.operator("luxcore.mat_nodetree_new", icon="NODETREE", text="Use LuxCore Material Nodes")
-    # End of specialized LuxCore code
+            if mat and (not mat.superluxcore.node_tree and not mat.superluxcore.use_cycles_nodes):
+                layout.operator("superluxcore.mat_nodetree_new", icon="NODETREE", text="Use SuperLuxCore Material Nodes")
+    # End of specialized SuperLuxCore code
     ###########################################################################################
 
     else:
@@ -198,7 +198,7 @@ def lux_node_header_draw(panel, context):
 
 
 def lux_draw_switch(panel, context):
-    if context.scene.render.engine == "LUXCORE" and context.space_data.tree_type == "luxcore_material_nodes":
+    if context.scene.render.engine == "SUPERLUXCORE" and context.space_data.tree_type == "superluxcore_material_nodes":
         lux_node_header_draw(panel, context)
     else:
         original_draw(panel, context)

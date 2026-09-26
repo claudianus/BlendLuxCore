@@ -27,12 +27,12 @@ if _needs_reload:
         importlib.reload(module)
 
 classes = (
-    harlequin.LuxCoreNodeShapeHarlequin,
-    heightdisplacement.LuxCoreNodeShapeHeightDisplacement,
-    simplify.LuxCoreNodeShapeSimplify,
-    subdiv.LuxCoreNodeShapeSubdiv,
-    vectordisplacement.LuxCoreNodeShapeVectorDisplacement,
-    mergeondistance.LuxCoreNodeShapeMergeOnDistance,
+    harlequin.SuperLuxCoreNodeShapeHarlequin,
+    heightdisplacement.SuperLuxCoreNodeShapeHeightDisplacement,
+    simplify.SuperLuxCoreNodeShapeSimplify,
+    subdiv.SuperLuxCoreNodeShapeSubdiv,
+    vectordisplacement.SuperLuxCoreNodeShapeVectorDisplacement,
+    mergeondistance.SuperLuxCoreNodeShapeMergeOnDistance,
 )
 
 

@@ -13,7 +13,7 @@ class StringCache:
 
     def diff(self, new_props):
         # Compare against the cached string of the previous props
-        # (str() on a pyluxcore.Properties object is expensive, don't do it twice)
+        # (str() on a pysuperluxcore.Properties object is expensive, don't do it twice)
         new_props_str = str(new_props)
 
         if self.props is None:
@@ -103,7 +103,7 @@ class VisibilityCache:
             if dg_obj_instance.show_self:
                 # For duplis, check visibility of parent (emitter)
                 obj = dg_obj_instance.parent if dg_obj_instance.parent else dg_obj_instance.object
-                if obj.luxcore.exclude_from_render or not obj.visible_in_viewport_get(context.space_data):
+                if obj.superluxcore.exclude_from_render or not obj.visible_in_viewport_get(context.space_data):
                     continue
                 keys.add(utils.make_key_from_instance(dg_obj_instance))
         return keys
@@ -122,9 +122,9 @@ class WorldCache:
             world_updated = depsgraph.id_type_updated("WORLD") or self.world_name != world.name_full
 
             # The sun influcences the world, e.g. through direction and turbidity if sky2 is used
-            if world.luxcore.light == "sky2" and depsgraph.id_type_updated("OBJECT"):
+            if world.superluxcore.light == "sky2" and depsgraph.id_type_updated("OBJECT"):
                 for dg_update in depsgraph.updates:
-                    if dg_update.id == world.luxcore.sun:
+                    if dg_update.id == world.superluxcore.sun:
                         world_updated = True
                         break
         elif self.world_name:

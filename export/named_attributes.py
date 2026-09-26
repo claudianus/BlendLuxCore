@@ -3,7 +3,7 @@ Generic (Geometry Nodes / named) attribute export for Cycles Attribute nodes.
 
 Blender stores arbitrary per-element data in ``mesh.attributes`` — either
 authored directly or written by a Geometry Nodes "Store Named Attribute"
-node. LuxCore carries such data on the ExtTriangleMesh:
+node. SuperLuxCore carries such data on the ExtTriangleMesh:
 
   * per-vertex float layers ("vertex AOV") read by the
     ``hitpointvertexaov`` texture,
@@ -22,9 +22,9 @@ import numpy as np
 
 import bpy
 
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 
-# EXTMESH_MAX_DATA_COUNT in LuxCore — max layers per channel
+# EXTMESH_MAX_DATA_COUNT in SuperLuxCore — max layers per channel
 MAX_DATA_LAYERS = 8
 
 KIND_VERTEX_AOV = "vertexaov"
@@ -172,7 +172,7 @@ def face_values(attr):
 
 
 def _warn_budget(attr, channel, obj_name):
-    LuxCoreErrorLog.add_warning(
+    SuperLuxCoreErrorLog.add_warning(
         f'Attribute "{attr.name}": more than {MAX_DATA_LAYERS} exportable '
         f"{channel} layers on the mesh; attribute skipped",
         obj_name=obj_name,

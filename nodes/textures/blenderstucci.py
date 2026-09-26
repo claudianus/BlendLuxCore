@@ -1,12 +1,12 @@
 import bpy
 from bpy.props import EnumProperty, FloatProperty, IntProperty
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 
 from ..base import NOISE_BASIS_ITEMS, NOISE_TYPE_ITEMS, MIN_NOISE_SIZE
 from ...utils import node as utils_node
 
 
-class LuxCoreNodeTexBlenderStucci(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexBlenderStucci(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Blender Stucci"
     bl_width_default = 200    
 
@@ -28,8 +28,8 @@ class LuxCoreNodeTexBlenderStucci(LuxCoreNodeTexture, bpy.types.Node):
     contrast: FloatProperty(update=utils_node.force_viewport_update, name="Contrast", default=1.0, min=0)
 
     def init(self, context):
-        self.add_input("LuxCoreSocketMapping3D", "3D Mapping")
-        self.outputs.new("LuxCoreSocketColor", "Color")
+        self.add_input("SuperLuxCoreSocketMapping3D", "3D Mapping")
+        self.outputs.new("SuperLuxCoreSocketColor", "Color")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "stucci_type", expand=True)
@@ -44,7 +44,7 @@ class LuxCoreNodeTexBlenderStucci(LuxCoreNodeTexture, bpy.types.Node):
         column.prop(self, "bright")
         column.prop(self, "contrast")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         definitions = {
             "type": "blender_stucci",
             "stuccitype": self.stucci_type,
@@ -56,4 +56,4 @@ class LuxCoreNodeTexBlenderStucci(LuxCoreNodeTexture, bpy.types.Node):
             "contrast": self.contrast,
         }
         definitions.update(self.inputs["3D Mapping"].export(exporter, depsgraph, props))
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

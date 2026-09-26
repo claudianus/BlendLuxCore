@@ -1,18 +1,18 @@
 import bpy
-from ..base import LuxCoreNodeTexture
+from ..base import SuperLuxCoreNodeTexture
 
 
-class LuxCoreNodeTexSplitFloat3(LuxCoreNodeTexture, bpy.types.Node):
+class SuperLuxCoreNodeTexSplitFloat3(SuperLuxCoreNodeTexture, bpy.types.Node):
     bl_label = "Split RGB"
     bl_width_default = 100
 
     def init(self, context):
-        self.add_input("LuxCoreSocketColor", "Color", (1, 1, 1))
-        self.outputs.new("LuxCoreSocketFloatUnbounded", "R")
-        self.outputs.new("LuxCoreSocketFloatUnbounded", "G")
-        self.outputs.new("LuxCoreSocketFloatUnbounded", "B")
+        self.add_input("SuperLuxCoreSocketColor", "Color", (1, 1, 1))
+        self.outputs.new("SuperLuxCoreSocketFloatUnbounded", "R")
+        self.outputs.new("SuperLuxCoreSocketFloatUnbounded", "G")
+        self.outputs.new("SuperLuxCoreSocketFloatUnbounded", "B")
 
-    def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
+    def sub_export(self, exporter, depsgraph, props, superluxcore_name=None, output_socket=None):
         if output_socket == self.outputs["R"]:
             channel = 0
         elif output_socket == self.outputs["G"]:
@@ -28,4 +28,4 @@ class LuxCoreNodeTexSplitFloat3(LuxCoreNodeTexture, bpy.types.Node):
             "channel": channel,
         }
 
-        return self.create_props(props, definitions, luxcore_name)
+        return self.create_props(props, definitions, superluxcore_name)

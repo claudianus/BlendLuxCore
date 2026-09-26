@@ -3,11 +3,11 @@ import errno
 from math import degrees
 import bpy
 from collections import OrderedDict
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from . import aovs
 from .imagepipeline import use_backgroundimage
-from ..utils.errorlog import LuxCoreErrorLog
+from ..utils.errorlog import SuperLuxCoreErrorLog
 from ..utils import view_layer as utils_view_layer
 from ..utils import get_addon_preferences
 
@@ -31,13 +31,13 @@ _RESTIR_ENGINES = {
     "PATHOCL", "TILEPATHOCL", "RTPATHOCL",
 }
 
-_EMISSIVE_NODE_TYPES = {"LuxCoreNodeMatEmission", "ShaderNodeEmission"}
+_EMISSIVE_NODE_TYPES = {"SuperLuxCoreNodeMatEmission", "ShaderNodeEmission"}
 
 
 def _material_is_emissive(mat):
     """Cheap heuristic: does this material emit light?
 
-    Looks for an emission node (LuxCore or Cycles) or a Principled BSDF
+    Looks for an emission node (SuperLuxCore or Cycles) or a Principled BSDF
     with emission enabled. Linked-ness of the emission node is not
     verified, so this may overcount emitters slightly — acceptable for a
     strategy heuristic that only needs the order of magnitude.
@@ -91,9 +91,9 @@ def _count_emitters(scene):
     return count
 
 
-def _auto_light_strategy(scene, luxcore_engine):
+def _auto_light_strategy(scene, superluxcore_engine):
     """Resolve AUTO light strategy from the scene's emitter count."""
-    if luxcore_engine not in _RESTIR_ENGINES:
+    if superluxcore_engine not in _RESTIR_ENGINES:
         return "LOG_POWER"
     if _count_emitters(scene) > AUTO_LIGHT_STRATEGY_EMITTER_THRESHOLD:
         return "RESTIR_DI"
@@ -111,7 +111,7 @@ def _collect_light_portals(scene):
     skipped_tris = 0
     for obj in scene.objects:
         if obj.type != "MESH" or not getattr(
-            obj.luxcore, "is_light_portal", False
+            obj.superluxcore, "is_light_portal", False
         ):
             continue
         mesh = obj.data
@@ -129,7 +129,7 @@ def _collect_light_portals(scene):
                 corners.extend((co.x, co.y, co.z))
             rects.append(corners)
     if skipped_tris:
-        LuxCoreErrorLog.add_warning(
+        SuperLuxCoreErrorLog.add_warning(
             f"Light portal: skipped {skipped_tris} non-quad face(s) "
             "(portals must be planar quads)"
         )
@@ -137,17 +137,17 @@ def _collect_light_portals(scene):
 
 
 def convert(exporter, scene, context=None, engine=None):
-    config = scene.luxcore.config
+    config = scene.superluxcore.config
     simple_token = None
     try:
         prefix = ""
         # We collect the properties in this dictionary (ordered because we sometimes
         # need to read them for debugging).
-        # The dictionary is converted to pyluxcore.Properties() in the return statement.
+        # The dictionary is converted to pysuperluxcore.Properties() in the return statement.
         definitions = OrderedDict()
 
         # See properties/config.py
-        config = scene.luxcore.config
+        config = scene.superluxcore.config
         is_viewport_render = context is not None
 
         # Compositor trap: rendering with compositing enabled but no
@@ -165,7 +165,7 @@ def convert(exporter, scene, context=None, engine=None):
                             has_output = True
                             break
                 if not has_output:
-                    LuxCoreErrorLog.add_warning(
+                    SuperLuxCoreErrorLog.add_warning(
                         "Compositing is enabled but the node tree has no "
                         "Composite output node: the saved image will be black. "
                         "Disable compositing or add a Composite node")
@@ -189,22 +189,22 @@ def convert(exporter, scene, context=None, engine=None):
         width, height = utils.calc_filmsize(scene, context)
         in_material_shading_mode = utils.in_material_shading_mode(context)
         denoiser_enabled = (
-            not is_viewport_render and scene.luxcore.denoiser.enabled
+            not is_viewport_render and scene.superluxcore.denoiser.enabled
         ) or (
             is_viewport_render
-            and scene.luxcore.viewport.use_denoiser
+            and scene.superluxcore.viewport.use_denoiser
             and not in_material_shading_mode
         )
         preferences = get_addon_preferences(bpy.context)
 
         if is_viewport_render:
             # Viewport render
-            luxcore_engine, sampler = convert_viewport_engine(
+            superluxcore_engine, sampler = convert_viewport_engine(
                 context, scene, definitions, config
             )
         else:
             # Final render
-            luxcore_engine, sampler = _convert_final_engine(
+            superluxcore_engine, sampler = _convert_final_engine(
                 scene, definitions, config
             )
 
@@ -228,7 +228,7 @@ def convert(exporter, scene, context=None, engine=None):
         else:
             light_strategy = config.light_strategy
             if light_strategy == "AUTO":
-                light_strategy = _auto_light_strategy(scene, luxcore_engine)
+                light_strategy = _auto_light_strategy(scene, superluxcore_engine)
 
         # Common properties that should be set regardless of engine configuration.
         # NB: the engine's PMJ02 tag breaks the SOBOL/RANDOM convention
@@ -236,7 +236,7 @@ def convert(exporter, scene, context=None, engine=None):
         sampler_tag = "PMJ02SAMPLER" if sampler == "PMJ02" else sampler
         definitions.update(
             {
-                "renderengine.type": luxcore_engine,
+                "renderengine.type": superluxcore_engine,
                 "sampler.type": sampler_tag,
                 "film.width": width,
                 "film.height": height,
@@ -245,7 +245,7 @@ def convert(exporter, scene, context=None, engine=None):
                 "lightstrategy.type": light_strategy,
                 "scene.epsilon.min": config.min_epsilon,
                 "scene.epsilon.max": config.max_epsilon,
-                "path.albedospecular.type": scene.luxcore.denoiser.albedo_specular_passthrough_mode,
+                "path.albedospecular.type": scene.superluxcore.denoiser.albedo_specular_passthrough_mode,
                 "path.albedospecular.glossinessthreshold": 0.05,
             }
         )
@@ -280,14 +280,14 @@ def convert(exporter, scene, context=None, engine=None):
         # (PATHOCL/TILEPATHOCL); RTPATHOCL and BIDIR* do not implement
         # the reservoir machinery, so exporting there would be a
         # silent no-op.
-        if config.restir_gi_enable and luxcore_engine not in (
+        if config.restir_gi_enable and superluxcore_engine not in (
             "PATHCPU", "PATHOCL", "TILEPATHOCL"
         ):
-            LuxCoreErrorLog.add_warning(
-                f"ReSTIR GI is not supported by {luxcore_engine}, "
+            SuperLuxCoreErrorLog.add_warning(
+                f"ReSTIR GI is not supported by {superluxcore_engine}, "
                 "the setting is ignored"
             )
-        if config.restir_gi_enable and luxcore_engine in (
+        if config.restir_gi_enable and superluxcore_engine in (
             "PATHCPU", "PATHOCL", "TILEPATHOCL"
         ):
             definitions["path.restir.gi.enable"] = True
@@ -311,7 +311,7 @@ def convert(exporter, scene, context=None, engine=None):
             if not config.mnee_seedcache:
                 definitions["path.mnee.seedcache"] = False
 
-        if config.guiding_enable and luxcore_engine in (
+        if config.guiding_enable and superluxcore_engine in (
             "PATHCPU", "PATHOCL", "TILEPATHCPU", "TILEPATHOCL",
         ):
             definitions["path.guiding.enable"] = True
@@ -327,7 +327,7 @@ def convert(exporter, scene, context=None, engine=None):
         # proposal. The objects themselves are excluded from render
         # geometry (utils.is_obj_visible). All path engines support it -
         # the GPU port runs in the shared pathoclbase kernels.
-        if luxcore_engine in (
+        if superluxcore_engine in (
             "PATHCPU", "TILEPATHCPU", "RTPATHCPU",
             "PATHOCL", "TILEPATHOCL", "RTPATHOCL",
         ):
@@ -338,7 +338,7 @@ def convert(exporter, scene, context=None, engine=None):
                 for i, rect in enumerate(portal_rects):
                     definitions[f"path.portal.{i}"] = rect
 
-        if config.spectral_enable and luxcore_engine in (
+        if config.spectral_enable and superluxcore_engine in (
             "PATHCPU", "PATHOCL", "TILEPATHCPU", "TILEPATHOCL",
             "RTPATHCPU", "RTPATHOCL",
         ):
@@ -385,7 +385,7 @@ def convert(exporter, scene, context=None, engine=None):
         # Transparent film settings
         black_background = False
         if utils.is_valid_camera(scene.camera):
-            pipeline = scene.camera.data.luxcore.imagepipeline
+            pipeline = scene.camera.data.superluxcore.imagepipeline
 
             if (
                 pipeline.transparent_film
@@ -397,7 +397,7 @@ def convert(exporter, scene, context=None, engine=None):
 
         # FILESAVER engine (only in final render)
         if use_filesaver:
-            _convert_filesaver(scene, definitions, luxcore_engine)
+            _convert_filesaver(scene, definitions, superluxcore_engine)
 
         # CPU thread settings (we use the properties from Blender here)
         if scene.render.threads_mode == "FIXED":
@@ -418,7 +418,7 @@ def convert(exporter, scene, context=None, engine=None):
     except Exception as error:
         msg = "Config: %s" % error
         # Note: Exceptions in the config are critical, we can't render without a config
-        LuxCoreErrorLog.add_error(msg)
+        SuperLuxCoreErrorLog.add_error(msg)
         import traceback
 
         traceback.print_exc()
@@ -427,19 +427,19 @@ def convert(exporter, scene, context=None, engine=None):
                 config.simple.restore(simple_token)
         except Exception:
             pass
-        return pyluxcore.Properties()
+        return pysuperluxcore.Properties()
 
 
 def _convert_opencl_settings(scene, definitions, is_final_render):
-    if scene.luxcore.debug.enabled and scene.luxcore.debug.use_opencl_cpu:
+    if scene.superluxcore.debug.enabled and scene.superluxcore.debug.use_opencl_cpu:
         # This is a mode for debugging OpenCL problems.
         # If the problem shows up in this mode, it is most
-        # likely a bug in LuxCore and not an OpenCL compiler bug.
+        # likely a bug in SuperLuxCore and not an OpenCL compiler bug.
         definitions["opencl.cpu.use"] = True
         definitions["opencl.gpu.use"] = False
         definitions["opencl.native.threads.count"] = 0
     else:
-        opencl = scene.luxcore.devices
+        opencl = scene.superluxcore.devices
         definitions["opencl.cpu.use"] = False
         definitions["opencl.gpu.use"] = True
         definitions["opencl.devices.select"] = (
@@ -454,7 +454,7 @@ def _convert_opencl_settings(scene, definitions, is_final_render):
                 definitions["opencl.native.threads.count"] = (
                     scene.render.threads
                 )
-            # If no thread count is specified, LuxCore automatically uses all available cores
+            # If no thread count is specified, SuperLuxCore automatically uses all available cores
         else:
             # Disable hybrid rendering
             definitions["opencl.native.threads.count"] = 0
@@ -471,15 +471,15 @@ def convert_viewport_engine(context, scene, definitions, config):
         definitions["rtpathcpu.zoomphase.weight"] = 0
         return "RTPATHCPU", "RTPATHCPUSAMPLER"
 
-    viewport = scene.luxcore.viewport
+    viewport = scene.superluxcore.viewport
     using_hybridbackforward = utils.using_hybridbackforward_in_viewport(scene)
 
     device = viewport.device
     if device == "OCL" and not (
         utils.luxutils.is_opencl_build() or utils.luxutils.is_cuda_build()
     ):
-        msg = "Config: LuxCore was built without GPU support, can't use GPU engine in viewport"
-        LuxCoreErrorLog.add_warning(msg)
+        msg = "Config: SuperLuxCore was built without GPU support, can't use GPU engine in viewport"
+        SuperLuxCoreErrorLog.add_warning(msg)
         device = "CPU"
 
     _convert_path(
@@ -492,7 +492,7 @@ def convert_viewport_engine(context, scene, definitions, config):
     )
 
     if utils.using_bidir_in_viewport(scene):
-        luxcore_engine = "BIDIRCPU"
+        superluxcore_engine = "BIDIRCPU"
         definitions["light.maxdepth"] = config.bidir_light_maxdepth
         definitions["path.maxdepth"] = config.bidir_path_maxdepth
         sampler = config.sampler
@@ -501,11 +501,11 @@ def convert_viewport_engine(context, scene, definitions, config):
         _convert_metropolis_settings(definitions, config)
     elif device == "CPU":
         if using_hybridbackforward:
-            luxcore_engine = "PATHCPU"
+            superluxcore_engine = "PATHCPU"
             sampler = "SOBOL"
             definitions["sampler.sobol.adaptive.strength"] = 0
         else:
-            luxcore_engine = "RTPATHCPU"
+            superluxcore_engine = "RTPATHCPU"
             sampler = "RTPATHCPUSAMPLER"
             # Size of the blocks right after a scene edit (in pixels)
             definitions["rtpathcpu.zoomphase.size"] = resolutionreduction
@@ -515,11 +515,11 @@ def convert_viewport_engine(context, scene, definitions, config):
     else:
         assert device == "OCL"
         if using_hybridbackforward:
-            luxcore_engine = "PATHOCL"
+            superluxcore_engine = "PATHOCL"
             sampler = "SOBOL"
             definitions["sampler.sobol.adaptive.strength"] = 0
         else:
-            luxcore_engine = "RTPATHOCL"
+            superluxcore_engine = "RTPATHOCL"
             sampler = "TILEPATHSAMPLER"
             """
             # Render a sample every n x n pixels in the first passes.
@@ -555,7 +555,7 @@ def convert_viewport_engine(context, scene, definitions, config):
 
         _convert_opencl_settings(scene, definitions, using_hybridbackforward)
 
-    return luxcore_engine, sampler
+    return superluxcore_engine, sampler
 
 
 def _convert_final_engine(scene, definitions, config):
@@ -575,7 +575,7 @@ def _convert_final_engine(scene, definitions, config):
         )
 
         if config.use_tiles:
-            luxcore_engine = "TILEPATH"
+            superluxcore_engine = "TILEPATH"
             # Tile specific settings
             tile = config.tile
 
@@ -595,17 +595,17 @@ def _convert_final_engine(scene, definitions, config):
             warmup = tile.multipass_convtest_warmup
             definitions["tile.multipass.convergencetest.warmup.count"] = warmup
         else:
-            luxcore_engine = "PATH"
+            superluxcore_engine = "PATH"
 
         # Add CPU/OCL suffix
-        luxcore_engine += device
+        superluxcore_engine += device
 
         if device == "OCL":
             # OpenCL specific settings
             _convert_opencl_settings(scene, definitions, True)
     else:
         # config.engine == BIDIR
-        luxcore_engine = "BIDIRCPU"
+        superluxcore_engine = "BIDIRCPU"
         definitions["light.maxdepth"] = config.bidir_light_maxdepth
         definitions["path.maxdepth"] = config.bidir_path_maxdepth
 
@@ -695,7 +695,7 @@ def _convert_final_engine(scene, definitions, config):
         # headroom for the driver and the OS compositor.
         definitions["opencl.task.count"] = config.LOW_RESOURCE_TASK_COUNT
 
-    return luxcore_engine, sampler
+    return superluxcore_engine, sampler
 
 
 def _convert_path(
@@ -708,7 +708,7 @@ def _convert_path(
 ):
     path = config.path
     # Note that for non-specular paths +1 is added to the path depth in order to have behaviour
-    # that feels intuitive for the user. LuxCore does only MIS on the last path bounce, but no
+    # that feels intuitive for the user. SuperLuxCore does only MIS on the last path bounce, but no
     # other shading, so depth 1 would be only direct light without MIS, depth 2 would be only
     # direct light with MIS, and depth 3 onwards would finally be direct + indirect light with MIS.
     definitions["path.pathdepth.total"] = path.depth_total + 1
@@ -749,9 +749,18 @@ def _convert_path(
             definitions["path.vertexconnection.enable"] = (
                 path.vertex_connection
             )
+            # M7 probabilistic connection (PCBPT): 0 connects = every
+            # pooled candidate (deterministic); pool = how many light
+            # tasks' vertex caches each eye vertex may connect to
+            definitions["path.vertexconnection.connects"] = (
+                path.vertex_connection_connects
+            )
+            definitions["path.vertexconnection.pool"] = (
+                path.vertex_connection_pool
+            )
         else:
             partition_raw = path.hybridbackforward_lightpartition
-        # Note that our partition property is inverted compared to LuxCore's (it is the probability to
+        # Note that our partition property is inverted compared to SuperLuxCore's (it is the probability to
         # sample a light path, not the probability to sample a camera path)
         partition = 1 - partition_raw / 100
         definitions["path.hybridbackforward.enable"] = use_hybridbackforward
@@ -770,8 +779,8 @@ def _convert_path(
         )
 
 
-def _convert_filesaver(scene, definitions, luxcore_engine):
-    config = scene.luxcore.config
+def _convert_filesaver(scene, definitions, superluxcore_engine):
+    config = scene.superluxcore.config
 
     filesaver_path = config.filesaver_path
     output_path = utils.get_abspath(
@@ -782,7 +791,7 @@ def _convert_filesaver(scene, definitions, luxcore_engine):
     if not blend_name:
         blend_name = "Untitled"
 
-    dir_name = blend_name + "_LuxCore"
+    dir_name = blend_name + "_SuperLuxCore"
     frame_name = "%05d" % scene.frame_current
 
     # If we have multiple render layers, we append the layer name
@@ -817,14 +826,14 @@ def _convert_filesaver(scene, definitions, luxcore_engine):
 
     definitions["filesaver.format"] = config.filesaver_format
     definitions["renderengine.type"] = "FILESAVER"
-    definitions["filesaver.renderengine.type"] = luxcore_engine
+    definitions["filesaver.renderengine.type"] = superluxcore_engine
 
 
 def _convert_seed(scene, definitions):
-    config = scene.luxcore.config
+    config = scene.superluxcore.config
 
     if config.use_animated_seed:
-        # frame_current can be 0, but not negative, while LuxCore seed can only be > 1
+        # frame_current can be 0, but not negative, while SuperLuxCore seed can only be > 1
         seed = scene.frame_current + 1
     else:
         seed = config.seed

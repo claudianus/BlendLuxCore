@@ -19,8 +19,8 @@ def calc_samples_per_pass(config):
                 return SamplingOverlap.CACHE_FRIENDLY
     return -1
 
-class LUXCORE_RENDER_PT_sampling(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
+class SUPERLUXCORE_RENDER_PT_sampling(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Sampling"
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 25
@@ -32,9 +32,9 @@ class LUXCORE_RENDER_PT_sampling(RenderButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
 
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         sampler = config.get_sampler()
-        denoiser = context.scene.luxcore.denoiser
+        denoiser = context.scene.superluxcore.denoiser
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -91,28 +91,28 @@ class LUXCORE_RENDER_PT_sampling(RenderButtonsPanel, Panel):
             row.alignment = "RIGHT"
             row.label(text=f"Samples per Pass: {samples_per_pass}")
 
-class LUXCORE_RENDER_PT_sampling_tiled_multipass(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDER_PT_sampling"
+class SUPERLUXCORE_RENDER_PT_sampling_tiled_multipass(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_sampling"
     bl_label = "Tile Multipass"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         if simple.enabled and not simple.show_advanced:
             return False
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         return config.using_tiled_path()
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         layout.prop(config.tile, "multipass_enable", text="")
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -124,23 +124,23 @@ class LUXCORE_RENDER_PT_sampling_tiled_multipass(RenderButtonsPanel, Panel):
         col.prop(config.tile, "multipass_convtest_threshold_reduction")
         col.prop(config.tile, "multipass_convtest_warmup")
 
-class LUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDER_PT_sampling"
+class SUPERLUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_sampling"
     bl_label = "Adaptive Sampling"
     bl_options = {'DEFAULT_CLOSED'}
     
     @classmethod
     def poll(cls, context):
-        simple = context.scene.luxcore.config.simple
+        simple = context.scene.superluxcore.config.simple
         if simple.enabled and not simple.show_advanced:
             return False
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
         return config.get_sampler() in {"SOBOL", "RANDOM", "PMJ02"} and not config.using_tiled_path()
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -164,16 +164,16 @@ class LUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
             col.prop(config.noise_estimation, "warmup")
             col.prop(config.noise_estimation, "step")
 
-class LUXCORE_RENDER_PT_sampling_pixel_filtering(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDER_PT_sampling"
+class SUPERLUXCORE_RENDER_PT_sampling_pixel_filtering(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_sampling"
     bl_label = "Pixel Filtering"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw_header(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
-        denoiser_enabled = context.scene.luxcore.denoiser.enabled
+        config = context.scene.superluxcore.config
+        denoiser_enabled = context.scene.superluxcore.denoiser.enabled
         filter_forced_disabled = utils.is_pixel_filtering_forced_disabled(context.scene, denoiser_enabled)
 
         if filter_forced_disabled and config.filter_enabled:
@@ -185,8 +185,8 @@ class LUXCORE_RENDER_PT_sampling_pixel_filtering(RenderButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
-        denoiser_enabled = context.scene.luxcore.denoiser.enabled
+        config = context.scene.superluxcore.config
+        denoiser_enabled = context.scene.superluxcore.denoiser.enabled
 
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -207,15 +207,15 @@ class LUXCORE_RENDER_PT_sampling_pixel_filtering(RenderButtonsPanel, Panel):
         elif config.filter == "SINC":
             layout.prop(config, "sinc_tau")
 
-class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
-    COMPAT_ENGINES = {"LUXCORE"}
-    bl_parent_id = "LUXCORE_RENDER_PT_sampling"
+class SUPERLUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"SUPERLUXCORE"}
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_sampling"
     bl_label = "Advanced"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
-        config = context.scene.luxcore.config
+        config = context.scene.superluxcore.config
 
         layout.use_property_split = True
         layout.use_property_decorate = False

@@ -1,5 +1,5 @@
-# E9 Phase-5b end-to-end regression: BlendLuxCore particle-hair strand
-# motion blur export (LuxCore dev-tools/deformation-motion-blur-design.md).
+# E9 Phase-5b end-to-end regression: SuperLuxCore particle-hair strand
+# motion blur export (SuperLuxCore dev-tools/deformation-motion-blur-design.md).
 #
 # Scene: a subdivided emitter plane with HAIR particles (render_type
 # PATH). A shape key slides the emitter's verts +x across the shutter
@@ -38,7 +38,7 @@ def find_addon_key():
     return next(
         a.module
         for a in bpy.context.preferences.addons
-        if "luxcore" in a.module.lower()
+        if "superluxcore" in a.module.lower()
     )
 
 
@@ -73,13 +73,13 @@ for me in list(bpy.data.meshes):
     bpy.data.meshes.remove(me)
 
 scene = bpy.context.scene
-scene.luxcore.config.engine = "PATH"
-scene.luxcore.config.device = "OCL"
-scene.luxcore.devices.use_native_cpu = False
-scene.luxcore.halt.enable = True
-scene.luxcore.halt.use_samples = True
-scene.luxcore.halt.samples = 64
-scene.render.engine = "LUXCORE"
+scene.superluxcore.config.engine = "PATH"
+scene.superluxcore.config.device = "OCL"
+scene.superluxcore.devices.use_native_cpu = False
+scene.superluxcore.halt.enable = True
+scene.superluxcore.halt.use_samples = True
+scene.superluxcore.halt.samples = 64
+scene.render.engine = "SUPERLUXCORE"
 scene.render.resolution_x = 320
 scene.render.resolution_y = 240
 scene.render.resolution_percentage = 100
@@ -132,8 +132,8 @@ settings.count = 25
 settings.hair_length = 0.8
 settings.render_type = "PATH"
 settings.render_step = 2  # 2**2+1 = 5 points per strand
-settings.luxcore.hair.hair_size = 0.04
-settings.luxcore.hair.tesseltype = "ribbon"
+settings.superluxcore.hair.hair_size = 0.04
+settings.superluxcore.hair.tesseltype = "ribbon"
 emitter.select_set(False)
 
 mat = bpy.data.materials.new("Emit")
@@ -153,7 +153,7 @@ scene.collection.objects.link(cam)
 cam.location = (0, 0, 4.5)
 scene.camera = cam
 
-mb = cam_data.luxcore.motion_blur
+mb = cam_data.superluxcore.motion_blur
 mb.enable = True
 mb.object_blur = True
 mb.camera_blur = False
@@ -161,7 +161,7 @@ mb.shutter = 8.0
 mb.steps = 3
 
 # ---------- A: motion blur on, object opted in ----------
-emitter.luxcore.enable_motion_blur = True
+emitter.superluxcore.enable_motion_blur = True
 render("blur")
 count_b, lo_b, hi_b = red_span(scene.render.filepath)
 check("blur render produced emissive pixels", count_b > 30, f"count={count_b}")
@@ -187,7 +187,7 @@ check(
 
 # ---------- C: blur on but object NOT opted in -> stays sharp ----------
 mb.enable = True
-emitter.luxcore.enable_motion_blur = False
+emitter.superluxcore.enable_motion_blur = False
 render("noopt")
 count_n, lo_n, hi_n = red_span(scene.render.filepath)
 span_n = hi_n - lo_n

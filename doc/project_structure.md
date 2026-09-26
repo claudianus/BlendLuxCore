@@ -1,6 +1,6 @@
 ### bin
 
-This is where the LuxCore binary files should be put to get a working BlendLuxCore addon. 
+This is where the SuperLuxCore binary files should be put to get a working SuperLuxCore addon. 
 For details, see [the Readme](https://github.com/LuxCoreRender/BlendLuxCore/blob/master/bin/readme.md).
 
 ### doc
@@ -16,7 +16,7 @@ Framebuffer classes for showing the rendered image on screen (viewport render an
 Implementation of Blenders RenderEngine API. 
 
 It is important to know that the instances of the RenderEngine class are not persistent or a singleton.
-A new instance of `LuxCoreRenderEngine` is created in these cases:
+A new instance of `SuperLuxCoreRenderEngine` is created in these cases:
 * Viewport render: created when shading mode is set to RENDERED, destroyed when shading mode is changed to something else.
   Also destroyed and re-created when changing frame!
 * Final render: created when final render is started (e.g. by F12), destroyed when the render ends 
@@ -24,13 +24,13 @@ A new instance of `LuxCoreRenderEngine` is created in these cases:
 * Material preview: same as final render (we can check if we are in preview mode with `self.is_preview`,
   the rest is exactly the same)
 
-The cleanup when the RenderEngine is destroyed happens in its `__del__()` method (stopping and deleting of the running luxcore session).
+The cleanup when the RenderEngine is destroyed happens in its `__del__()` method (stopping and deleting of the running superluxcore session).
 
 ### export
 
 This module contains an Exporter class with a bunch of caches. 
 It handles the conversion of Blender objects, materials etc. into 
-the [LuxCore SDL](https://wiki.luxcorerender.org/LuxCore_SDL_Reference_Manual_v2.0) 
+the [SuperLuxCore SDL](https://wiki.luxcorerender.org/SuperLuxCore_SDL_Reference_Manual_v2.0) 
 and the definition of shapes (meshes), strands etc.
 
 It's also responsible for scene and session updates during viewport render sessions.
@@ -79,19 +79,19 @@ Custom operators, e.g. wrappers.
 
 All custom properties are registered and attached here.
 
-We group them in a `luxcore` PropertyGroup for each datablock type. Some Examples:
+We group them in a `superluxcore` PropertyGroup for each datablock type. Some Examples:
 
-* `bpy.types.Material.luxcore.*`
-* `bpy.types.World.luxcore.*`
-* `bpy.types.Camera.luxcore.*`
-* `bpy.types.Scene.luxcore.*`
+* `bpy.types.Material.superluxcore.*`
+* `bpy.types.World.superluxcore.*`
+* `bpy.types.Camera.superluxcore.*`
+* `bpy.types.Scene.superluxcore.*`
 
-So if you want to access the LuxCore node tree of a material, you can get it like this:
+So if you want to access the SuperLuxCore node tree of a material, you can get it like this:
 
 ```python
 # Assuming we have an active object, get the material
 material = context.object.active_material
-node_tree = material.luxcore.node_tree
+node_tree = material.superluxcore.node_tree
 print("Material", material.name, "has the following node tree:", node_tree.name)
 ```
 
@@ -106,7 +106,7 @@ Automated tests. See [tests/readme.md](https://github.com/LuxCoreRender/BlendLux
 ### ui
 
 This module contains the UI drawing code for the custom properties.
-The `__init__.py` file contains the list of Blender UI panels that are compatible with BlendLuxCore.
+The `__init__.py` file contains the list of Blender UI panels that are compatible with SuperLuxCore.
 
 The other files contain the UI code for our custom panels.
 In these panels we display the properties defined in the **properties/** folder.

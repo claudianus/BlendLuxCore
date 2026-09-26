@@ -3,8 +3,8 @@
 # Cycles node-reader coverage test (non-render).
 #
 # For each newly supported node this builds a small Cycles node tree,
-# runs blendluxcore.export.cycles_node_reader.convert() on it and checks
-# the emitted LuxCore properties (texture types, folded constants,
+# runs superluxcore.export.cycles_node_reader.convert() on it and checks
+# the emitted SuperLuxCore properties (texture types, folded constants,
 # material types).
 #
 # Run:
@@ -26,9 +26,9 @@ _EXT_DIR = os.path.expanduser(
 if _EXT_DIR not in sys.path:
     sys.path.insert(0, _EXT_DIR)
 
-import pyluxcore  # noqa: E402
-from blendluxcore.export import cycles_node_reader  # noqa: E402
-from blendluxcore.utils.errorlog import LuxCoreErrorLog  # noqa: E402
+import pysuperluxcore  # noqa: E402
+from superluxcore.export import cycles_node_reader  # noqa: E402
+from superluxcore.utils.errorlog import SuperLuxCoreErrorLog  # noqa: E402
 
 
 RESULTS = []
@@ -58,7 +58,7 @@ def emit_color_via(nt, out, from_socket):
 
 
 def convert(mat, obj_name=""):
-    props = pyluxcore.Properties()
+    props = pysuperluxcore.Properties()
     cycles_node_reader.convert(mat, props, "covmat", obj_name=obj_name)
     return props
 
@@ -504,7 +504,7 @@ def test_gabor_phase_output():
 
 
 def test_gabor_3d_warns():
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     gabor = nt.nodes.new("ShaderNodeTexGabor")
     gabor.gabor_type = "3D"
@@ -513,7 +513,7 @@ def test_gabor_3d_warns():
     nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
     props = convert(mat)
     msgs = [w.message if hasattr(w, "message") else str(w)
-            for w in LuxCoreErrorLog.warnings]
+            for w in SuperLuxCoreErrorLog.warnings]
     check("gabor 3D warns + still emits gabornoise",
           any("3D" in m for m in msgs) and
           "gabornoise" in emitted_texture_types(props),
@@ -521,12 +521,12 @@ def test_gabor_3d_warns():
 
 
 # ---------------------------------------------------------------------------
-# Principled BSDF (Blender 5.x) -> LuxCore disney/glossycoating/archglass
+# Principled BSDF (Blender 5.x) -> SuperLuxCore disney/glossycoating/archglass
 # ---------------------------------------------------------------------------
 
 def _warnings_text():
     return " | ".join(w.message if hasattr(w, "message") else str(w)
-                      for w in LuxCoreErrorLog.warnings)
+                      for w in SuperLuxCoreErrorLog.warnings)
 
 
 def _principled(nt, out, **inputs):
@@ -564,7 +564,7 @@ def _prop_defined(props, name):
 
 
 def test_principled_default_disney():
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out)
     props = convert(mat)
@@ -576,7 +576,7 @@ def test_principled_default_disney():
 
 def test_principled_coat_simple_stays_disney():
     """Default coat (white, IOR 1.5, no coat normal) -> disney clearcoat."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Coat Weight": 0.5})
     props = convert(mat)
@@ -588,7 +588,7 @@ def test_principled_coat_simple_stays_disney():
 
 def test_principled_coat_ior_wraps():
     """Non-default Coat IOR -> base wrapped in glossycoating (index)."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Coat Weight": 1.0, "Coat IOR": 2.0})
     props = convert(mat)
@@ -610,7 +610,7 @@ def test_principled_coat_ior_wraps():
 def test_principled_coat_tint_absorption():
     """Coat Tint -> layer absorption ka = -ln(tint), d = weight/2."""
     import math as _m
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Coat Weight": 1.0,
                             "Coat Tint": (0.5, 0.8, 1.0, 1.0)})
@@ -628,7 +628,7 @@ def test_principled_coat_tint_absorption():
 
 def test_principled_coat_normal_bumptex():
     """Linked Coat Normal -> glossycoating gets its own bumptex."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     bsdf = _principled(nt, out, **{"Coat Weight": 1.0})
     nm = nt.nodes.new("ShaderNodeNormalMap")
@@ -645,7 +645,7 @@ def test_principled_coat_normal_bumptex():
 
 def test_principled_coat_on_glass_wraps():
     """Full transmission + any coat -> glossycoating around glass."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Transmission Weight": 1.0, "Roughness": 0.0,
                             "Coat Weight": 1.0})
@@ -659,7 +659,7 @@ def test_principled_coat_on_glass_wraps():
 
 def test_principled_thinwall_archglass():
     """Thin Wall + sharp full transmission -> archglass."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     bsdf = _principled(nt, out, **{"Transmission Weight": 1.0,
                                    "Roughness": 0.0})
@@ -674,7 +674,7 @@ def test_principled_thinwall_archglass():
 
 def test_principled_thinwall_partial_warns():
     """Thin Wall + partial transmission -> disney + honest warning."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     bsdf = _principled(nt, out, **{"Transmission Weight": 0.5})
     bsdf.inputs["Thin Wall"].default_value = True
@@ -686,7 +686,7 @@ def test_principled_thinwall_partial_warns():
 
 
 def test_principled_sheen_roughness_warns():
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Sheen Weight": 1.0, "Sheen Roughness": 0.8})
     props = convert(mat)
@@ -697,7 +697,7 @@ def test_principled_sheen_roughness_warns():
 
 def test_principled_sheen_inactive_no_warn():
     """Sheen Roughness non-default but weight 0 -> no warning."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Sheen Roughness": 0.8})
     convert(mat)
@@ -708,7 +708,7 @@ def test_principled_sheen_inactive_no_warn():
 
 def test_principled_sss_randomwalk_warns():
     """Default method (random walk) + subsurface weight -> SSS warning."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Subsurface Weight": 0.5})
     props = convert(mat)
@@ -719,7 +719,7 @@ def test_principled_sss_randomwalk_warns():
 
 
 def test_principled_aniso_rotation_warns():
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Anisotropic": 0.5, "Anisotropic Rotation": 0.3})
     props = convert(mat)
@@ -731,7 +731,7 @@ def test_principled_aniso_rotation_warns():
 
 def test_principled_emission_scale():
     """Emission Color * Strength -> scale texture on the material."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Emission Color": (1.0, 0.0, 0.0, 1.0),
                             "Emission Strength": 2.0})
@@ -745,7 +745,7 @@ def test_principled_emission_scale():
 
 def test_principled_thinfilm_on_glass():
     """Thin Film on the glass path emits filmthickness/filmior."""
-    LuxCoreErrorLog.clear(force_ui_update=False)
+    SuperLuxCoreErrorLog.clear(force_ui_update=False)
     mat, nt, out = new_tree()
     _principled(nt, out, **{"Transmission Weight": 1.0,
                             "Thin Film Thickness": 500.0,

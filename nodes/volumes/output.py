@@ -1,14 +1,14 @@
 import bpy
 from bpy.props import BoolProperty, IntProperty
-from ..output import LuxCoreNodeOutput, update_active
+from ..output import SuperLuxCoreNodeOutput, update_active
 from ..materials.output import MATERIAL_ID_DESC
 from ... import utils
-import pyluxcore
-from ...utils.errorlog import LuxCoreErrorLog
+import pysuperluxcore
+from ...utils.errorlog import SuperLuxCoreErrorLog
 from ... import icons
 
 
-class LuxCoreNodeVolOutput(bpy.types.Node, LuxCoreNodeOutput):
+class SuperLuxCoreNodeVolOutput(bpy.types.Node, SuperLuxCoreNodeOutput):
     """
     Volume output node.
     This is where the export starts (if the output is active).
@@ -27,7 +27,7 @@ class LuxCoreNodeVolOutput(bpy.types.Node, LuxCoreNodeOutput):
                                             "scattering, like a fog volume in a large open scene")
 
     def init(self, context):
-        self.inputs.new("LuxCoreSocketVolume", "Volume")
+        self.inputs.new("SuperLuxCoreSocketVolume", "Volume")
         super().init(context)
 
     def draw_buttons(self, context, layout):
@@ -36,34 +36,34 @@ class LuxCoreNodeVolOutput(bpy.types.Node, LuxCoreNodeOutput):
         layout.prop(self, "id")
 
         # PhotonGI currently only works with Path engine
-        if (context.scene.luxcore.config.photongi.enabled
-                and context.scene.luxcore.config.engine == "PATH"):
+        if (context.scene.superluxcore.config.photongi.enabled
+                and context.scene.superluxcore.config.engine == "PATH"):
             # PhotonGI only affects homogeneous and heterogeneous volumes, make the setting inactive for others
             linked_node = self.inputs["Volume"].links[0].from_node if self.inputs["Volume"].is_linked else None
             row = layout.row()
-            row.active = bool(linked_node and linked_node.bl_idname in {"LuxCoreNodeVolHomogeneous",
-                                                                        "LuxCoreNodeVolHeterogeneous"})
+            row.active = bool(linked_node and linked_node.bl_idname in {"SuperLuxCoreNodeVolHomogeneous",
+                                                                        "SuperLuxCoreNodeVolHeterogeneous"})
             row.prop(self, "use_photongi")
 
             world = context.scene.world
-            if self.use_photongi and world and world.luxcore.volume == self.id_data:
+            if self.use_photongi and world and world.superluxcore.volume == self.id_data:
                 col = layout.column(align=True)
                 col.label(text="PhotonGI on the world volume can", icon=icons.WARNING)
                 col.label(text="lead to VERY long cache computation time!")
 
-    def export(self, exporter, depsgraph, props, luxcore_name):
-        prefix = "scene.volumes." + luxcore_name + "."
+    def export(self, exporter, depsgraph, props, superluxcore_name):
+        prefix = "scene.volumes." + superluxcore_name + "."
         definitions = {}
         # Invalidate node cache
         # TODO have one global properties object so this is no longer necessary
         exporter.node_cache.clear()
 
         if self.inputs["Volume"].is_linked:
-            self.inputs["Volume"].export(exporter, depsgraph, props, luxcore_name)
+            self.inputs["Volume"].export(exporter, depsgraph, props, superluxcore_name)
         else:
             # We need a fallback (black volume)
             msg = 'Node "%s" in tree "%s": No volume attached' % (self.name, self.id_data.name)
-            LuxCoreErrorLog.add_warning(msg)
+            SuperLuxCoreErrorLog.add_warning(msg)
 
             definitions["type"] = "clear"
             definitions["absorption"] = [100, 100, 100]
@@ -71,7 +71,7 @@ class LuxCoreNodeVolOutput(bpy.types.Node, LuxCoreNodeOutput):
         definitions["photongi.enable"] = self.use_photongi
 
         if self.id != -1:
-            # LuxCore only assigns a random ID if the ID is not set at all
+            # SuperLuxCore only assigns a random ID if the ID is not set at all
             definitions["id"] = self.id
 
         props.Set(utils.luxutils.create_props(prefix, definitions))

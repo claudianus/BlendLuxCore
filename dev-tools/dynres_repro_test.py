@@ -8,10 +8,10 @@ import sys
 import time
 
 import bpy
-import pyluxcore
+import pysuperluxcore
 
-import bl_ext.user_default.blendluxcore as blendluxcore  # noqa: F401
-from bl_ext.user_default.blendluxcore import export as blc_export
+import bl_ext.user_default.superluxcore as superluxcore  # noqa: F401
+from bl_ext.user_default.superluxcore import export as blc_export
 
 
 def main():
@@ -20,19 +20,19 @@ def main():
 
     exporter = blc_export.Exporter()
     result = exporter.export_scene(depsgraph, None)
-    luxcore_scene, config_props = result
+    superluxcore_scene, config_props = result
 
-    config_props.Set(pyluxcore.Property("renderengine.type", ["RTPATHOCL"]))
-    config_props.Set(pyluxcore.Property("sampler.type", ["TILEPATHSAMPLER"]))
+    config_props.Set(pysuperluxcore.Property("renderengine.type", ["RTPATHOCL"]))
+    config_props.Set(pysuperluxcore.Property("sampler.type", ["TILEPATHSAMPLER"]))
     config_props.Set(
-        pyluxcore.Property("rtpath.resolutionreduction.preview", [8]))
+        pysuperluxcore.Property("rtpath.resolutionreduction.preview", [8]))
     config_props.Set(
-        pyluxcore.Property("rtpath.resolutionreduction.preview.step", [2]))
+        pysuperluxcore.Property("rtpath.resolutionreduction.preview.step", [2]))
     config_props.Set(
-        pyluxcore.Property("rtpath.resolutionreduction", [4]))
+        pysuperluxcore.Property("rtpath.resolutionreduction", [4]))
 
-    renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
-    session = pyluxcore.RenderSession(renderconfig)
+    renderconfig = pysuperluxcore.RenderConfig(config_props, superluxcore_scene)
+    session = pysuperluxcore.RenderSession(renderconfig)
     session.Start()
 
     def sc():
@@ -64,8 +64,8 @@ def main():
     h = film.GetHeight()
     from array import array
     buf = array("f", bytes(
-        film.GetOutputSize(pyluxcore.FilmOutputType.RGB_IMAGEPIPELINE) * 4))
-    film.GetOutputFloat(pyluxcore.FilmOutputType.RGB_IMAGEPIPELINE, buf)
+        film.GetOutputSize(pysuperluxcore.FilmOutputType.RGB_IMAGEPIPELINE) * 4))
+    film.GetOutputFloat(pysuperluxcore.FilmOutputType.RGB_IMAGEPIPELINE, buf)
     rgba = array("f", [0.0] * (w * h * 4))
     rgba[0::4] = buf[0::3]
     rgba[1::4] = buf[1::3]

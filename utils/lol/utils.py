@@ -121,7 +121,7 @@ def load_patreon_assets(context):
 def download_table_of_contents(context):
     global bg_threads
     scene = context.scene
-    ui_props = context.scene.luxcoreOL.ui
+    ui_props = context.scene.superluxcoreOL.ui
     user_preferences = get_addon_preferences(context)
     LOL_HOST_URL = user_preferences.lol_host
     LOL_VERSION = user_preferences.lol_version
@@ -170,7 +170,7 @@ def download_table_of_contents(context):
 
         assets.extend(load_local_TOC(context, 'model'))
         assets.extend(load_patreon_assets(context))
-        scene.luxcoreOL.model['assets'] = assets
+        scene.superluxcoreOL.model['assets'] = assets
 
         # check if local file is available
         filepath = join(user_preferences.global_dir, 'assets_material.json')
@@ -203,7 +203,7 @@ def download_table_of_contents(context):
                     asset['locked'] = False
 
         assets.extend(load_local_TOC(context, 'material'))
-        scene.luxcoreOL.material['assets'] = assets
+        scene.superluxcoreOL.material['assets'] = assets
 
         ui_props.ToC_loaded = True
         init_categories(context)
@@ -229,7 +229,7 @@ def download_table_of_contents(context):
 
 def init_categories(context):
     scene = context.scene
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
     categories = {}
 
     assets = get_search_props(context)
@@ -251,11 +251,11 @@ def init_categories(context):
             categories[cat] = 1
 
     if ui_props.asset_type == 'MODEL':
-        asset_props = scene.luxcoreOL.model
+        asset_props = scene.superluxcoreOL.model
     elif ui_props.asset_type == 'SCENE':
-        asset_props = scene.luxcoreOL.scene
+        asset_props = scene.superluxcoreOL.scene
     elif ui_props.asset_type == 'MATERIAL':
-        asset_props = scene.luxcoreOL.material
+        asset_props = scene.superluxcoreOL.material
     else:
         raise ValueError(f"Unhandled asset properties '{ui_props.asset_type}'")
 
@@ -269,7 +269,7 @@ def check_cache(args):
 
     user_preferences = get_addon_preferences(context)
     scene = context.scene
-    assets = scene.luxcoreOL.model['assets']
+    assets = scene.superluxcoreOL.model['assets']
     for asset in assets:
         if stop_check_cache:
             break
@@ -280,7 +280,7 @@ def check_cache(args):
             if calc_hash(filepath) == asset["hash"]:
                 asset['downloaded'] = 100.0
 
-    assets = scene.luxcoreOL.material['assets']
+    assets = scene.superluxcoreOL.material['assets']
     for asset in assets:
         if stop_check_cache:
             break
@@ -436,7 +436,7 @@ def link_asset(context, asset, location, rotation):
     filepath = os.path.join(user_preferences.global_dir, "model", splitext(filename)[0] + '.blend')
 
     scene = context.scene
-    link_model = (scene.luxcoreOL.model.append_method == 'LINK_COLLECTION')
+    link_model = (scene.superluxcoreOL.model.append_method == 'LINK_COLLECTION')
 
     with bpy.data.libraries.load(filepath, link=link_model) as (data_from, data_to):
         data_to.objects = [name for name in data_from.objects]
@@ -515,7 +515,7 @@ def append_material(context, asset, target_object, target_slot):
 def load_asset(context, asset, location, rotation, target_object, target_slot):
     user_preferences = get_addon_preferences(context)
 
-    ui_props = context.scene.luxcoreOL.ui
+    ui_props = context.scene.superluxcoreOL.ui
 
     #TODO: write method for this as it is used serveral times
     if ui_props.asset_type == 'SCENE':
@@ -549,38 +549,38 @@ def get_search_props(context):
     scene = context.scene
     if scene is None:
         return
-    ui_props = scene.luxcoreOL.ui
+    ui_props = scene.superluxcoreOL.ui
     props = None
 
     if ui_props.asset_type == 'MODEL':
-        if not 'assets' in scene.luxcoreOL.model:
+        if not 'assets' in scene.superluxcoreOL.model:
             return
-        props = scene.luxcoreOL.model['assets']
+        props = scene.superluxcoreOL.model['assets']
     if ui_props.asset_type == 'SCENE':
-        if not 'assets' in scene.luxcoreOL.scene:
+        if not 'assets' in scene.superluxcoreOL.scene:
             return
-        props = scene.luxcoreOL.scene['assets']
+        props = scene.superluxcoreOL.scene['assets']
     if ui_props.asset_type == 'MATERIAL':
-        if not 'assets' in scene.luxcoreOL.material:
+        if not 'assets' in scene.superluxcoreOL.material:
             return
-        props = scene.luxcoreOL.material['assets']
+        props = scene.superluxcoreOL.material['assets']
 
     # if ui_props.asset_type == 'TEXTURE':
-    #     if not hasattr(scene.luxcoreOL.texture, 'assets'):
+    #     if not hasattr(scene.superluxcoreOL.texture, 'assets'):
     #         return
-    #     props = scene.luxcoreOL.texture['assets']
+    #     props = scene.superluxcoreOL.texture['assets']
 
     # if ui_props.asset_type == 'BRUSH':
-    #     if not hasattr(scene.luxcoreOL, 'brush'):
+    #     if not hasattr(scene.superluxcoreOL, 'brush'):
     #         return
-    #     props = scene.luxcoreOL.brush['assets']
+    #     props = scene.superluxcoreOL.brush['assets']
     return props
 
 
 def get_default_directory():
     from os.path import expanduser
     home = expanduser("~")
-    return home + os.sep + 'LuxCoreOnlineLibrary_data'
+    return home + os.sep + 'SuperLuxCoreOnlineLibrary_data'
 
 
 def get_scene_id():
@@ -638,11 +638,11 @@ def bg_load_previews(context, asset_type):
     user_preferences = get_addon_preferences(bpy.context)
 
     if asset_type == 'MODEL':
-        assets = context.scene.luxcoreOL.model['assets']
+        assets = context.scene.superluxcoreOL.model['assets']
     elif asset_type == 'SCENE':
-        assets = context.scene.luxcoreOL.scene['assets']
+        assets = context.scene.superluxcoreOL.scene['assets']
     elif asset_type == 'MATERIAL':
-        assets = context.scene.luxcoreOL.material['assets']
+        assets = context.scene.superluxcoreOL.material['assets']
     else:
         raise ValueError(f"Unhandled asset properties '{asset_type}'")
 

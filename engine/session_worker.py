@@ -1,7 +1,7 @@
 """
 Dedicated session worker thread for the viewport.
 
-All mutating calls on the live pyluxcore session - Start/Stop/Parse,
+All mutating calls on the live pysuperluxcore session - Start/Stop/Parse,
 BeginSceneEdit/EndSceneEdit, config restarts and kernel pre-compiles -
 run here instead of on Blender's UI thread. The main thread submits
 jobs; the worker executes them serially, so a slow Stop + RenderConfig +
@@ -19,7 +19,7 @@ around film reads, so a film reset in EndSceneEdit can never tear a
 GetOutputFloat in half. The lock is never held across a session
 construction, so readers never wait on compiles.
 
-This module only imports pyluxcore (never bpy) so it stays unit-testable
+This module only imports pysuperluxcore (never bpy) so it stays unit-testable
 and can never accidentally touch Blender state off the main thread.
 """
 
@@ -29,21 +29,21 @@ import traceback
 import weakref
 from collections import deque
 
-import pyluxcore
+import pysuperluxcore
 
 
 def _uses_vulkan(config_props):
     """True when opencl.devices.select picks a VULKAN_GPU device.
 
     Position i of the selection string addresses opencl.device.<i> of
-    pyluxcore.GetOpenCLDeviceDescs() (same order the render engine sees:
+    pysuperluxcore.GetOpenCLDeviceDescs() (same order the render engine sees:
     OpenCL, CUDA, Metal, Vulkan).
     """
     try:
         select = config_props.Get("opencl.devices.select").GetString()
         if not select:
             return False
-        descs = pyluxcore.GetOpenCLDeviceDescs()
+        descs = pysuperluxcore.GetOpenCLDeviceDescs()
         for i, flag in enumerate(select):
             if flag == "1" and descs.Get(
                     "opencl.device." + str(i) + ".type"
@@ -61,7 +61,7 @@ def precompile_kernels(config_props, renderconfig, progress_cb=None):
     PATHOCL kernels are compiled up-front for OCL engines when the kernel
     cache is cold. Returns True when a fill ran.
 
-    Pure pyluxcore - safe on any thread. ``progress_cb`` receives
+    Pure pysuperluxcore - safe on any thread. ``progress_cb`` receives
     ``(index, count)`` per compiled kernel (0-based index).
     """
     renderengine_type = config_props.Get("renderengine.type").GetString()
@@ -72,7 +72,7 @@ def precompile_kernels(config_props, renderconfig, progress_cb=None):
         return False
     # Copy config props so we can pass scene.epsilon.min,
     # scene.epsilon.max and opencl.devices.select to the kernel filler.
-    props = pyluxcore.Properties(config_props)
+    props = pysuperluxcore.Properties(config_props)
     engines = ["PATHOCL", "RTPATHOCL"]
     if renderengine_type == "TILEPATHOCL":
         # Only pre-compile for tiled path if requested, since it's rarely
@@ -84,17 +84,17 @@ def precompile_kernels(config_props, renderconfig, progress_cb=None):
         # engine the session will actually start instead of warming both.
         engines = [renderengine_type]
     props.Set(
-        pyluxcore.Property("kernelcachefill.renderengine.types", engines)
+        pysuperluxcore.Property("kernelcachefill.renderengine.types", engines)
     )
     if progress_cb is None:
-        pyluxcore.KernelCacheFill(props)
+        pysuperluxcore.KernelCacheFill(props)
     else:
-        pyluxcore.KernelCacheFill(props, progress_cb)
+        pysuperluxcore.KernelCacheFill(props, progress_cb)
     return True
 
 
 class SessionWorker:
-    """Single worker thread owning the live pyluxcore session."""
+    """Single worker thread owning the live pysuperluxcore session."""
 
     def __init__(self, engine=None):
         self._cond = threading.Condition()
@@ -144,7 +144,7 @@ class SessionWorker:
         self.mutation_seq = 0
 
         self._thread = threading.Thread(
-            target=self._run, daemon=True, name="LuxCoreSessionWorker"
+            target=self._run, daemon=True, name="SuperLuxCoreSessionWorker"
         )
         self._thread.start()
 
@@ -152,7 +152,7 @@ class SessionWorker:
     # Main-thread API (job submission)
     # ------------------------------------------------------------------
 
-    def submit_start(self, luxcore_scene, config_props):
+    def submit_start(self, superluxcore_scene, config_props):
         """Build RenderConfig + RenderSession + Start off-thread."""
         with self._cond:
             self._start_seq += 1
@@ -161,7 +161,7 @@ class SessionWorker:
             # config stashed while session-less: don't let it override.
             self._pending_config = None
             self._queue.append(
-                ["start", (luxcore_scene, config_props, self._start_seq)]
+                ["start", (superluxcore_scene, config_props, self._start_seq)]
             )
             self._cond.notify()
 
@@ -326,7 +326,7 @@ class SessionWorker:
         self._stop_session()
         self._publish(None)
 
-    def _do_start(self, luxcore_scene, config_props, seq):
+    def _do_start(self, superluxcore_scene, config_props, seq):
         try:
             if seq != self._start_seq:
                 # A newer export landed while this job sat in the queue.
@@ -343,7 +343,7 @@ class SessionWorker:
             # new one (a superseded start leaves a live session behind).
             self._stop_session()
             self.phase = "Creating render config"
-            renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
+            renderconfig = pysuperluxcore.RenderConfig(config_props, superluxcore_scene)
 
             def progress_cb(index, count):
                 self.progress = (index + 1, count)
@@ -353,7 +353,7 @@ class SessionWorker:
             self.progress = None
 
             self.phase = "Starting session"
-            session = pyluxcore.RenderSession(renderconfig)
+            session = pysuperluxcore.RenderSession(renderconfig)
             session.Start()
             self.phase = ""
             self.mutation_seq += 1
@@ -368,8 +368,8 @@ class SessionWorker:
 
         The old code mutated the RenderConfig of the running session,
         which leaked (every stopped session kept its scene copy) and
-        crashed on some LuxCore versions. We build a fresh RenderConfig
-        on the *same* LuxCore scene instead - meshes, materials and
+        crashed on some SuperLuxCore versions. We build a fresh RenderConfig
+        on the *same* SuperLuxCore scene instead - meshes, materials and
         lights stay defined, so no Blender re-export is needed - then
         swap in a fresh session. Everything runs on the worker so the
         Stop + rebuild + Start cycle never touches the UI thread.
@@ -397,7 +397,7 @@ class SessionWorker:
             # last film instead of a black frame.
             self.session = None
 
-            renderconfig = pyluxcore.RenderConfig(config_props, scene)
+            renderconfig = pysuperluxcore.RenderConfig(config_props, scene)
 
             def progress_cb(index, count):
                 self.progress = (index + 1, count)
@@ -407,7 +407,7 @@ class SessionWorker:
             self.progress = None
 
             self.phase = "Starting session"
-            session = pyluxcore.RenderSession(renderconfig)
+            session = pysuperluxcore.RenderSession(renderconfig)
             session.Start()
             self.phase = ""
             self.mutation_seq += 1
@@ -467,7 +467,7 @@ class SessionWorker:
             return
         # Atomic store into the engine - no film reset, no mutation_seq
         # bump (coverage pattern changes, accumulated samples stay valid).
-        # getattr: tolerate a stale pyluxcore lacking the binding.
+        # getattr: tolerate a stale pysuperluxcore lacking the binding.
         set_reduction = getattr(
             session, "SetRuntimeResolutionReduction", None
         )

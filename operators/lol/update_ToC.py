@@ -30,8 +30,8 @@ from ...utils.lol import utils as utils
 from ...utils import get_addon_preferences
 
 class LOLUpdateTOC(Operator):
-    bl_idname = 'scene.luxcore_ol_update_toc'
-    bl_label = 'LuxCore Online Library Update Table of Contents from Server'
+    bl_idname = 'scene.superluxcore_ol_update_toc'
+    bl_label = 'SuperLuxCore Online Library Update Table of Contents from Server'
     bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
 
     @classmethod
@@ -43,7 +43,7 @@ class LOLUpdateTOC(Operator):
         import json
 
         scene = context.scene
-        ui_props = scene.luxcoreOL.ui
+        ui_props = scene.superluxcoreOL.ui
 
         user_preferences = get_addon_preferences(context)
         LOL_HOST_URL = user_preferences.lol_host

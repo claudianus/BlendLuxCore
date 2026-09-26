@@ -7,7 +7,7 @@ _needs_reload = "bpy" in locals()
 import bpy
 from mathutils import Matrix
 
-import pyluxcore
+import pysuperluxcore
 from .. import utils
 from .. import export
 from .. import draw
@@ -90,8 +90,8 @@ def _export_mat_scene(engine, depsgraph, active_mat):
     exporter = engine.exporter
     scene = depsgraph.scene_eval
 
-    scene_props = pyluxcore.Properties()
-    luxcore_scene = pyluxcore.Scene()
+    scene_props = pysuperluxcore.Properties()
+    superluxcore_scene = pysuperluxcore.Scene()
 
     # The world sphere uses different lights and render settings
     is_world_sphere = active_mat.use_preview_world
@@ -101,10 +101,10 @@ def _export_mat_scene(engine, depsgraph, active_mat):
 
     # Apply zoom
     field_of_view = cam_props.Get("scene.camera.fieldofview").GetFloat()
-    cam_props.Set(pyluxcore.Property("scene.camera.autovolume.enable", 0))
-    zoom = active_mat.luxcore.preview.zoom
-    cam_props.Set(pyluxcore.Property("scene.camera.fieldofview", field_of_view / zoom))
-    luxcore_scene.Parse(cam_props)
+    cam_props.Set(pysuperluxcore.Property("scene.camera.autovolume.enable", 0))
+    zoom = active_mat.superluxcore.preview.zoom
+    cam_props.Set(pysuperluxcore.Property("scene.camera.fieldofview", field_of_view / zoom))
+    superluxcore_scene.Parse(cam_props)
 
     # Objects
     for dg_obj_instance in depsgraph.object_instances:
@@ -124,12 +124,12 @@ def _export_mat_scene(engine, depsgraph, active_mat):
             mesh_key = "Preview_LuxBall_Mesh"
 
             mesh_definitions = []
-            props = pyluxcore.Properties()
-            filepath = dirname(dirname(realpath(__file__))) + "/preview_scene/LuxCore_preview.ply"
+            props = pysuperluxcore.Properties()
+            filepath = dirname(dirname(realpath(__file__))) + "/preview_scene/SuperLuxCore_preview.ply"
 
             prefix = "scene.shapes." + mesh_key + "."
-            props.Set(pyluxcore.Property(prefix + "type", "mesh"))
-            props.Set(pyluxcore.Property(prefix + "ply", filepath))
+            props.Set(pysuperluxcore.Property(prefix + "type", "mesh"))
+            props.Set(pysuperluxcore.Property(prefix + "ply", filepath))
             mesh_definitions.append((mesh_key, 0))
             scene_props.Set(props)
 
@@ -151,44 +151,44 @@ def _export_mat_scene(engine, depsgraph, active_mat):
             exporter.object_cache2.exported_objects[obj_key] = exported_obj
         else:
             exporter.object_cache2._convert_obj(exporter, dg_obj_instance, obj, depsgraph,
-                                                luxcore_scene, scene_props, False)
+                                                superluxcore_scene, scene_props, False)
     
     # Limit max. subdivision level for previews
     for shape_key in scene_props.GetAllUniqueSubNames("scene.shapes"):
         shape_props = scene_props.GetAllProperties(shape_key)
         if shape_props.Get(shape_key + ".type", [""]).GetString() == "subdiv":
             max_level = shape_props.Get(shape_key + ".maxlevel", [0]).GetInt()
-            shape_props.Set(pyluxcore.Property(shape_key + ".maxlevel", min(max_level, 1)))
+            shape_props.Set(pysuperluxcore.Property(shape_key + ".maxlevel", min(max_level, 1)))
             scene_props.Set(shape_props)
 
     # Lights (either two area lights or a sun+sky setup)
-    _create_lights(scene, luxcore_scene, scene_props, is_world_sphere)
+    _create_lights(scene, superluxcore_scene, scene_props, is_world_sphere)
 
     if not is_world_sphere:
-        _create_backplates(luxcore_scene, scene_props)
-    _create_ground(luxcore_scene, scene_props)
+        _create_backplates(superluxcore_scene, scene_props)
+    _create_ground(superluxcore_scene, scene_props)
 
-    luxcore_scene.Parse(scene_props)
+    superluxcore_scene.Parse(scene_props)
 
     # Session
     config_props = _create_config(scene)
-    renderconfig = pyluxcore.RenderConfig(config_props, luxcore_scene)
-    session = pyluxcore.RenderSession(renderconfig)
+    renderconfig = pysuperluxcore.RenderConfig(config_props, superluxcore_scene)
+    session = pysuperluxcore.RenderSession(renderconfig)
     
     return session
 
-def _create_lights(scene, luxcore_scene, props, is_world_sphere):
+def _create_lights(scene, superluxcore_scene, props, is_world_sphere):
     if is_world_sphere:
-        props.Set(pyluxcore.Property("scene.lights.sky.type", "sky2"))
-        props.Set(pyluxcore.Property("scene.lights.sky.gain", [.00003] * 3))
+        props.Set(pysuperluxcore.Property("scene.lights.sky.type", "sky2"))
+        props.Set(pysuperluxcore.Property("scene.lights.sky.gain", [.00003] * 3))
         # Building the visibility map and not needed in an open scene
-        props.Set(pyluxcore.Property("scene.lights.sky.visibilitymap.enable", False))
+        props.Set(pysuperluxcore.Property("scene.lights.sky.visibilitymap.enable", False))
 
-        props.Set(pyluxcore.Property("scene.lights.sun.type", "sun"))
-        props.Set(pyluxcore.Property("scene.lights.sun.dir", [-0.6, -1, 0.9]))
-        props.Set(pyluxcore.Property("scene.lights.sun.gain", [.00003] * 3))
+        props.Set(pysuperluxcore.Property("scene.lights.sun.type", "sun"))
+        props.Set(pysuperluxcore.Property("scene.lights.sun.dir", [-0.6, -1, 0.9]))
+        props.Set(pysuperluxcore.Property("scene.lights.sun.gain", [.00003] * 3))
         # Avoid fireflies
-        props.Set(pyluxcore.Property("scene.lights.sun.visibility.indirect.specular.enable", False))
+        props.Set(pysuperluxcore.Property("scene.lights.sun.visibility.indirect.specular.enable", False))
     else:
         # Key light
         color_key = [80] * 3
@@ -197,7 +197,7 @@ def _create_lights(scene, luxcore_scene, props, is_world_sphere):
                 (-0.22214478254318237, 0.7306543588638306, -0.6455973386764526),
                 (-0.8227329850196838, 0.21485532820224762, 0.526258111000061)))
         scale_key = 1
-        _create_area_light(scene, luxcore_scene, props, "key", color_key,
+        _create_area_light(scene, superluxcore_scene, props, "key", color_key,
                            position_key, rotation_key, scale_key)
 
         # Fill light
@@ -207,21 +207,21 @@ def _create_lights(scene, luxcore_scene, props, is_world_sphere):
                 (0.13679763674736023, 0.9016143679618835, -0.4103388786315918, ),
                 (0.9712990522384644, -0.04071354120969772, 0.23435142636299133 )))
         scale_fill = 2
-        _create_area_light(scene, luxcore_scene, props, "fill", color_fill,
+        _create_area_light(scene, superluxcore_scene, props, "fill", color_fill,
                            position_fill, rotation_fill, scale_fill, False)
 
 
-def _create_area_light(scene, luxcore_scene, props, name, color, position, rotation_matrix, scale, visible=True):
+def _create_area_light(scene, superluxcore_scene, props, name, color, position, rotation_matrix, scale, visible=True):
     mat_name = name + "_mat"
     mesh_name = name + "_mesh"
 
     # Material
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".type", ["matte"]))
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".kd", [0.0] * 3))
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".emission", color))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".type", ["matte"]))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".kd", [0.0] * 3))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".emission", color))
     # assign material to object
-    props.Set(pyluxcore.Property("scene.objects." + name + ".material", [mat_name]))
-    props.Set(pyluxcore.Property("scene.objects." + name + ".camerainvisible", not visible))
+    props.Set(pysuperluxcore.Property("scene.objects." + name + ".material", [mat_name]))
+    props.Set(pysuperluxcore.Property("scene.objects." + name + ".camerainvisible", not visible))
 
 
     scale_matrix = Matrix()
@@ -247,13 +247,13 @@ def _create_area_light(scene, luxcore_scene, props, name, color, position, rotat
         (0, 1, 2),
         (2, 3, 0)
     ]
-    luxcore_scene.DefineMesh(mesh_name, vertices, faces, None, None, None, None, transform)
+    superluxcore_scene.DefineMesh(mesh_name, vertices, faces, None, None, None, None, transform)
     # assign mesh to object
-    props.Set(pyluxcore.Property("scene.objects." + name + ".shape", [mesh_name]))
+    props.Set(pysuperluxcore.Property("scene.objects." + name + ".shape", [mesh_name]))
     return props
 
 
-def _create_backplates(luxcore_scene, props):
+def _create_backplates(superluxcore_scene, props):
     # Ground plane
     size = 20
     zpos = 0.0
@@ -279,9 +279,9 @@ def _create_backplates(luxcore_scene, props):
         (4, 0, 1),
         (1, 5, 4)
     ]
-    _create_walls(luxcore_scene, props, "walls", vertices, faces)
+    _create_walls(superluxcore_scene, props, "walls", vertices, faces)
 
-def _create_ground(luxcore_scene, props):
+def _create_ground(superluxcore_scene, props):
     # Ground plane
     size = 20
     zpos = 0.0
@@ -295,16 +295,16 @@ def _create_ground(luxcore_scene, props):
         (0, 1, 2),
         (2, 3, 0),
     ]
-    _create_checker_plane(luxcore_scene, props, "ground_plane", vertices, faces)
+    _create_checker_plane(superluxcore_scene, props, "ground_plane", vertices, faces)
 
 
-def _create_checker_plane(luxcore_scene, props, name, vertices, faces):
+def _create_checker_plane(superluxcore_scene, props, name, vertices, faces):
     mesh_name = name + "_mesh"
     mat_name = name + "_mat"
     tex_name = name + "_tex"
 
     # Mesh
-    luxcore_scene.DefineMesh(mesh_name, vertices, faces, None, None, None, None)
+    superluxcore_scene.DefineMesh(mesh_name, vertices, faces, None, None, None, None)
     # Texture
     # (we scale the default sphere to be 10cm by default and we want the squares to be 5cm in size)
     checker_size = 5
@@ -312,35 +312,35 @@ def _create_checker_plane(luxcore_scene, props, name, vertices, faces):
                      0, checker_size, 0, 0,
                      0, 0, checker_size, 0,
                      0, 0, 0, 1]
-    props.Set(pyluxcore.Property("scene.textures." + tex_name + ".type", "checkerboard3d"))
-    props.Set(pyluxcore.Property("scene.textures." + tex_name + ".texture1", 0.7))
-    props.Set(pyluxcore.Property("scene.textures." + tex_name + ".texture2", 0.2))
-    props.Set(pyluxcore.Property("scene.textures." + tex_name + ".mapping.type", "globalmapping3d"))
-    props.Set(pyluxcore.Property("scene.textures." + tex_name + ".mapping.transformation", checker_trans))
+    props.Set(pysuperluxcore.Property("scene.textures." + tex_name + ".type", "checkerboard3d"))
+    props.Set(pysuperluxcore.Property("scene.textures." + tex_name + ".texture1", 0.7))
+    props.Set(pysuperluxcore.Property("scene.textures." + tex_name + ".texture2", 0.2))
+    props.Set(pysuperluxcore.Property("scene.textures." + tex_name + ".mapping.type", "globalmapping3d"))
+    props.Set(pysuperluxcore.Property("scene.textures." + tex_name + ".mapping.transformation", checker_trans))
     # Material
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".type", "matte"))
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".kd", tex_name))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".type", "matte"))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".kd", tex_name))
     # Invisible for indirect diffuse rays to eliminate fireflies
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".visibility.indirect.diffuse.enable", False))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".visibility.indirect.diffuse.enable", False))
 
     # Object
-    props.Set(pyluxcore.Property("scene.objects." + name + ".shape", mesh_name))
-    props.Set(pyluxcore.Property("scene.objects." + name + ".material", mat_name))
+    props.Set(pysuperluxcore.Property("scene.objects." + name + ".shape", mesh_name))
+    props.Set(pysuperluxcore.Property("scene.objects." + name + ".material", mat_name))
 
-def _create_walls(luxcore_scene, props, name, vertices, faces):
+def _create_walls(superluxcore_scene, props, name, vertices, faces):
     mesh_name = name + "_mesh"
     mat_name = name + "_mat"
 
     # Mesh
-    luxcore_scene.DefineMesh(mesh_name, vertices, faces, None, None, None, None)
+    superluxcore_scene.DefineMesh(mesh_name, vertices, faces, None, None, None, None)
     # Material
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".type", "matte"))
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".kd", 0.7))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".type", "matte"))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".kd", 0.7))
     # Invisible for indirect diffuse rays to eliminate fireflies
-    props.Set(pyluxcore.Property("scene.materials." + mat_name + ".visibility.indirect.diffuse.enable", False))
+    props.Set(pysuperluxcore.Property("scene.materials." + mat_name + ".visibility.indirect.diffuse.enable", False))
     # Object
-    props.Set(pyluxcore.Property("scene.objects." + name + ".shape", mesh_name))
-    props.Set(pyluxcore.Property("scene.objects." + name + ".material", mat_name))
+    props.Set(pysuperluxcore.Property("scene.objects." + name + ".shape", mesh_name))
+    props.Set(pysuperluxcore.Property("scene.objects." + name + ".material", mat_name))
 
 
 def _create_config(scene):
