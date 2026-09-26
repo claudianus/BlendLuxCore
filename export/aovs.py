@@ -260,6 +260,15 @@ def get_OIDN_props(definitions, scene, index):
     definitions[str(index) + ".oidnmemory"] = denoiser.max_memory_MB
     definitions[str(index) + ".sharpness"] = 0
     definitions[str(index) + ".prefilter.enable"] = denoiser.prefilter_AOVs
+    # Component-decomposed recipe (denoise direct/indirect x
+    # diffuse/glossy/specular separately, then recombine exactly)
+    components = denoiser.oidn_mode == "COMPONENTS"
+    definitions[str(index) + ".mode"] = "components" if components else "combined"
+    if components:
+        definitions[str(index) + ".demodulate"] = denoiser.oidn_demodulate
+        definitions[str(index) + ".emission.denoise"] = denoiser.oidn_denoise_emission
+        if denoiser.oidn_firefly_sigma > 0:
+            definitions[str(index) + ".firefly.sigma"] = denoiser.oidn_firefly_sigma
     return index + 1
 
 

@@ -149,9 +149,18 @@ class LUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
         col.prop(config, "sobol_adaptive_strength", slider=True)
 
         if config.get_sampler() == "SOBOL":
+            col.prop(config, "sobol_owen_enable")
+            sub = col.column(align=True)
+            sub.active = config.sobol_owen_enable
+            sub.prop(config, "sobol_owen_tile_enable")
             col.prop(config, "sobol_bluenoise_enable")
 
         if config.sobol_adaptive_strength > 0:
+            if config.get_sampler() == "SOBOL":
+                col.prop(config, "sobol_adaptive_moments_enable")
+                sub = col.column(align=True)
+                sub.active = config.sobol_adaptive_moments_enable
+                sub.prop(config, "sobol_adaptive_relerr", slider=True)
             col.prop(config.noise_estimation, "warmup")
             col.prop(config.noise_estimation, "step")
 
@@ -241,6 +250,8 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
         col.prop(config, "mnee_enable")
         if config.mnee_enable:
             col.prop(config, "mnee_maxspecular")
+            col.prop(config, "mnee_maxiterations")
+            col.prop(config, "mnee_seedcache")
 
         col.prop(config, "guiding_enable")
 

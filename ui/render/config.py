@@ -125,9 +125,9 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
         )
 
     def error(self, context):
-        use_native_cpu = context.scene.luxcore.devices.use_native_cpu
-        config = context.scene.luxcore.config
-        return config.effective_device() == "OCL" and not use_native_cpu
+        # GPU light tracing runs natively on the device (no CPU threads
+        # needed since path.lighttracing.* replaced the CPU light pass)
+        return False
 
     def draw_header(self, context):
         layout = self.layout
@@ -149,7 +149,19 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
             layout.prop(config.path, "hybridbackforward_lightpartition")
         else:
             layout.prop(config.path, "hybridbackforward_lightpartition_opencl")
-        layout.prop(config.path, "hybridbackforward_glossinessthresh")
+            layout.prop(config.path, "lighttracing_only")
+            col = layout.column(align=True)
+            col.prop(config.path, "lighttracing_focus")
+            if config.path.lighttracing_focus:
+                col.prop(config.path, "lighttracing_focus_ratio")
+                col.prop(config.path, "lighttracing_focus_radius")
+        layout.prop(config.path, "hybridbackforward_adaptivecaustic")
+        col = layout.column(align=True)
+        if config.path.hybridbackforward_adaptivecaustic:
+            col.prop(config.path, "hybridbackforward_terminalglossiness")
+            col.prop(config.path, "hybridbackforward_connectprob")
+        else:
+            col.prop(config.path, "hybridbackforward_glossinessthresh")
 
         if self.error(context):
             layout.label(

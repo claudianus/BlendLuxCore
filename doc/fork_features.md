@@ -236,6 +236,18 @@ gradients on CPU and Metal/OpenCL.
   when no convergence test is configured.
 - Production defaults on new scenes: denoiser enabled, halt conditions
   enabled with a convergence stop (noise threshold) plus a 1024-spp cap.
+- **OIDN component-decomposed denoising** (`denoiser.oidn_mode = "COMPONENTS"`,
+  the default): denoises each radiance component (direct/indirect ×
+  diffuse/glossy/specular) independently with shared albedo/normal guides
+  and recombines exactly (residual passthrough preserves total energy).
+  Indirect diffuse is filtered in illumination space (radiance ÷ albedo,
+  multiplied back after — "albedo demodulation", the same trick production
+  reconstruction filters use) so texture detail can not be blurred.
+  Sub-options: Albedo Demodulation, Denoise Emission (off = crisp emitter
+  silhouettes), Firefly Suppression (median+MAD isolated-spike clamp,
+  0 = off). Engine side: `film.imagepipeline.N.mode = components`,
+  `.demodulate`, `.emission.denoise`, `.firefly.sigma`; required film
+  channels are requested automatically.
 - Viewport: black-flash and UI-freeze fixes; engine-teardown hardening; an
   error-log file for fatal errors. Interactivity pass (P0-1): hold-last-frame
   after film resets (empty frames are never uploaded — the previous image

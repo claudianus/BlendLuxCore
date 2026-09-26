@@ -61,3 +61,24 @@ class LuxCoreDenoiser(PropertyGroup):
                                                   default="REFLECT_TRANSMIT", description="How to treat specular materials in the albedo AOV")
     prefilter_AOVs: BoolProperty(name="Prefilter Auxiliary AOVs", default=True,
                                  description="Denoise the albedo and avg. shading normal AOVs before using them to denoise the main image")
+
+    oidn_mode_items = [
+        ("COMBINED", "Combined",
+         "Denoise the beauty image in a single pass (classic OIDN behaviour)", 0),
+        ("COMPONENTS", "Components",
+         "Denoise each lighting component (direct/indirect, diffuse/glossy/specular) "
+         "separately and recombine. Better preserves texture detail and edges", 1),
+    ]
+    oidn_mode: EnumProperty(name="Denoise Mode", items=oidn_mode_items, default="COMPONENTS",
+                            description="OIDN input decomposition recipe")
+    oidn_demodulate: BoolProperty(name="Albedo Demodulation", default=True,
+                                  description="Components mode: filter the indirect diffuse component "
+                                  "in illumination space (radiance divided by albedo) and multiply the "
+                                  "albedo back afterwards - texture detail can not be blurred")
+    oidn_denoise_emission: BoolProperty(name="Denoise Emission", default=False,
+                                        description="Components mode: also denoise the emission component. "
+                                        "Leave off to keep light source silhouettes crisp")
+    oidn_firefly_sigma: FloatProperty(name="Firefly Suppression", default=0.0, min=0.0, soft_max=8.0,
+                                      description="Components mode: clamp isolated outlier pixels before "
+                                      "denoising, in units of local robust sigma (0 disables). Useful for "
+                                      "scenes with sparse fireflies; may flatten dense noise textures")

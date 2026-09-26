@@ -206,33 +206,22 @@ class FrameBuffer:
         ):
             # Offset is only needed if viewport is in camera mode and uses
             # border rendering
-            sensor_fit = scene.camera.data.sensor_fit
-
-            aspectratio, aspect_x, aspect_y = utils.calc_aspect(
-                render.resolution_x * render.pixel_aspect_x,
-                render.resolution_y * render.pixel_aspect_y,
-                sensor_fit,
+            frame_w, frame_h, _ = utils.calc_camera_frame_size(
+                region_width, region_height, scene
             )
-
-            base = 0.5 * zoom
-            if sensor_fit == "AUTO":
-                base *= max(region_width, region_height)
-            elif sensor_fit == "HORIZONTAL":
-                base *= region_width
-            elif sensor_fit == "VERTICAL":
-                base *= region_height
+            frame_h /= render.pixel_aspect_y / render.pixel_aspect_x
+            base_x = 0.5 * zoom * frame_w
+            base_y = 0.5 * zoom * frame_h
 
             offset_x = self._cam_border_offset(
-                aspect_x,
-                base,
+                base_x,
                 border_min_x,
                 region_width,
                 view_camera_offset[0],
                 zoom,
             )
             offset_y = self._cam_border_offset(
-                aspect_y,
-                base,
+                base_y,
                 border_min_y,
                 region_height,
                 view_camera_offset[1],
@@ -247,11 +236,11 @@ class FrameBuffer:
         return int(offset_x), int(offset_y)
 
     def _cam_border_offset(
-        self, aspect, base, border_min, region_width, view_camera_offset, zoom
+        self, half_size, border_min, region_size, view_camera_offset, zoom
     ):
         return (
             0.5 - 2 * zoom * view_camera_offset
-        ) * region_width + aspect * base * (2 * border_min - 1)
+        ) * region_size + half_size * (2 * border_min - 1)
 
     def start_denoiser(self, engine):
         self._denoise_done = False

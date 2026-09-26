@@ -160,12 +160,59 @@ HYBRID_BACKFORWARD_LIGHTPART_DESC = (
     "to caustic rendering. Using 0% disables light tracing, using 100% disables camera rays completely"
 )
 HYBRID_BACKFORWARD_LIGHTPART_OPENCL_DESC = (
-    "Controls the amount of light rays computed on the CPU (the GPU can only compute camera rays). "
-    "Using 0% disables light tracing, using 100% means that the CPU only performs light tracing"
+    "Fraction of the GPU task population dedicated to light paths (caustics). "
+    "25% is a balanced default; 100% devotes nearly all tasks to light tracing"
 )
 HYBRID_BACKFORWARD_GLOSSINESS_DESC = (
     "If a material's roughness is lower than this threshold, it is sampled from lights, "
-    "otherwise it is sampled from the camera (normal path tracing)"
+    "otherwise it is sampled from the camera (normal path tracing). "
+    "Used only when Adaptive Caustics is disabled"
+)
+HYBRID_ADAPTIVE_CAUSTIC_DESC = (
+    "Classify each light path by how hard it is for camera rays to "
+    "complete: specular chains ending on a glossy lobe whose light "
+    "coverage is small go to light tracing, easy ones stay on the "
+    "camera path. Removes caustic fireflies from rough glass and other "
+    "boundary materials that fall above the fixed glossiness threshold. "
+    "Unbiased - both sides classify the same path identically"
+)
+HYBRID_TERMINAL_GLOSSINESS_DESC = (
+    "Glossiness limit for the light-adjacent vertex of an adaptive "
+    "caustic path. Rougher terminals are easy for camera rays and are "
+    "left to normal path tracing; smoother ones are checked against the "
+    "light's apparent size. Raise to hand rougher caustics to light "
+    "tracing"
+)
+HYBRID_CONNECT_PROB_DESC = (
+    "Eye-connection success probability below which a glossy path is "
+    "assigned to light tracing (estimated as light solid angle vs. lobe "
+    "solid angle). Higher values move more boundary cases to light "
+    "tracing; 0.5 covers paths the camera completes less than half the "
+    "time"
+)
+LIGHTTRACING_ONLY_DESC = (
+    "Render using only light paths (no camera rays). Shows the image the "
+    "light-tracing pass alone produces - useful for isolating and "
+    "inspecting caustic contributions. GPU devices only"
+)
+LIGHTTRACING_FOCUS_DESC = (
+    "Guided light emission: the engine learns which surfaces produce "
+    "camera-visible light - caustic-generating glass/mirror and surfaces "
+    "seen only through such occluders - and steers a share of emissions "
+    "toward them. Speeds up caustics and refracted-view lighting, "
+    "especially when the target is small or far from the light. Works "
+    "with point, spot and area lights. GPU light tracing only"
+)
+LIGHTTRACING_FOCUS_RATIO_DESC = (
+    "Fraction of light emissions steered toward learned caustic hotspots. "
+    "Higher concentrates more on caustics; the mixture keeps the result "
+    "unbiased either way"
+)
+LIGHTTRACING_FOCUS_RADIUS_DESC = (
+    "Aim radius of each learned hotspot, as a fraction of the scene "
+    "radius. Smaller aims tighter - good for pinpoint caustic hotspots; "
+    "diffuse surfaces seen through glass already get a broad floor, so "
+    "raise this only if a scene's productive surfaces stay under-covered"
 )
 
 ENVLIGHT_CACHE_DESC = (
@@ -395,11 +442,33 @@ class LuxCoreConfigPath(PropertyGroup):
                                                     subtype="PERCENTAGE",
                                                     description=HYBRID_BACKFORWARD_LIGHTPART_DESC)
     # Separate property so we can use a different default that makes more sense for OpenCL
-    hybridbackforward_lightpartition_opencl: FloatProperty(name="Light Rays", default=100, min=0, max=100,
+    hybridbackforward_lightpartition_opencl: FloatProperty(name="Light Rays", default=25, min=0, max=100,
                                                     subtype="PERCENTAGE",
                                                     description=HYBRID_BACKFORWARD_LIGHTPART_OPENCL_DESC)
     hybridbackforward_glossinessthresh: FloatProperty(name="Glossiness Threshold", default=0.049, min=0, max=1,
                                                       description=HYBRID_BACKFORWARD_GLOSSINESS_DESC)
+    # path.hybridbackforward.adaptivecaustic - per-path caustic
+    # classification by connection difficulty instead of a fixed
+    # glossiness threshold
+    hybridbackforward_adaptivecaustic: BoolProperty(name="Adaptive Caustics", default=True,
+                                                    description=HYBRID_ADAPTIVE_CAUSTIC_DESC)
+    hybridbackforward_terminalglossiness: FloatProperty(name="Terminal Glossiness", default=0.3, min=0, max=1,
+                                                        description=HYBRID_TERMINAL_GLOSSINESS_DESC)
+    hybridbackforward_connectprob: FloatProperty(name="Connection Probability", default=0.5, min=0, max=1,
+                                                 subtype="FACTOR",
+                                                 description=HYBRID_CONNECT_PROB_DESC)
+    # path.lighttracing.only - GPU light paths replace the eye pass
+    # entirely (PATHOCL/RTPATHOCL debug + caustic-isolation output)
+    lighttracing_only: BoolProperty(name="Light Tracing Only", default=False,
+                                    description=LIGHTTRACING_ONLY_DESC)
+    # path.lighttracing.focus.* - caustic focus cache (guided emission)
+    lighttracing_focus: BoolProperty(name="Caustic Focus", default=True,
+                                     description=LIGHTTRACING_FOCUS_DESC)
+    lighttracing_focus_ratio: FloatProperty(name="Focus Ratio", default=50, min=0, max=90,
+                                            subtype="PERCENTAGE",
+                                            description=LIGHTTRACING_FOCUS_RATIO_DESC)
+    lighttracing_focus_radius: FloatProperty(name="Focus Radius", default=0.01, min=0.0001, max=1.0,
+                                             description=LIGHTTRACING_FOCUS_RADIUS_DESC)
 
     use_clamping: BoolProperty(name="Clamp Output", default=False, description=CLAMPING_DESC)
     auto_clamping: BoolProperty(
@@ -734,6 +803,24 @@ class LuxCoreConfig(PropertyGroup):
                                           description="Blue-noise dithered Sobol sampling (Heitz 2019): "
                                           "each pixel gets a hashed per-dimension scramble and offset, "
                                           "decorrelating neighboring pixels to remove low-spp sampling artifacts")
+    sobol_owen_enable: BoolProperty(name="Owen Scrambling", default=True,
+                                     description="Hash-based Owen-scrambled Sobol (Burley 2020): "
+                                     "nested digit permutation of the Sobol sequence plus per-pixel "
+                                     "index shuffling gives fully decorrelated pixel sequences")
+    sobol_owen_tile_enable: BoolProperty(name="Blue-Noise Offset Tile", default=True,
+                                          description="Per-pixel Cranley-Patterson offsets from a "
+                                          "blue-noise rank tile: pushes residual error toward high "
+                                          "frequencies so low-spp renders look cleaner")
+    sobol_adaptive_moments_enable: BoolProperty(name="Variance-Driven Adaptive", default=True,
+                                               description="Per-pixel luminance second-moment estimate: "
+                                               "convergence is decided live on the device from each "
+                                               "pixel's relative standard error instead of the periodic "
+                                               "host-side noise heuristic")
+    sobol_adaptive_relerr: FloatProperty(name="Error Target", default=0.02, min=0.001, max=0.5,
+                                          precision=4,
+                                          description="Per-pixel relative standard error target for "
+                                          "variance-driven adaptive sampling: lower values sample "
+                                          "converged pixels more conservatively")
 
     # Quick Setup (Corona-style simplified interface)
     simple: PointerProperty(type=LuxCoreConfigSimple)
@@ -888,6 +975,15 @@ class LuxCoreConfig(PropertyGroup):
     mnee_maxspecular: IntProperty(name="Max Specular Vertices", default=1, min=1, max=4,
                                   description="Chain length for multi-specular transport (closed glass slabs need 2+). "
                                               "Higher values resolve thicker refractive stacks at extra cost")
+    mnee_maxiterations: IntProperty(name="Max Iterations", default=12, min=1, max=256,
+                                  description="Newton solver iteration cap per manifold solve. Curved "
+                                              "refractive casters and dispersive glass need ~64 to converge; "
+                                              "lower values leave the manifold caustic darker")
+    mnee_seedcache: BoolProperty(name="Seed Cache", default=True,
+                                  description="Cache converged manifold vertices as warm-start seeds "
+                                              "(mirrors: skips the seed trace; glass: rescues solves the "
+                                              "cold line seed fails on). Leave on - it never biases the "
+                                              "result and only adds recovered caustic energy")
 
     # Path guiding (P1-3): learned incident-radiance field steers glossy bounces
     guiding_enable: BoolProperty(name="Path Guiding", default=False,

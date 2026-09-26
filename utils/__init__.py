@@ -193,26 +193,18 @@ def calc_filmsize(scene, context=None):
             zoom = 0.25 * (
                 (math.sqrt(2) + context.region_data.view_camera_zoom / 50) ** 2
             )
-            aspectratio, aspect_x, aspect_y = calc_aspect(
-                render.resolution_x * render.pixel_aspect_x,
-                render.resolution_y * render.pixel_aspect_y,
-                scene.camera.data.sensor_fit,
-            )
-
             if render.use_border:
-                base = zoom
-                if scene.camera.data.sensor_fit == "AUTO":
-                    base *= max(width, height)
-                elif scene.camera.data.sensor_fit == "HORIZONTAL":
-                    base *= width
-                elif scene.camera.data.sensor_fit == "VERTICAL":
-                    base *= height
-
-                width = int(base * aspect_x * border_max_x) - int(
-                    base * aspect_x * border_min_x
+                # The film covers the camera frame's border rect on screen:
+                # the frame is drawn at frame size * zoom inside the region
+                frame_w, frame_h, _ = calc_camera_frame_size(
+                    width_raw, height_raw, scene
                 )
-                height = int(base * aspect_y * border_max_y) - int(
-                    base * aspect_y * border_min_y
+                frame_h /= render.pixel_aspect_y / render.pixel_aspect_x
+                width = int(zoom * frame_w * border_max_x) - int(
+                    zoom * frame_w * border_min_x
+                )
+                height = int(zoom * frame_h * border_max_y) - int(
+                    zoom * frame_h * border_min_y
                 )
 
         pixel_size = int(scene.luxcore.viewport.pixel_size)
@@ -310,9 +302,18 @@ def calc_screenwindow(zoom, shift_x, shift_y, scene, context=None):
 
             else:
                 # No border
-                aspectratio, xaspect, yaspect = calc_aspect(
-                    width_raw, height_raw, scene.camera.data.sensor_fit
+                # The pixel scale is normalized by the size of the camera
+                # frame fitted inside the region (the viewfac used by
+                # BKE_camera_params_compute_viewplane), not by the region
+                # aspect. Otherwise the render appears zoomed in by
+                # max(W,H)/viewfac when the render aspect differs from
+                # the region aspect (e.g. a square render resolution).
+                frame_w, frame_h, viewfac = calc_camera_frame_size(
+                    width_raw, height_raw, scene
                 )
+                ycor = render.pixel_aspect_y / render.pixel_aspect_x
+                xaspect = width_raw / viewfac
+                yaspect = height_raw * ycor / viewfac
 
         else:
             # Normal viewport
@@ -346,6 +347,34 @@ def calc_screenwindow(zoom, shift_x, shift_y, scene, context=None):
     ]
 
     return screenwindow
+
+
+def calc_camera_frame_size(width, height, scene):
+    """Size of the render frame fitted inside a region of the given size
+    and the viewfac used to normalize the pixel scale (the camera frame
+    drawn in Blender's camera view before zooming).
+
+    Mirrors BKE_camera_frame_size + the viewfac selection in
+    BKE_camera_params_compute_viewplane. Height/frame_h are corrected by
+    the pixel aspect ratio (winy_cor); divide frame_h by ycor for raw
+    pixel units."""
+    render = scene.render
+    ycor = render.pixel_aspect_y / render.pixel_aspect_x
+    frame_aspect = (render.resolution_y * render.pixel_aspect_y) / (
+        render.resolution_x * render.pixel_aspect_x
+    )
+    frame_w = min(width, height * ycor / frame_aspect)
+    frame_h = frame_w * frame_aspect
+
+    sensor_fit = scene.camera.data.sensor_fit
+    if sensor_fit == "VERTICAL" or (
+        sensor_fit == "AUTO" and frame_aspect > 1.0
+    ):
+        viewfac = frame_h
+    else:
+        viewfac = frame_w
+
+    return frame_w, frame_h, viewfac
 
 
 def calc_aspect(width, height, fit="AUTO"):

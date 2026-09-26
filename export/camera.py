@@ -100,7 +100,7 @@ def _view_camera(scene, context, definitions):
         definitions["type"] = "environment"
     elif camera.data.type == "PERSP":
         definitions["type"] = "perspective"
-        definitions["fieldofview"] = math.degrees(camera.data.angle)
+        definitions["fieldofview"] = _fieldofview_deg(camera.data, scene)
         _depth_of_field(scene, definitions, context)
     else:
         raise NotImplementedError("Unknown camera.data.type")
@@ -134,7 +134,7 @@ def _final(scene, definitions):
 
     # Field of view
     if cam_type == "perspective":
-        definitions["fieldofview"] = math.degrees(camera.data.angle)
+        definitions["fieldofview"] = _fieldofview_deg(camera.data, scene)
         _depth_of_field(scene, definitions)
 
     # screenwindow (for border rendering and camera shift)
@@ -271,6 +271,26 @@ def _motion_blur(scene, definitions, context, is_camera_moving):
         definitions["lookat.target"] = [0, 0, -1]
         definitions["up"] = [0, 1, 0]
         # Note: camera motion system is defined in export/motion_blur.py
+
+
+def _fieldofview_deg(cam_data, scene):
+    """FOV along the effective sensor fit direction. Blender resolves an
+    AUTO sensor fit by the frame aspect (BKE_camera_sensor_fit), so e.g.
+    a portrait frame uses sensor_height even though Camera.angle is
+    always based on sensor_width."""
+    render = scene.render
+    frame_aspect = (render.resolution_y * render.pixel_aspect_y) / (
+        render.resolution_x * render.pixel_aspect_x
+    )
+    sensor_fit = cam_data.sensor_fit
+    if sensor_fit == "VERTICAL" or (
+        sensor_fit == "AUTO" and frame_aspect > 1.0
+    ):
+        sensor_size = cam_data.sensor_height
+    else:
+        sensor_size = cam_data.sensor_width
+
+    return math.degrees(2 * math.atan(sensor_size / (2 * cam_data.lens)))
 
 
 def _calc_lookat(cam_matrix, scene):

@@ -61,6 +61,11 @@ class LUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
             sub.prop(denoiser, "search_window_radius")
         elif denoiser.type == "OIDN":
             sub = layout.column(align=False)
+            sub.prop(denoiser, "oidn_mode")
+            if denoiser.oidn_mode == "COMPONENTS":
+                sub.prop(denoiser, "oidn_demodulate")
+                sub.prop(denoiser, "oidn_denoise_emission")
+                sub.prop(denoiser, "oidn_firefly_sigma")
             sub.prop(denoiser, "max_memory_MB")
             sub.prop(denoiser, "albedo_specular_passthrough_mode")
             sub.prop(denoiser, "prefilter_AOVs")
