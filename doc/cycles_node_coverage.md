@@ -61,7 +61,7 @@ with no LuxCore equivalent additionally carry a specific reason via
 | ShaderNodeTexWave | approx | wave-type subset |
 | ShaderNodeTexWhiteNoise | mapped | whitenoise |
 | ShaderNodeTexGabor | mapped | `gabornoise` (native; 2D only, 3D mode warns+approximates) |
-| ShaderNodeTexIES | warn | IES lives on LuxCore light definitions |
+| ShaderNodeTexIES | mapped | light Emission strength -> mappoint/mapsphere iesblob (point lights) |
 | ShaderNodeTexSky | warn | sky2/sun are lights, not material textures |
 
 ## Input / geometry nodes
@@ -71,7 +71,7 @@ with no LuxCore equivalent additionally carry a specific reason via
 | ShaderNodeTexCoord | approx | UV/Normal/Object mapped; Generated→UV, Reflection→normal approximations warn; Window/Camera warn |
 | ShaderNodeNewGeometry | approx | per-output support varies; unsupported outputs warn |
 | ShaderNodeUVMap | mapped | incl. named-layer index lookup |
-| ShaderNodeAttribute | approx | color attributes + vertex AOVs |
+| ShaderNodeAttribute | mapped | color attrs, UV layers (Vector out), generic named attrs — float/int/bool→`hitpointvertexaov`/`hitpointtriangleaov`, vector/float2→extra color layer; edge-domain/string warn |
 | ShaderNodeVertexColor | approx | |
 | ShaderNodeObjectInfo | approx | Random→objectidnormalized; per-field subset warns |
 | ShaderNodeParticleInfo | approx | per-field subset warns |

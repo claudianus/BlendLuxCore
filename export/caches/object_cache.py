@@ -7,6 +7,7 @@ from time import time
 from ... import utils
 import pyluxcore
 from .. import mesh_converter
+from .. import named_attributes
 from ..hair import (
     convert_hair,
     warn_about_missing_uvs,
@@ -436,6 +437,9 @@ class ObjectCache2:
     ):
         is_viewport_render = bool(context)
         instances = {}
+        # Fresh export: drop any generic-attribute name→index maps a
+        # previous session registered.
+        named_attributes.clear()
         # Persistent-scene delta bookkeeping: for every instancer, the
         # set of source objects it spawned duplis of (fast path) or a
         # marker that some of its instances were exported individually

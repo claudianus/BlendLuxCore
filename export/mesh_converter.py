@@ -7,6 +7,7 @@ _needs_reload = "bpy" in locals()
 import bpy
 
 from . import caches
+from . import named_attributes
 from .. import utils
 from ..utils.errorlog import LuxCoreErrorLog
 
@@ -14,6 +15,7 @@ if _needs_reload:
     import importlib
 
     importlib.reload(caches)
+    importlib.reload(named_attributes)
     importlib.reload(utils)
 
 
@@ -119,6 +121,21 @@ def convert(
         rgb = [rgba[:, :3] for rgba in rgba_colors]
         alphas = [rgba[:, 3] for rgba in rgba_colors]
 
+        # Generic named attributes (Geometry Nodes "Store Named Attribute"
+        # outputs etc.) → LuxCore vertex AOV / triangle AOV / extra color
+        # layers. The name→index map is registered for the node reader.
+        vert_aovs, face_attrs, extra_cols = named_attributes.collect(
+            mesh, loop_vertices, len(rgb), obj.name
+        )
+        rgb += extra_cols
+        # FACE-domain attrs are per polygon; loop_triangles.polygon_index
+        # maps each exported triangle back to its attribute value.
+        tri_polygon_index = (
+            get_ndarray(mesh.loop_triangles, "polygon_index", 0, np.uint32)
+            if face_attrs
+            else None
+        )
+
         # Transformation
         if is_viewport_render or use_instancing:
             mesh_transform = None
@@ -147,7 +164,8 @@ def convert(
 
         mesh_definitions = []
         for mat in unique_mats:
-            mat_triangles = triangle_loops[loop_triangle_materials == mat]
+            mat_tri_ids = np.flatnonzero(loop_triangle_materials == mat)
+            mat_triangles = triangle_loops[mat_tri_ids]
             name = f"{str(mesh_key)}{mat:03d}"
 
 
@@ -163,6 +181,15 @@ def convert(
                 alphas=alphas,
                 transformation=mesh_transform,
             )
+            for aov_index, aov in enumerate(vert_aovs):
+                luxcore_scene.SetMeshVertexAOV(name, aov_index, aov.tolist())
+            for aov_index, attr in enumerate(face_attrs):
+                face_vals = named_attributes.face_values(attr)
+                luxcore_scene.SetMeshTriangleAOV(
+                    name,
+                    aov_index,
+                    face_vals[tri_polygon_index[mat_tri_ids]].tolist(),
+                )
             mesh_definitions.append((name, mat))
 
         duration = time() - start_time

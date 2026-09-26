@@ -3,6 +3,7 @@ import pyluxcore
 from .. import utils
 from ..utils import node as utils_node
 from ..utils.errorlog import LuxCoreErrorLog
+from . import named_attributes
 from .image import ImageExporter
 import math
 from math import degrees, log
@@ -2401,9 +2402,47 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 data_index = -2  # marker: handled
 
         if data_index is None:
+            # Generic named attribute (e.g. written by Geometry Nodes):
+            # exported by mesh_converter as vertex/triangle AOV or an
+            # extra color layer.
+            named = named_attributes.resolve(obj_name, attribute_name)
+            if named is not None:
+                kind, named_index = named
+                if output_socket.name == "Alpha":
+                    # Scalar/vector attributes carry no alpha channel
+                    definitions = {"type": "constfloat1", "value": 1.0}
+                elif output_socket.name == "Fac":
+                    definitions = {
+                        "type": {
+                            named_attributes.KIND_VERTEX_AOV:
+                                "hitpointvertexaov",
+                            named_attributes.KIND_TRIANGLE_AOV:
+                                "hitpointtriangleaov",
+                            named_attributes.KIND_COLOR: "hitpointgrey",
+                        }[kind],
+                        "dataindex": named_index,
+                    }
+                    if kind == named_attributes.KIND_COLOR:
+                        definitions["channel"] = -1
+                else:
+                    # "Color" and "Vector" outputs
+                    definitions = {
+                        "type": {
+                            named_attributes.KIND_VERTEX_AOV:
+                                "hitpointvertexaov",
+                            named_attributes.KIND_TRIANGLE_AOV:
+                                "hitpointtriangleaov",
+                            named_attributes.KIND_COLOR: "hitpointcolor",
+                        }[kind],
+                        "dataindex": named_index,
+                    }
+                data_index = -2  # marker: handled
+
+        if data_index is None:
             return _warn_unsupported(
                 node, f'attribute "{attribute_name}" could not be resolved to an '
-                "exported vertex color or UV layer; returning mid grey",
+                "exported vertex color, UV layer, or named attribute; "
+                "returning mid grey",
                 FALLBACK_COLOR if output_socket.name != "Fac" else FALLBACK_FLOAT,
                 obj_name)
 
@@ -3252,6 +3291,9 @@ def _convert_to_float(color_or_texture, props):
         return tex_name
     elif isinstance(color_or_texture, list):
         return sum(color_or_texture) / len(color_or_texture)
+    # Scalar constants pass through unchanged — dropping them here turned
+    # e.g. MULTIPLY(attr, 50.0) into attr * 0.
+    return color_or_texture
 
 
 def _is_zero(value):

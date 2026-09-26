@@ -15,6 +15,25 @@ TYPES_SUPPORTING_ENVLIGHTCACHE = {"sky2", "infinite", "constantinfinite"}
 
 is_blender_5 = bpy.app.version[0] >= 5 # only test of Blender 5 for now
 
+def _ies_node_to_blob(ies_node, obj_name):
+    """Read a Cycles ShaderNodeTexIES photometric profile into a byte blob
+    for LuxCore's `<light>.iesblob` property. Returns None (with a warning)
+    when the profile cannot be resolved."""
+    try:
+        if ies_node.mode == "EXTERNAL":
+            path = bpy.path.abspath(ies_node.filepath)
+            with open(path, "rb") as f:
+                return f.read()
+        else:
+            # INTERNAL mode: the profile lives in a Text datablock
+            if ies_node.ies is None:
+                LuxCoreErrorLog.add_warning("IES node has no text datablock", obj_name)
+                return None
+            return ies_node.ies.as_string().encode("utf-8")
+    except Exception as error:
+        LuxCoreErrorLog.add_warning(f"Could not read IES profile: {error}", obj_name)
+        return None
+
 def convert_light(exporter, obj, obj_key, depsgraph, luxcore_scene, transform, is_viewport_render):
     try:
         luxcore_name = obj_key
@@ -49,6 +68,8 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
     color = list(light.color)
     gain = light.energy
 
+    ies_blob = None
+
     if light.use_nodes and light.node_tree:
         # Modify color and gain according to node setup
         output_node = light.node_tree.get_output_node("CYCLES")
@@ -61,8 +82,21 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
                 if surface_node.bl_idname == "ShaderNodeEmission":
                     strength_socket = surface_node.inputs["Strength"]
                     node_gain = strength_socket.default_value
-                    if utils_node.get_linked_node(strength_socket):
-                        LuxCoreErrorLog.add_warning("Light strength nodes not supported", obj.name)
+                    strength_node = utils_node.get_linked_node(strength_socket)
+                    if strength_node:
+                        if strength_node.bl_idname == "ShaderNodeTexIES":
+                            # Cycles IES: Fac drives the emission strength.
+                            # LuxCore maps the photometric profile to
+                            # mappoint/mapsphere via the iesblob property.
+                            ies_blob = _ies_node_to_blob(strength_node, obj.name)
+                            if utils_node.get_linked_node(strength_node.inputs["Vector"]):
+                                LuxCoreErrorLog.add_warning(
+                                    "IES node Vector input not supported, "
+                                    "the light's local direction is used", obj.name)
+                            # The IES node's own Strength socket scales Fac
+                            node_gain = strength_node.inputs["Strength"].default_value
+                        else:
+                            LuxCoreErrorLog.add_warning("Light strength nodes not supported", obj.name)
 
                     color_socket = surface_node.inputs["Color"]
                     color_node = utils_node.get_linked_node(color_socket)
@@ -81,7 +115,18 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
                 color = [a * b for a, b in zip(color, node_color)]
 
     if light.type == "POINT":
-        definitions["type"] = "point" if light.shadow_soft_size == 0 else "sphere"
+        if ies_blob is not None:
+            definitions["type"] = "mappoint" if light.shadow_soft_size == 0 else "mapsphere"
+            definitions["iesblob"] = [ies_blob]
+            # Cycles measures the IES vertical angle from the light's
+            # local -Z (nadir for a light pointing down), while LuxCore's
+            # emission map places nadir at +Z. flipz corrects the mapping.
+            definitions["flipz"] = True
+            # Match the LuxCore light UI defaults (export_ies)
+            definitions["map.width"] = 512
+            definitions["map.height"] = 256
+        else:
+            definitions["type"] = "point" if light.shadow_soft_size == 0 else "sphere"
         definitions["transformation"] = utils.luxutils.matrix_to_list(transform)
 
         if light.shadow_soft_size > 0:
@@ -118,7 +163,7 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
         # Multiplier to reach similar brightness as Cycles, found by eyeballing.
         gain *= 0.07
     elif light.type == "AREA":
-        if light.cycles.is_portal:
+        if getattr(light.cycles, "is_portal", False):
             return pyluxcore.Properties(), None
 
         if light.shape not in {"SQUARE", "RECTANGLE"}:
@@ -164,6 +209,11 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
         # Can only happen if Blender changes its light types
         raise Exception("Unkown light type", light.type, 'in light "%s"' % obj.name)
 
+    if ies_blob is not None and light.type != "POINT":
+        LuxCoreErrorLog.add_warning(
+            "IES profile nodes are only supported on point lights",
+            obj.name)
+
     definitions["gain"] = [gain] * 3
     definitions["color"] = color
     definitions["efficency"] = 0.0
@@ -171,7 +221,8 @@ def _convert_cycles_light(exporter, obj, depsgraph, luxcore_scene, transform, is
     definitions["normalizebycolor"] = False
     definitions["importance"] = light.luxcore.importance
 
-    if not light.cycles.cast_shadow:
+    # Cycles light settings in Blender 4.2+ no longer expose cast_shadow
+    if not getattr(light.cycles, "cast_shadow", True):
         LuxCoreErrorLog.add_warning("Cast Shadow is disabled, but unsupported by LuxCore", obj.name)
 
     props = utils.luxutils.create_props(prefix, definitions)
