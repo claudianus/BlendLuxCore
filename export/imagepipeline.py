@@ -24,7 +24,15 @@ def convert(scene, context=None, index=0):
             _fallback(definitions)
             return utils.luxutils.create_props(prefix, definitions)
 
-        convert_defs(context, scene, definitions, 0)
+        index = 0
+        # Final renders: temporally accumulate the linear beauty first,
+        # so the tonemapped display and every downstream plugin see the
+        # stabilized image. The denoiser pipeline gets its own instance.
+        if context is None and scene.luxcore.denoiser.temporal_enabled:
+            from .aovs import add_temporal_accumulate
+            index = add_temporal_accumulate(definitions, index, scene)
+
+        convert_defs(context, scene, definitions, index)
 
         return utils.luxutils.create_props(prefix, definitions)
     except Exception as error:

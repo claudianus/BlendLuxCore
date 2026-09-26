@@ -71,6 +71,43 @@ class LUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
             sub.prop(denoiser, "prefilter_AOVs")
 
 
+class LUXCORE_RENDER_PT_denoiser_temporal(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"LUXCORE"}
+    bl_label = "Temporal Accumulation"
+    bl_parent_id = "LUXCORE_RENDER_PT_denoiser"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.render.engine == "LUXCORE"
+
+    def draw_header(self, context):
+        layout = self.layout
+        layout.prop(context.scene.luxcore.denoiser, "temporal_enabled", text="")
+
+    def draw(self, context):
+        config = context.scene.luxcore.config
+        denoiser = context.scene.luxcore.denoiser
+
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        layout.active = denoiser.temporal_enabled and not LuxCoreRenderEngine.final_running
+
+        if config.engine == "BIDIR":
+            layout.label(text="Not supported by the Bidir engine", icon=icons.WARNING)
+        if not config.use_animated_seed:
+            layout.label(text="Enable animated seed for frame-independent noise",
+                         icon=icons.INFO)
+
+        col = layout.column(align=True)
+        col.prop(denoiser, "temporal_history")
+        col.prop(denoiser, "temporal_clip_sigma")
+        col.prop(denoiser, "temporal_depth_threshold")
+        col.prop(denoiser, "temporal_normal_threshold")
+        col.prop(denoiser, "temporal_statedir")
+
+
 class LUXCORE_RENDER_PT_denoiser_bcd_advanced(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"LUXCORE"}
     bl_label = "Advanced"

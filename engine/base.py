@@ -25,7 +25,7 @@ if _needs_reload:
 
 class LuxCoreRenderEngine(bpy.types.RenderEngine):
     bl_idname = "LUXCORE"
-    bl_label = "LuxCoreRender"
+    bl_label = "SuperLuxCore"
 
     # Apply compositing on render results.
     bl_use_postprocess = True

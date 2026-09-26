@@ -206,8 +206,10 @@ class LUXCORE_RENDERLAYER_PT_aovs_render(ViewLayerButtonsPanel, Panel):
         col.prop(aovs, "irradiance")
         col.prop(aovs, "raycount")
         col.prop(aovs, "convergence")
+        col.prop(aovs, "motion_vector")
 
         # Supported by BIDIR
         col = flow.column()
         col.prop(aovs, "noise")
         col.prop(aovs, "samplecount")
+        col.prop(aovs, "variance")

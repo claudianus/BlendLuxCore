@@ -1,6 +1,6 @@
 from bpy.types import PropertyGroup
 from bpy.props import (
-    BoolProperty, IntProperty, FloatProperty, EnumProperty,
+    BoolProperty, IntProperty, FloatProperty, EnumProperty, StringProperty,
 )
 
 REFRESH_DESC = (
@@ -82,3 +82,27 @@ class LuxCoreDenoiser(PropertyGroup):
                                       description="Components mode: clamp isolated outlier pixels before "
                                       "denoising, in units of local robust sigma (0 disables). Useful for "
                                       "scenes with sparse fireflies; may flatten dense noise textures")
+
+    # Temporal accumulation (animation denoising, final renders only)
+    temporal_enabled: BoolProperty(name="Temporal Accumulation", default=False,
+                                   description="Reproject and blend previous frames through motion "
+                                   "vectors before denoising - kills animation flicker. Enable the "
+                                   "animated seed (Render > Sampling > Seed) so frames carry "
+                                   "independent noise that can actually converge")
+    temporal_history: FloatProperty(name="History Length", default=16, min=1, soft_max=64,
+                                    description="Maximum number of frames folded into the accumulation. "
+                                    "Higher values are smoother but lag more on lighting changes")
+    temporal_clip_sigma: FloatProperty(name="Clip Sigma", default=2.5, min=0, soft_max=8,
+                                       description="Neighbourhood clamp of the reprojected history, in "
+                                       "combined spatial + sample standard deviations. Lower values "
+                                       "suppress ghosting more aggressively; 0 disables clipping")
+    temporal_depth_threshold: FloatProperty(name="Depth Threshold", default=0.05, min=0, soft_max=0.5,
+                                            description="Relative depth difference that marks a history "
+                                            "sample as disoccluded (stale)")
+    temporal_normal_threshold: FloatProperty(name="Normal Threshold", default=0.6, min=-1, max=1,
+                                             description="Minimum dot product between previous and current "
+                                             "shading normals for a history sample to be reused")
+    temporal_statedir: StringProperty(name="State Directory", default="//luxcore_temporal/",
+                                      subtype='DIR_PATH',
+                                      description="Where the temporal history EXRs are stored. Cleared "
+                                      "automatically when rendering from the first frame")

@@ -102,3 +102,10 @@ class LuxCoreAOVSettings(PropertyGroup):
                        description="The noise amount per pixel. High values mean more noise, low values less noise")
     irradiance: BoolProperty(name="Irradiance", default=False,
                        description="Surface irradiance")
+    variance: BoolProperty(name="Variance", default=False,
+                       description="Per-pixel radiance variance estimate (HDR). Input for external "
+                                   "denoisers (e.g. Arnold noice) and temporal accumulation confidence")
+    motion_vector: BoolProperty(name="Motion Vector", default=False,
+                       description="Screen-space velocity of the first visible surface in pixels/frame "
+                                   "(HDR: x,y = velocity, z = valid flag, w = object-motion flag). "
+                                   "Required by temporal denoisers; needs PATH engine")

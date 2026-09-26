@@ -1,4 +1,6 @@
 from collections import OrderedDict
+import os
+import bpy
 import pyluxcore
 from .. import utils
 from . import imagepipeline
@@ -221,10 +223,30 @@ def _make_imagepipeline(props, context, scene, output_name, pipeline_index, outp
     return pipeline_index + 1
 
 
+def add_temporal_accumulate(definitions, index, scene):
+    """Prepend a TEMPORAL_ACCUMULATE plugin at index; returns the next
+    plugin index. Must run first in the pipeline (linear HDR input)."""
+    denoiser = scene.luxcore.denoiser
+    definitions[str(index) + ".type"] = "TEMPORAL_ACCUMULATE"
+    # Rendering the first frame must start from a clean history
+    definitions[str(index) + ".frame"] = max(0, scene.frame_current - scene.frame_start)
+    statedir = bpy.path.abspath(denoiser.temporal_statedir)
+    os.makedirs(statedir, exist_ok=True)
+    definitions[str(index) + ".statedir"] = statedir
+    definitions[str(index) + ".history"] = denoiser.temporal_history
+    definitions[str(index) + ".clipsigma"] = denoiser.temporal_clip_sigma
+    definitions[str(index) + ".depththreshold"] = denoiser.temporal_depth_threshold
+    definitions[str(index) + ".normalthreshold"] = denoiser.temporal_normal_threshold
+    return index + 1
+
+
 def get_denoiser_imgpipeline_props(context, scene, pipeline_index):
     prefix = "film.imagepipelines.%03d." % pipeline_index
     definitions = OrderedDict()
     index = 0
+
+    if scene.luxcore.denoiser.temporal_enabled:
+        index = add_temporal_accumulate(definitions, index, scene)
 
     if scene.luxcore.denoiser.type == "BCD":
         index = get_BCD_props(definitions, scene, index)
