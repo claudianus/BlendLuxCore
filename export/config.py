@@ -109,6 +109,18 @@ def convert(exporter, scene, context=None, engine=None):
                 scene, definitions, config, is_viewport_render
             )
 
+        if light_strategy == "RESTIR_DI":
+            definitions["lightstrategy.restir.temporal.enable"] = (
+                config.restir_temporal_enable
+            )
+            if config.restir_candidates > 0:
+                definitions["lightstrategy.restir.candidates"] = (
+                    config.restir_candidates
+                )
+
+        if config.mnee_enable:
+            definitions["path.mnee.enable"] = True
+
         if config.photongi.enabled and not is_viewport_render:
             _convert_photongi_settings(context, scene, definitions, config)
 
@@ -354,6 +366,11 @@ def _convert_final_engine(scene, definitions, config):
         definitions[f"sampler.{sampler_type}.adaptive.strength"] = (
             adaptive_strength
         )
+
+        if sampler == "SOBOL":
+            definitions["sampler.sobol.bluenoise.enable"] = (
+                config.sobol_bluenoise_enable
+            )
 
         # Sampler pattern
         if config.using_out_of_core():

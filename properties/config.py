@@ -89,6 +89,12 @@ POWER_DESC = (
 
 UNIFORM_DESC = "Sample all lights equally, not according to their brightness"
 
+RESTIR_DI_DESC = (
+    "Reservoir importance resampling: pick each candidate light by its estimated "
+    "contribution at the shading point (recommended for scenes with many lights; "
+    "supported by PATHCPU/TILEPATHCPU/RTPATHCPU/PATHOCL/TILEPATHOCL/RTPATHOCL)"
+)
+
 DLSC_DESC = (
     "Use the DLSC in scenes with many light sources if each of them only "
     "lights up a small part of the scene (example: a city at night). \n"
@@ -564,6 +570,10 @@ class LuxCoreConfig(PropertyGroup):
     # SOBOL properties
     sobol_adaptive_strength: FloatProperty(name="Adaptive Strength", default=0.9, min=0, max=0.95,
                                             description=SOBOL_ADAPTIVE_STRENGTH_DESC)
+    sobol_bluenoise_enable: BoolProperty(name="Blue-Noise Dithering", default=False,
+                                          description="Blue-noise dithered Sobol sampling (Heitz 2019): "
+                                          "each pixel gets a hashed per-dimension scramble and offset, "
+                                          "decorrelating neighboring pixels to remove low-spp sampling artifacts")
 
     # Quick Setup (Corona-style simplified interface)
     simple: PointerProperty(type=LuxCoreConfigSimple)
@@ -665,9 +675,20 @@ class LuxCoreConfig(PropertyGroup):
         ("LOG_POWER", "Log Power", LOG_POWER_DESC, 0),
         ("POWER", "Power", POWER_DESC, 1),
         ("UNIFORM", "Uniform", UNIFORM_DESC, 2),
+        ("RESTIR_DI", "ReSTIR DI (reservoir)", RESTIR_DI_DESC, 3),
     ]
     light_strategy: EnumProperty(name="Light Strategy", items=light_strategy_items, default="LOG_POWER",
                                   description="Decides how the lights in the scene are sampled")
+
+    # ReSTIR DI options
+    restir_temporal_enable: BoolProperty(name="Temporal Reuse", default=True,
+                                  description="Reuse the reservoir of each pixel from the previous pass (faster convergence on static scenes)")
+    restir_candidates: IntProperty(name="Candidate Count", default=0, min=0, max=32,
+                                  description="Number of candidate lights per reservoir (0 = adaptive: scales with the number of lights)")
+
+    # MNEE (specular chain direct light sampling)
+    mnee_enable: BoolProperty(name="MNEE Specular Caustics", default=False,
+                                  description="Direct light through delta specular surfaces (mirrors, glass) via manifold next event estimation. Fix dark caustics from point/spot lights behind mirrors or glass")
 
     # Special properties of the direct light sampling cache
     dls_cache: PointerProperty(type=LuxCoreConfigDLSCache)

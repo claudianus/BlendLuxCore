@@ -147,7 +147,10 @@ class LUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
         
         col = layout.column(align=True)
         col.prop(config, "sobol_adaptive_strength", slider=True)
-        
+
+        if config.get_sampler() == "SOBOL":
+            col.prop(config, "sobol_bluenoise_enable")
+
         if config.sobol_adaptive_strength > 0:
             col.prop(config.noise_estimation, "warmup")
             col.prop(config.noise_estimation, "step")
@@ -222,3 +225,9 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
             col.active = False
         
         col.prop(config, "light_strategy")
+
+        if config.light_strategy == "RESTIR_DI":
+            col.prop(config, "restir_temporal_enable")
+            col.prop(config, "restir_candidates")
+
+        col.prop(config, "mnee_enable")
