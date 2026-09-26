@@ -30,10 +30,9 @@ def convert(material, props, luxcore_name, obj_name=""):
     link = utils_node.get_link(output.inputs["Surface"])
     volume_link = utils_node.get_link(output.inputs["Volume"]) if "Volume" in output.inputs else None
 
-    displacement_input = output.inputs.get("Displacement")
-    if displacement_input is not None and displacement_input.is_linked:
-        LuxCoreErrorLog.add_warning("Material displacement is not supported and is ignored",
-                                    obj_name=obj_name)
+    # Note: the Displacement output is not handled here — it is a mesh-level
+    # effect exported by the object cache as a LuxCore "displacement" shape
+    # (see get_displacement_link / export_displacement below).
 
     if link is None and volume_link is None:
         return black(luxcore_name)
@@ -61,6 +60,83 @@ def convert(material, props, luxcore_name, obj_name=""):
         # If None, _volume already logged a warning
 
     return luxcore_name, props
+
+
+def get_displacement_link(material):
+    """
+    Returns the link feeding the Cycles output's Displacement socket, or
+    None. Used by the object cache to decide whether to wrap the mesh in a
+    LuxCore "displacement" shape.
+    """
+    node_tree = getattr(material, "node_tree", None)
+    if node_tree is None:
+        return None
+    output = node_tree.get_output_node("CYCLES")
+    if output is None:
+        return None
+    disp_input = output.inputs.get("Displacement")
+    if disp_input is None or not disp_input.is_linked:
+        return None
+    return utils_node.get_link(disp_input)
+
+
+def export_displacement(link, props, material, obj_name):
+    """
+    Exports the textures driving a Cycles Displacement/Vector Displacement
+    node into props and returns the parameters for a LuxCore "displacement"
+    shape, or None when the link is not a supported displacement node.
+    """
+    node = link.from_node
+
+    if node.bl_idname == "ShaderNodeDisplacement":
+        if getattr(node, "space", "OBJECT") != "OBJECT":
+            LuxCoreErrorLog.add_warning(
+                'Displacement node "%s": world space is not supported, '
+                "object space is used instead" % node.name, obj_name=obj_name)
+        height = _socket(node.inputs["Height"], props, material, obj_name, None)
+        if height == ERROR_VALUE:
+            return None
+        scale = _scalar_or_warn(node.inputs["Scale"], 1.0, node, obj_name)
+        midlevel = _scalar_or_warn(node.inputs["Midlevel"], 0.5, node, obj_name)
+        # LuxCore: disp = (map * scale + offset) * N
+        # Cycles:  disp = (height - midlevel) * scale * N
+        return {
+            "map": height,
+            "map.type": "height",
+            "scale": scale,
+            "offset": -midlevel * scale,
+        }
+
+    if node.bl_idname == "ShaderNodeVectorDisplacement":
+        if getattr(node, "space", "OBJECT") != "OBJECT":
+            LuxCoreErrorLog.add_warning(
+                'Vector Displacement node "%s": world space is not supported, '
+                "object space is used instead" % node.name, obj_name=obj_name)
+        vector = _socket(node.inputs["Vector"], props, material, obj_name, None)
+        if vector == ERROR_VALUE:
+            return None
+        scale = _scalar_or_warn(node.inputs["Scale"], 1.0, node, obj_name)
+        return {
+            "map": vector,
+            "map.type": "vector",
+            "scale": scale,
+            "offset": 0.0,
+        }
+
+    # Anything else plugged straight into Displacement behaves like bump in
+    # Cycles — the material-level Normal/bump path covers that case.
+    return None
+
+
+def _scalar_or_warn(socket, fallback, node, obj_name):
+    """ Reads a scalar socket; warns and falls back when it is textured. """
+    if socket.is_linked:
+        LuxCoreErrorLog.add_warning(
+            'Node "%s": textured "%s" input is not supported for '
+            "displacement, using default value" % (node.name, socket.name),
+            obj_name=obj_name)
+        return fallback
+    return socket.default_value
 
 
 def black(luxcore_name="__BLACK__"):
@@ -409,12 +485,11 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 definitions["vroughness"] = roughness
         else:
             definitions = {
-                # TODO:
-                #  - subsurface
-                #  - clearcoat roughness (we have clearcoat gloss, probably need to invert or something)
-                #  - clearcoat normal (no idea)
-                #  - tangent (no idea)
-                #  - transmission roughness (weird thing, might require rough glass + glossy coating?)
+                # TODO (needs OpenPBR material — no Disney params):
+                #  - subsurface radius/scale/IOR (Disney has weight only)
+                #  - coat IOR / coat tint / coat normal
+                #  - sheen roughness, diffuse roughness
+                #  - anisotropic rotation, tangent, thin wall
                 "type": "disney",
                 "basecolor": base_color,
                 "subsurface": _socket(node.inputs["Subsurface Weight"], props, material, obj_name, group_node_stack),
@@ -427,70 +502,64 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "sheen": _socket(node.inputs["Sheen Weight"], props, material, obj_name, group_node_stack),
                 "sheentint": _socket(node.inputs["Sheen Tint"], props, material, obj_name, group_node_stack),
                 "clearcoat": _socket(node.inputs["Coat Weight"], props, material, obj_name, group_node_stack),
+                # Disney clearcoatgloss = 1 - coat_roughness
+                "clearcoatgloss": _tex_helper(props, luxcore_name + "coatgloss", {
+                    "type": "subtract",
+                    "texture1": 1.0,
+                    "texture2": _socket(node.inputs["Coat Roughness"], props, material, obj_name, group_node_stack),
+                }) if node.inputs["Coat Roughness"].is_linked
+                    or node.inputs["Coat Roughness"].default_value != 0.0
+                    else 1.0,
+                # Integrated dielectric transmission lobe (no disney+glass
+                # mix hack): weight, roughness and IOR map directly.
+                "transmission": transmission,
+                "ior": _socket(node.inputs["IOR"], props, material, obj_name, group_node_stack),
             }
-            
-            # Metallic values > 0 reduce transmission. At metallic = 1, no transmission happens at all
-            if metallic != 1 and (transmission_socket.is_linked or transmission_socket.default_value > 0):
-                luxcore_name_disney = luxcore_name + "_disney"
-                props.Set(utils.luxutils.create_props(prefix + luxcore_name_disney + ".", definitions))
-                
-                # Glass/Roughglass
-                luxcore_name_glass = luxcore_name + "_glass"
-                roughness = _squared_roughness_to_linear(node.inputs["Roughness"], props, material,
-                                                         luxcore_name_glass, obj_name, group_node_stack)
 
-                definitions = {
-                    "type": "glass" if roughness == 0 else "roughglass",
-                    "kt": base_color,
-                    "kr": [1, 1, 1],
-                    "interiorior": _socket(node.inputs["IOR"], props, material, obj_name, group_node_stack),
-                }
+            # Transmission Roughness: Principled default 0 (sharp). Always emit
+            # the socket value — the Disney material otherwise falls back to
+            # the base roughness, which would break sharp-transmission looks.
+            tr_roughness_socket = node.inputs.get("Transmission Roughness")
+            if tr_roughness_socket is not None:
+                definitions["transmissionroughness"] = _socket(
+                    tr_roughness_socket, props, material, obj_name, group_node_stack
+                )
 
-                if roughness != 0:
-                    definitions["uroughness"] = roughness
-                    definitions["vroughness"] = roughness
-                
-                props.Set(utils.luxutils.create_props(prefix + luxcore_name_glass + ".", definitions))
-                
-                # Calculate mix amount
-                # metallic 1, transmission whatever -> mix_amount = 0
-                # metallic 0, transmission whatever -> mix_amount = transmission
-                # so: result = transmission * (1 - metallic)
-                if _is_textured(metallic) or _is_textured(transmission):
-                    if _is_textured(metallic):
-                        inverted_metallic = luxcore_name + "inverted_metallic"
-                        tex_prefix = "scene.textures." + inverted_metallic + "."
-                        tex_definitions = {
-                            "type": "subtract",
-                            "texture1": 1,
-                            "texture2": metallic,
-                        }
-                        props.Set(utils.luxutils.create_props(tex_prefix, tex_definitions))
-                    else:
-                        inverted_metallic = 1 - metallic
-                        
-                    mix_amount = luxcore_name + "mix_amount"
-                    tex_prefix = "scene.textures." + mix_amount + "."
-                    tex_definitions = {
-                        "type": "scale",
-                        "texture1": inverted_metallic,
-                        "texture2": transmission,
-                    }
-                    props.Set(utils.luxutils.create_props(tex_prefix, tex_definitions))
-                else:
-                    mix_amount = transmission * (1 - metallic)
-                
-                # Mix
-                definitions = {
-                    "type": "mix",
-                    "material1": luxcore_name_disney,
-                    "material2": luxcore_name_glass,
-                    "amount": mix_amount,
-                }
+            # Thin film (Principled v2): thickness + IOR -> Disney film params
+            tf_thickness_socket = node.inputs.get("Thin Film Thickness")
+            if tf_thickness_socket is not None and (
+                tf_thickness_socket.is_linked
+                or tf_thickness_socket.default_value != 0.0
+            ):
+                definitions["filmamount"] = 1.0
+                definitions["filmthickness"] = _socket(
+                    tf_thickness_socket, props, material, obj_name, group_node_stack
+                )
+                tf_ior_socket = node.inputs.get("Thin Film IOR")
+                if tf_ior_socket is not None and (
+                    tf_ior_socket.is_linked
+                    or tf_ior_socket.default_value != 1.33
+                ):
+                    definitions["filmior"] = _socket(
+                        tf_ior_socket, props, material, obj_name, group_node_stack
+                    )
         
         # Attach these props to the right-most material node (regardless if it's glass, disney or a mix mat)
+        # Principled v2: emission = Emission Color * Emission Strength
+        emission_strength = _socket(node.inputs["Emission Strength"], props, material, obj_name, group_node_stack)
+        emission_color = _socket(node.inputs["Emission Color"], props, material, obj_name, group_node_stack)
+        if emission_color == [1.0, 1.0, 1.0] or emission_color == 1.0:
+            emission = emission_strength
+        elif emission_strength == 0 or emission_strength == 0.0:
+            emission = emission_strength
+        else:
+            emission = _tex_helper(props, luxcore_name + "emission_col", {
+                "type": "scale",
+                "texture1": emission_strength,
+                "texture2": emission_color,
+            })
         definitions.update({
-            "emission": _socket(node.inputs["Emission Strength"], props, material, obj_name, group_node_stack),
+            "emission": emission,
             "transparency": _socket(node.inputs["Alpha"], props, material, obj_name, group_node_stack),
             "bumptex": _socket(node.inputs["Normal"], props, material, obj_name, group_node_stack),
         })

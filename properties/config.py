@@ -765,6 +765,12 @@ class LuxCoreConfig(PropertyGroup):
                                              "glossy bounces toward it (one-sample MIS vs BSDF, unbiased). "
                                              "Helps indirect and glossy transport; needs some passes to warm up")
 
+    # Spectral rendering (hero-wavelength transport, 3 wavelength bins)
+    spectral_enable: BoolProperty(name="Spectral Rendering", default=False,
+                                  description="Simulate light at sampled wavelengths instead of RGB "
+                                              "(dispersion through glass, physically correct color transport). "
+                                              "Slightly slower; results are projected back to RGB on film")
+
     # Special properties of the direct light sampling cache
     dls_cache: PointerProperty(type=LuxCoreConfigDLSCache)
     # Special properties of the photon GI cache
