@@ -118,9 +118,12 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
             return False
         config = context.scene.luxcore.config
         engine = context.scene.render.engine
+        # Tiled path supports GPU light tracing (TILEPATHOCL); the CPU
+        # tile engine has no light pass, so keep the panel hidden there
+        tiles_ok = not config.use_tiles or config.effective_device() == "OCL"
         return (
             config.engine == "PATH"
-            and not config.use_tiles
+            and tiles_ok
             and engine == "LUXCORE"
         )
 
@@ -149,7 +152,10 @@ class LUXCORE_RENDER_PT_add_light_tracing(RenderButtonsPanel, Panel):
             layout.prop(config.path, "hybridbackforward_lightpartition")
         else:
             layout.prop(config.path, "hybridbackforward_lightpartition_opencl")
-            layout.prop(config.path, "lighttracing_only")
+            if not config.use_tiles:
+                # light-only mode needs the full-film tile engine
+                # (RTPATHOCL); TILEPATHOCL runs the split population
+                layout.prop(config.path, "lighttracing_only")
             col = layout.column(align=True)
             col.prop(config.path, "lighttracing_focus")
             if config.path.lighttracing_focus:

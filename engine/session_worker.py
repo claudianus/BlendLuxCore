@@ -177,7 +177,7 @@ class SessionWorker:
             self._cond.notify()
 
     def submit_resolution_reduction(self, value):
-        """Runtime RTPATHOCL resolution-reduction override.
+        """Runtime RTPATHOCL/RTPATHCPU resolution-reduction override.
 
         ``value`` 0 restores the configured reduction. Coalesces like a
         config job: only the newest pending value matters. Applies at

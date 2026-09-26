@@ -103,6 +103,8 @@ def needs_edge_detector_shape(node_tree):
     # The bevel texture reads per-edge angles written by edgedetectoraov
     if utils_node.find_nodes(node_tree, "ShaderNodeBevel", True):
         return True
+    if utils_node.find_nodes(node_tree, "LuxCoreNodeTexBevel", True):
+        return True
     return False
 
 
@@ -166,6 +168,27 @@ def _apply_cycles_displacement(shape, obj, mat_index, depsgraph, scene_props):
     scene_props.Set(pyluxcore.Property(prefix + "offset", disp["offset"]))
     scene_props.Set(pyluxcore.Property(prefix + "normalsmooth", True))
     return disp_shape
+
+
+def _apply_cycles_edge_detector(shape, obj, mat_index, depsgraph, scene_props):
+    """
+    Wraps the shape in a LuxCore "edgedetectoraov" shape when the Cycles-routed
+    material on mat_index contains a Bevel node: the bevel texture reads the
+    per-edge angles recorded by this shape.
+    """
+    mat = get_material(obj, mat_index, depsgraph)
+    if mat is None or mat.original.node_tree is None:
+        return shape
+    if not utils_node.find_nodes(
+        mat.original.node_tree, "ShaderNodeBevel", True
+    ):
+        return shape
+
+    edge_shape = "%s_edge%d" % (shape, mat_index)
+    prefix = "scene.shapes." + edge_shape + "."
+    scene_props.Set(pyluxcore.Property(prefix + "type", "edgedetectoraov"))
+    scene_props.Set(pyluxcore.Property(prefix + "source", shape))
+    return edge_shape
 
 
 def define_shapes(input_shape, node_tree, exporter, depsgraph, scene_props):
@@ -1105,6 +1128,10 @@ class ObjectCache2:
                     # mesh-level effect — wrap the shape if the material's
                     # Blender node tree drives it with a displacement node.
                     shape = _apply_cycles_displacement(
+                        shape, obj, mat_index, depsgraph, scene_props
+                    )
+                    # Bevel node needs per-edge angles from edgedetectoraov
+                    shape = _apply_cycles_edge_detector(
                         shape, obj, mat_index, depsgraph, scene_props
                     )
 

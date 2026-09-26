@@ -57,3 +57,21 @@
   Serialization uses `make_array` (raw elements) so mapped storage
   round-trips through .bcf.
 
+
+## Standalone pyluxcore notes
+
+- `pyluxcore.Scene(props)` single-Properties overload is the
+  resize-policy ctor (empty scene) — build scenes via
+  `pyluxcore.Scene()` then `scene.Parse(props)`.
+- `session.Parse(props)` handles FILM properties only; scene edits go
+  through `scene.UpdateObjectTransformation()` etc. between
+  `session.BeginSceneEdit()/EndSceneEdit()`.
+- PATHOCL + dual GPU aliases: on Apple Silicon, leaving
+  `opencl.devices.select` empty picks BOTH OPENCL_GPU and METAL_GPU
+  (same physical GPU) and crashes inside AGX OpenCL-over-Metal encode
+  (pre-existing, unrelated to spilling — reproduces with spill off).
+  Select a single device, e.g. `opencl.devices.select = "01"`.
+- Live geometry edits re-upload from spilled staging transparently:
+  CompileGeometry rebuilds the SpillableArrays (mutating ops pull them
+  back to heap), the upload then re-spills — verified by a second
+  "Host staging spilled" log line after EndSceneEdit.

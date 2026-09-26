@@ -255,6 +255,9 @@ class LUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
 
         col.prop(config, "guiding_enable")
         if config.guiding_enable:
+            # Optional warm-start table; empty trains inline (GPU engines
+            # refine it through the record drain loop)
+            col.prop(config, "guiding_tablefile")
             # Caps the aperture-proposal share; only takes effect when a
             # mesh object is flagged "Light Portal" (object properties).
             col.prop(config, "portal_weight")

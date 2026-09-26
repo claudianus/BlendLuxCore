@@ -710,7 +710,8 @@ class LuxCoreConfig(PropertyGroup):
     samplers_gpu = [
         ("SOBOL", "Sobol", "Best suited sampler for the GPU. " + SOBOL_DESC, 0),
         ("PMJ02", "PMJ02", "Progressive multi-jittered sampler, GPU port of the CPU sampler", 1),
-        ("RANDOM", "Random", RANDOM_DESC, 2),
+        ("METROPOLIS", "Metropolis", METROPOLIS_DESC, 2),
+        ("RANDOM", "Random", RANDOM_DESC, 3),
     ]
     sampler_gpu: EnumProperty(name="Sampler", items=samplers_gpu, default="SOBOL")
     

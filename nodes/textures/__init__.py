@@ -1,6 +1,6 @@
 from .. import utils
 from . import (
-    band, blackbody, blenderblend, blenderclouds, blenderdistortednoise, blendermagic,
+    band, bevel, blackbody, blenderblend, blenderclouds, blenderdistortednoise, blendermagic,
     blendermarble, blendermusgrave, blendernoise, blenderstucci, blendervoronoi,
     blenderwood, bombing, brick, brightcontrast, bump, checkerboard2d, checkerboard3d,
     coloratdepth, colormix, constfloat1, constfloat3, distort, dotproduct, dots, fbm,
@@ -16,6 +16,7 @@ from .tree import luxcore_node_categories_texture
 classes = (
     band.ColorRampItem,
     band.LuxCoreNodeTexBand,
+    bevel.LuxCoreNodeTexBevel,
     blackbody.LuxCoreNodeTexBlackbody,
     blenderblend.LuxCoreNodeTexBlenderBlend,
     blenderclouds.LuxCoreNodeTexBlenderClouds,
