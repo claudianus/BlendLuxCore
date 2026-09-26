@@ -34,6 +34,30 @@ FALLBACK_COLOR = [0.5, 0.5, 0.5]
 FALLBACK_FLOAT = 0.5
 FALLBACK_VECTOR = [0.0, 0.0, 0.0]
 
+# ShaderNodeLightPath output socket -> LuxCore "rayinfo" texture channel.
+# The engine fills HitPoint with the context of the incoming ray during
+# Scene::Intersect() (ray flags, generating BSDF event, path depth
+# counters, segment length). See LuxCore slg/textures/hitpoint/rayinfo.h.
+_LIGHT_PATH_CHANNELS = {
+    "Is Camera Ray": "iscameraray",
+    "Is Shadow Ray": "isshadowray",
+    "Is Diffuse Ray": "isdiffuseray",
+    "Is Glossy Ray": "isglossyray",
+    "Is Singular Ray": "issingularray",
+    "Is Reflection Ray": "isreflectionray",
+    "Is Transmission Ray": "istransmissionray",
+    # Blender 4.x output; also 1 for hits inside volumes
+    "Is Volume Scatter Ray": "isvolumescatterray",
+    "Ray Length": "raylength",
+    "Ray Depth": "raydepth",
+    "Diffuse Depth": "diffusedepth",
+    "Glossy Depth": "glossydepth",
+    # Cycles counts transparent BSDF crossings; LuxCore increments the
+    # path transparentDepth while stepping through pass-through materials
+    "Transparent Depth": "transparentdepth",
+    "Transmission Depth": "transmissiondepth",
+}
+
 math_operation_map = {
     "MULTIPLY": "scale",
     "GREATER_THAN": "greaterthan",
@@ -184,6 +208,46 @@ def _tex_helper(props, name, definitions):
     tex_name = utils.sanitize_luxcore_name(name)
     props.Set(utils.luxutils.create_props("scene.textures." + tex_name + ".", definitions))
     return tex_name
+
+
+def _socket_nondefault(socket, default, eps=1e-4):
+    """
+    True when an input socket is linked or its constant value differs from
+    `default` (the Principled node's factory value). Vector/color defaults are
+    compared per channel; `socket` may be None on Blender versions where the
+    input does not exist.
+    """
+    if socket is None:
+        return False
+    if socket.is_linked:
+        return True
+    value = getattr(socket, "default_value", default)
+    if isinstance(default, (list, tuple)):
+        try:
+            return any(abs(v - d) > eps for v, d in zip(list(value)[:3], default))
+        except TypeError:
+            return True
+    try:
+        return abs(float(value) - float(default)) > eps
+    except (TypeError, ValueError):
+        return True
+
+
+def _socket_active(socket):
+    """True when a [0,1] weight socket is linked or has a non-zero constant."""
+    return socket is not None and (
+        socket.is_linked or socket.default_value != 0.0)
+
+
+def _color_is_gray(value, eps=5e-2):
+    """True when a color constant is (near) grayscale, i.e. carries no hue."""
+    if _is_textured(value):
+        return False
+    try:
+        v = list(value)[:3]
+    except TypeError:
+        return True
+    return max(v) - min(v) <= eps
 
 
 def _const_binary(op, value1, value2):
@@ -681,6 +745,123 @@ def _socket(socket, props, material, obj_name, group_node, luxcore_name=None):
         return socket.default_value
 
 
+def _principled_thin_film(node, definitions, props, material, obj_name,
+                          group_node_stack, with_amount):
+    """
+    Principled v2 Thin Film Thickness/IOR -> LuxCore thin-film interference
+    params. Disney uses filmamount + filmthickness + filmior; glass-family
+    materials only have filmthickness/filmior (thickness > 0 enables it).
+    """
+    tf_thickness_socket = node.inputs.get("Thin Film Thickness")
+    if tf_thickness_socket is not None and (
+        tf_thickness_socket.is_linked
+        or tf_thickness_socket.default_value != 0.0
+    ):
+        if with_amount:
+            definitions["filmamount"] = 1.0
+        definitions["filmthickness"] = _socket(
+            tf_thickness_socket, props, material, obj_name, group_node_stack
+        )
+        tf_ior_socket = node.inputs.get("Thin Film IOR")
+        if tf_ior_socket is not None and (
+            tf_ior_socket.is_linked
+            or abs(tf_ior_socket.default_value - 1.33) > 1e-4
+        ):
+            definitions["filmior"] = _socket(
+                tf_ior_socket, props, material, obj_name, group_node_stack
+            )
+
+
+def _principled_disney_warnings(node, transmission, thin_wall_on, obj_name):
+    """
+    Emit warnings for Principled v2 inputs that LuxCore's Disney material
+    cannot express. Each warning only fires when the feature is actually
+    used (weight active + input linked/non-default) to avoid noise on
+    untouched sockets.
+    """
+    # Sheen Roughness / Sheen Tint (Disney sheen is a fixed-gloss lobe whose
+    # tint blends white<->base color; Principled's tint is a free color)
+    if _socket_active(node.inputs.get("Sheen Weight")):
+        if _socket_nondefault(node.inputs.get("Sheen Roughness"), 0.5):
+            _warn_unsupported(
+                node, "Sheen Roughness is not supported by LuxCore's Disney "
+                "material (the sheen lobe has no roughness); ignored",
+                None, obj_name)
+        sheen_tint_socket = node.inputs.get("Sheen Tint")
+        if sheen_tint_socket is not None and (
+                sheen_tint_socket.is_linked
+                or not _color_is_gray(sheen_tint_socket.default_value)):
+            _warn_unsupported(
+                node, "Sheen Tint is a free color in Principled but a "
+                "white<->basecolor blend factor in the Disney material; "
+                "approximated by its luminance", None, obj_name)
+
+    # Specular Tint has the same color-vs-blend-factor mismatch
+    spec_tint_socket = node.inputs.get("Specular Tint")
+    if spec_tint_socket is not None and (
+            spec_tint_socket.is_linked
+            or not _color_is_gray(spec_tint_socket.default_value)):
+        _warn_unsupported(
+            node, "Specular Tint is a free color in Principled but a "
+            "white<->basecolor blend factor in the Disney material; "
+            "approximated by its luminance", None, obj_name)
+
+    # Diffuse Roughness: Disney drives the diffuse lobe with the specular
+    # roughness, there is no separate parameter
+    if _socket_nondefault(node.inputs.get("Diffuse Roughness"), 0.0):
+        _warn_unsupported(
+            node, "Diffuse Roughness is not supported by LuxCore's Disney "
+            "material (the specular Roughness drives the diffuse lobe); "
+            "ignored", None, obj_name)
+
+    # Anisotropic Rotation / Tangent: Disney anisotropy is axis-aligned with
+    # the shading frame and has no rotation parameter
+    if _socket_active(node.inputs.get("Anisotropic")) and (
+            _socket_nondefault(node.inputs.get("Anisotropic Rotation"), 0.0)
+            or _socket_nondefault(node.inputs.get("Tangent"), (0.0, 0.0, 0.0))):
+        _warn_unsupported(
+            node, "anisotropy direction (Anisotropic Rotation, Tangent) is "
+            "not supported by LuxCore's Disney material; the anisotropy "
+            "follows the shading frame", None, obj_name)
+
+    # Subsurface: Disney's subsurface is the weight-only diffuse-profile
+    # lobe (a Burley-style approximation) — radius/scale/IOR/anisotropy and
+    # the random-walk methods need real volumetric scattering
+    if _socket_active(node.inputs.get("Subsurface Weight")):
+        sss_ignored = [name for name, socket, default in (
+            ("Subsurface Radius", node.inputs.get("Subsurface Radius"),
+             (1.0, 0.2, 0.1)),
+            ("Subsurface Scale", node.inputs.get("Subsurface Scale"), 0.005),
+            ("Subsurface IOR", node.inputs.get("Subsurface IOR"), 1.4),
+            ("Subsurface Anisotropy", node.inputs.get("Subsurface Anisotropy"),
+             0.0),
+        ) if _socket_nondefault(socket, default)]
+        sss_method = getattr(node, "subsurface_method", "BURLEY")
+        if sss_ignored or sss_method != "BURLEY":
+            details = []
+            if sss_ignored:
+                details.append("ignored inputs: " + ", ".join(sss_ignored))
+            if sss_method != "BURLEY":
+                details.append(
+                    "'%s' scattering requires a scattering interior volume, "
+                    "which the Disney material cannot drive"
+                    % sss_method.replace("_", " ").title())
+            _warn_unsupported(
+                node, "subsurface is approximated by the Disney "
+                "diffuse-profile lobe (weight only); " + "; ".join(details),
+                None, obj_name)
+
+    # Thin Wall only changes the transmission lobe — warn when transmission
+    # can actually occur (partial transmission path; the sharp full-
+    # transmission case is handled by the archglass mapping)
+    transmission_active = _is_textured(transmission) or transmission != 0
+    if thin_wall_on and transmission_active:
+        _warn_unsupported(
+            node, "Thin Wall is not supported by LuxCore's Disney material; "
+            "transmission refracts as a solid volume (total internal "
+            "reflection and interior volumes apply)", None, obj_name)
+
+
 def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", group_node_stack=None):
     if luxcore_name is None:
         luxcore_name = str(node.as_pointer()) + output_socket.name
@@ -696,30 +877,83 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
         metallic = _socket(metallic_socket, props, material, obj_name, group_node_stack)
         transmission_socket = node.inputs["Transmission Weight"]
         transmission = _socket(transmission_socket, props, material, obj_name, group_node_stack)
-        
+
+        # --- Principled v2 feature detection (sockets may not exist on
+        # older Blender versions -> .get() everywhere) ---
+
+        # Thin Wall: transmission behaves as an infinitely thin slab (no ray
+        # offset, no TIR, no interior volume). Only const-True can switch the
+        # material type; a linked flag falls back to the warning path.
+        thin_wall_socket = node.inputs.get("Thin Wall")
+        thin_wall_linked = thin_wall_socket is not None and thin_wall_socket.is_linked
+        thin_wall_on = thin_wall_socket is not None and (
+            thin_wall_linked or bool(thin_wall_socket.default_value))
+
+        # Coat. Disney's built-in clearcoat is a fixed-IOR (1.5), untinted
+        # lobe sharing the material normal. When Coat IOR / Coat Tint / Coat
+        # Normal are actually used, wrap the base material in a real
+        # dielectric coat layer (glossycoating) instead — see below.
+        coat_weight_socket = node.inputs.get("Coat Weight")
+        coat_weight = _socket(coat_weight_socket, props, material, obj_name,
+                              group_node_stack) if coat_weight_socket is not None else 0.0
+        coat_active = _socket_active(coat_weight_socket)
+        coat_ior_socket = node.inputs.get("Coat IOR")
+        coat_tint_socket = node.inputs.get("Coat Tint")
+        coat_normal_socket = node.inputs.get("Coat Normal")
+        coat_extra = (_socket_nondefault(coat_ior_socket, 1.5)
+                      or _socket_nondefault(coat_tint_socket, (1.0, 1.0, 1.0))
+                      or _socket_nondefault(coat_normal_socket, (0.0, 0.0, 0.0)))
+
         if transmission == 1 and metallic == 0:
             # It's effectively glass instead of a disney material.
             # Don't use mix for performance reasons.
             roughness = _squared_roughness_to_linear(node.inputs["Roughness"], props, material,
                                                      luxcore_name, obj_name, group_node_stack)
+            # Glass materials have no built-in coat lobe, so any active coat
+            # needs the glossycoating wrap (even with default coat params).
+            use_coating = coat_active
 
-            definitions = {
-                "type": "glass" if roughness == 0 else "roughglass",
-                "kt": base_color,
-                "kr": [1, 1, 1],
-                "interiorior": _socket(node.inputs["IOR"], props, material, obj_name, group_node_stack),
-            }
+            if thin_wall_on and not thin_wall_linked and roughness == 0:
+                # Thin-walled sharp transmission: rays refract in and out of
+                # the thin slab and exit parallel to the incident ray, so
+                # archglass (Fresnel reflection + unbent transmission, no
+                # interior volume, no TIR) is the physically matching model.
+                definitions = {
+                    "type": "archglass",
+                    "kt": base_color,
+                    "kr": [1, 1, 1],
+                    "interiorior": _socket(node.inputs["IOR"], props, material, obj_name, group_node_stack),
+                }
+            else:
+                if thin_wall_on:
+                    _warn_unsupported(
+                        node, "Thin Wall is only supported for sharp full "
+                        "transmission (mapped to archglass); rough or textured "
+                        "transmission is exported as solid glass — rays are "
+                        "refracted and the interior volume applies",
+                        None, obj_name)
+                definitions = {
+                    "type": "glass" if roughness == 0 else "roughglass",
+                    "kt": base_color,
+                    "kr": [1, 1, 1],
+                    "interiorior": _socket(node.inputs["IOR"], props, material, obj_name, group_node_stack),
+                }
 
-            if roughness != 0:
-                definitions["uroughness"] = roughness
-                definitions["vroughness"] = roughness
+                if roughness != 0:
+                    definitions["uroughness"] = roughness
+                    definitions["vroughness"] = roughness
+
+            # Thin film works on glass/roughglass/archglass too (activated by
+            # filmthickness > 0; there is no filmamount on these materials)
+            _principled_thin_film(node, definitions, props, material, obj_name,
+                                  group_node_stack, with_amount=False)
         else:
+            use_coating = coat_active and coat_extra
             definitions = {
                 # TODO (needs OpenPBR material — no Disney params):
-                #  - subsurface radius/scale/IOR (Disney has weight only)
-                #  - coat IOR / coat tint / coat normal
-                #  - sheen roughness, diffuse roughness
-                #  - anisotropic rotation, tangent, thin wall
+                #  - subsurface radius/scale/IOR/anisotropy (Disney has weight only)
+                #  - sheen roughness/tint color, diffuse roughness
+                #  - anisotropic rotation, tangent
                 "type": "disney",
                 "basecolor": base_color,
                 "subsurface": _socket(node.inputs["Subsurface Weight"], props, material, obj_name, group_node_stack),
@@ -731,15 +965,17 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "anisotropic": _socket(node.inputs["Anisotropic"], props, material, obj_name, group_node_stack),
                 "sheen": _socket(node.inputs["Sheen Weight"], props, material, obj_name, group_node_stack),
                 "sheentint": _socket(node.inputs["Sheen Tint"], props, material, obj_name, group_node_stack),
-                "clearcoat": _socket(node.inputs["Coat Weight"], props, material, obj_name, group_node_stack),
+                # When a glossycoating wraps this material, the Disney
+                # clearcoat lobe is disabled so the coat is not applied twice.
+                "clearcoat": 0.0 if use_coating else coat_weight,
                 # Disney clearcoatgloss = 1 - coat_roughness
-                "clearcoatgloss": _tex_helper(props, luxcore_name + "coatgloss", {
+                "clearcoatgloss": 1.0 if use_coating else (_tex_helper(props, luxcore_name + "coatgloss", {
                     "type": "subtract",
                     "texture1": 1.0,
                     "texture2": _socket(node.inputs["Coat Roughness"], props, material, obj_name, group_node_stack),
                 }) if node.inputs["Coat Roughness"].is_linked
                     or node.inputs["Coat Roughness"].default_value != 0.0
-                    else 1.0,
+                    else 1.0),
                 # Integrated dielectric transmission lobe (no disney+glass
                 # mix hack): weight, roughness and IOR map directly.
                 "transmission": transmission,
@@ -756,24 +992,14 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 )
 
             # Thin film (Principled v2): thickness + IOR -> Disney film params
-            tf_thickness_socket = node.inputs.get("Thin Film Thickness")
-            if tf_thickness_socket is not None and (
-                tf_thickness_socket.is_linked
-                or tf_thickness_socket.default_value != 0.0
-            ):
-                definitions["filmamount"] = 1.0
-                definitions["filmthickness"] = _socket(
-                    tf_thickness_socket, props, material, obj_name, group_node_stack
-                )
-                tf_ior_socket = node.inputs.get("Thin Film IOR")
-                if tf_ior_socket is not None and (
-                    tf_ior_socket.is_linked
-                    or tf_ior_socket.default_value != 1.33
-                ):
-                    definitions["filmior"] = _socket(
-                        tf_ior_socket, props, material, obj_name, group_node_stack
-                    )
-        
+            _principled_thin_film(node, definitions, props, material, obj_name,
+                                  group_node_stack, with_amount=True)
+
+            # --- Honest warnings for the remaining Principled inputs the
+            # Disney material cannot express ---
+            _principled_disney_warnings(node, transmission, thin_wall_on,
+                                        obj_name)
+
         # Attach these props to the right-most material node (regardless if it's glass, disney or a mix mat)
         # Principled v2: emission = Emission Color * Emission Strength
         emission_strength = _socket(node.inputs["Emission Strength"], props, material, obj_name, group_node_stack)
@@ -788,11 +1014,68 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 "texture1": emission_strength,
                 "texture2": emission_color,
             })
-        definitions.update({
-            "emission": emission,
-            "transparency": _socket(node.inputs["Alpha"], props, material, obj_name, group_node_stack),
-            "bumptex": _socket(node.inputs["Normal"], props, material, obj_name, group_node_stack),
-        })
+        transparency = _socket(node.inputs["Alpha"], props, material, obj_name, group_node_stack)
+        bump = _socket(node.inputs["Normal"], props, material, obj_name, group_node_stack)
+
+        if use_coating:
+            # Wrap the base in a real dielectric coat layer (glossycoating):
+            #   index = Coat IOR, ks = Coat Weight scales the coat Fresnel F0
+            #   (LuxCore multiplies ks by ((ior-1)/(ior+1))^2, exactly the
+            #   Cycles coat F0), uroughness/vroughness = Coat Roughness
+            #   (Cycles squared -> LuxCore linear), bumptex = Coat Normal
+            #   (the coating evaluates with its own bumped frame while the
+            #   base keeps the regular Normal input).
+            base_name = utils.sanitize_luxcore_name(luxcore_name + "_coatbase")
+            base_definitions = dict(definitions)
+            # Emission/transparency/normal live on the substrate — the
+            # coating delegates passthrough transparency and (when it has no
+            # emission itself) emitted radiance to the base material.
+            base_definitions.update({
+                "emission": emission,
+                "transparency": transparency,
+                "bumptex": bump,
+            })
+            props.Set(utils.luxutils.create_props(
+                "scene.materials." + base_name + ".", base_definitions))
+
+            coat_roughness = _squared_roughness_to_linear(
+                node.inputs["Coat Roughness"], props, material,
+                luxcore_name + "_coat", obj_name, group_node_stack)
+            coat_ior = _socket(coat_ior_socket, props, material, obj_name,
+                               group_node_stack) if coat_ior_socket is not None else 1.5
+            definitions = {
+                "type": "glossycoating",
+                "base": base_name,
+                "ks": coat_weight,
+                "uroughness": coat_roughness,
+                "vroughness": coat_roughness,
+                "index": coat_ior,
+                # Cycles' default MULTI_GGX coat = multibounce microfacet
+                "multibounce": 1 if getattr(node, "distribution", "MULTI_GGX") == "MULTI_GGX" else 0,
+            }
+            if _socket_nondefault(coat_normal_socket, (0.0, 0.0, 0.0)):
+                definitions["bumptex"] = _socket(
+                    coat_normal_socket, props, material, obj_name, group_node_stack)
+            if _socket_nondefault(coat_tint_socket, (1.0, 1.0, 1.0)):
+                # Cycles Coat Tint is volumetric absorption inside the coat:
+                # transmittance = pow(tint, weight / cosNT). LuxCore computes
+                # exp(-ka * d * (1/cosi + 1/coso)), so ka = -ln(tint) and
+                # d = weight/2 reproduce tint^weight at perpendicular
+                # incidence (the angle Cycles normalizes to).
+                coat_tint = _socket(coat_tint_socket, props, material, obj_name,
+                                    group_node_stack)
+                definitions["ka"] = _tex_binary(
+                    "scale",
+                    _v3_mathfunc("ln", coat_tint, luxcore_name + "_coatln", props),
+                    -1.0, luxcore_name + "_coatka", props)
+                definitions["d"] = _tex_binary(
+                    "scale", coat_weight, 0.5, luxcore_name + "_coatd", props)
+        else:
+            definitions.update({
+                "emission": emission,
+                "transparency": transparency,
+                "bumptex": bump,
+            })
     elif node.bl_idname == "ShaderNodeMixShader":
         prefix = "scene.materials."
 
@@ -1986,12 +2269,20 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
                 node, "'Facing' output is not supported (no angular falloff "
                 "texture); using 0.5", FALLBACK_FLOAT, obj_name)
     elif node.bl_idname == "ShaderNodeLightPath":
-        # LuxCore textures have no access to the ray type; assume a camera
-        # visible path so renders don't silently turn black
-        value = 1.0 if output_socket.name == "Is Camera Ray" else 0.0
-        return _warn_unsupported(
-            node, f"'{output_socket.name}' is not supported (no ray-type "
-            f"information); using constant {value}", value, obj_name)
+        # The LuxCore "rayinfo" texture exposes the context of the ray that
+        # generated the current hit point (stored in HitPoint by
+        # Scene::Intersect()). All Light Path outputs are supported.
+        channel = _LIGHT_PATH_CHANNELS.get(output_socket.name)
+        if channel is None:
+            return _warn_unsupported(
+                node, f"unknown Light Path output '{output_socket.name}'; "
+                "using constant 0", 0.0, obj_name)
+
+        prefix = "scene.textures."
+        definitions = {
+            "type": "rayinfo",
+            "channel": channel,
+        }
     elif node.bl_idname == "ShaderNodeMix":
         prefix = "scene.textures."
         data_type = node.data_type

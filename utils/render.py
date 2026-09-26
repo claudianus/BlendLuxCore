@@ -250,6 +250,86 @@ def shortest_display_interval(scene):
     return (width * height) / 852272.0 * 1.1
 
 
+_SIG_CACHE = {"t": 0.0, "sig": "", "scene": None}
+_SIG_CACHE_TTL = 2.0  # config.convert() runs per view_draw in the viewport
+
+
+def compute_clamp_signature(scene):
+    """Fingerprint of the scene's light/emission content.
+
+    Auto-clamp applies a value measured on a previous render; without a
+    staleness check a suggestion made for one scene (e.g. a dark interior)
+    would silently crush a later, brighter scene's emitters. The digest
+    covers light objects, material emission strengths and the world
+    background - cheap and stable, not a security hash. Memoized briefly:
+    this is called from config.convert() which runs every view_draw.
+    """
+    import hashlib
+    import time
+
+    # Cache is keyed on the scene datablock name as well as time so a
+    # different scene within the TTL window cannot inherit a stale digest.
+    scene_key = getattr(scene, "name_full", None) or getattr(scene, "name", "")
+    now = time.time()
+    if (now - _SIG_CACHE["t"] < _SIG_CACHE_TTL
+            and _SIG_CACHE["scene"] == scene_key):
+        return _SIG_CACHE["sig"]
+    _SIG_CACHE["t"] = now
+    _SIG_CACHE["scene"] = scene_key
+
+    h = hashlib.sha1()
+    try:
+        for ob in scene.objects:
+            if ob.type == 'LIGHT':
+                d = ob.data
+                h.update(
+                    f"L:{ob.name}:{d.type}:{d.energy}:"
+                    f"{tuple(round(c, 4) for c in d.color)}".encode()
+                )
+            elif ob.type == 'MESH':
+                for slot in ob.material_slots:
+                    mat = slot.material
+                    if not (mat and mat.use_nodes and mat.node_tree):
+                        continue
+                    for n in mat.node_tree.nodes:
+                        for s in n.inputs:
+                            name = s.name.lower()
+                            if "emission" in name and (
+                                "strength" in name or "color" in name
+                            ):
+                                try:
+                                    h.update(
+                                        f"E:{ob.name}:{mat.name}:{n.name}:"
+                                        f"{s.name}:{s.default_value[:]}".encode()
+                                        if hasattr(s.default_value, "__len__")
+                                        else
+                                        f"E:{ob.name}:{mat.name}:{n.name}:"
+                                        f"{s.name}:{s.default_value}".encode()
+                                    )
+                                except (TypeError, AttributeError):
+                                    pass
+        world = scene.world
+        if world and world.use_nodes and world.node_tree:
+            for n in world.node_tree.nodes:
+                if n.type == 'BACKGROUND':
+                    for s in n.inputs:
+                        try:
+                            h.update(
+                                f"W:{s.name}:{s.default_value[:]}".encode()
+                                if hasattr(s.default_value, "__len__")
+                                else f"W:{s.name}:{s.default_value}".encode()
+                            )
+                        except (TypeError, AttributeError):
+                            pass
+    except Exception:
+        # Signature failure must never block rendering; return a value that
+        # never matches a stored one rather than disabling the safety check.
+        _SIG_CACHE["sig"] = ""
+        return ""
+    _SIG_CACHE["sig"] = h.hexdigest()
+    return _SIG_CACHE["sig"]
+
+
 def find_suggested_clamp_value(session, scene=None):
     """
     Find suggested clamp value.
@@ -268,6 +348,11 @@ def find_suggested_clamp_value(session, scene=None):
         try:
             # TODO: rework this so it can't fail anymore (some users have reported that it throws an AttributeError)
             scene.luxcore.config.path.suggested_clamping_value = suggested_clamping_value
+            # Stamp the suggestion with the scene's lighting content so a
+            # stale value is ignored once the scene's emitters change.
+            scene.luxcore.config.path.suggested_clamping_sig = (
+                compute_clamp_signature(scene)
+            )
         except AttributeError:
             print("Warning: could not set suggested_clamping_value property")
             import traceback

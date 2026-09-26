@@ -415,6 +415,11 @@ class LuxCoreConfigPath(PropertyGroup):
     clamping: FloatProperty(name="Max Brightness", default=10, min=0,soft_max=10000,  description=CLAMPING_DESC)
     # This should only be set in the engine code after export. Only show a read-only label to the user.
     suggested_clamping_value: FloatProperty(name="", default=-1)
+    # Fingerprint of the scene's light/emission content at the time the
+    # suggested value was measured (see utils.render.compute_clamp_signature).
+    # Auto-clamp is skipped when it no longer matches, so a suggestion made
+    # for one lighting setup never silently clamps a different scene.
+    suggested_clamping_sig: StringProperty(name="", default="")
 
     # We probably don't need to expose these properties because they have good
     # default values that should very rarely (or never?) need adjustment

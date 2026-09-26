@@ -52,6 +52,10 @@ class LuxCoreViewportSettings(bpy.types.PropertyGroup):
     use_denoiser: BoolProperty(name="Denoise", default=True,
                            description="Denoise the viewport render once the halt time is reached. "
                                        "Note that this disables most imagepipeline plugins in the viewport")
+    denoise_interactive: BoolProperty(name="Interactive Denoise", default=True,
+                           description="Run the denoiser periodically while the viewport render is still "
+                                       "in progress (OIDN only) instead of only once after it pauses. "
+                                       "Keeps the preview smooth at low sample counts")
     denoisers = [
         ("OIDN", "Intel Open Image Denoiser", "Denoising is only performed once the viewport render pauses", 0),
         ("OPTIX", "OptiX", "Denoises continuously during viewport rendering", 1),

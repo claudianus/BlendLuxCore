@@ -98,6 +98,8 @@ class LUXCORE_RENDER_PT_viewport_settings_denoiser(RenderButtonsPanel, Panel):
 
         if viewport.get_denoiser(context) == "OPTIX":
             col.prop(viewport, "min_samples")
+        else:
+            col.prop(viewport, "denoise_interactive")
 
 
 class LUXCORE_RENDER_PT_viewport_settings_advanced(RenderButtonsPanel, Panel):

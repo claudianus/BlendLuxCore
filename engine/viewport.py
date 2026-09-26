@@ -161,6 +161,7 @@ def view_update(engine, context, depsgraph, changes=None):
                 engine.viewport_start_time = time()
 
                 if engine.framebuffer:
+                    engine.framebuffer.begin_reset()
                     engine.framebuffer.reset_denoiser()
             except Exception as error:
                 # Fall back to the safe full-restart path if the fast path
@@ -174,6 +175,9 @@ def view_update(engine, context, depsgraph, changes=None):
         if changes & export.Change.REQUIRES_VIEW_UPDATE:
             # Only restart the session if the view transform didn't change by
             # itself
+            if engine.framebuffer:
+                # Keep the last frame on screen while the new session boots
+                engine.framebuffer.begin_reset()
             force_session_restart(engine)
             return
         s = time()
@@ -185,6 +189,7 @@ def view_update(engine, context, depsgraph, changes=None):
         engine.viewport_start_time = time()
 
         if engine.framebuffer:
+            engine.framebuffer.begin_reset()
             engine.framebuffer.reset_denoiser()
 
 
@@ -244,6 +249,10 @@ def view_draw(engine, context, depsgraph):
 
         engine.update_stats("Starting viewport render", message)
         engine.viewport_starting_message_shown = True
+        # Keep showing the previous session's last frame while the new
+        # session exports/starts instead of flashing black.
+        if engine.framebuffer:
+            engine.framebuffer.draw()
         engine.tag_update()
         engine.tag_redraw()
         return
@@ -272,6 +281,7 @@ def view_draw(engine, context, depsgraph):
                 engine.session, engine.exporter.config_cache.props
             )
             engine.viewport_start_time = time()
+            framebuffer.begin_reset()
             framebuffer.reset_denoiser()
         except Exception as error:
             LuxCoreErrorLog.add_error(error)
@@ -284,8 +294,13 @@ def view_draw(engine, context, depsgraph):
         return
     elif changes & export.Change.REQUIRES_VIEW_UPDATE:
         engine.tag_redraw()
+        # Keep the last frame up while the session restarts (the session-None
+        # branch in the next draw keeps drawing it until the new session's
+        # first real samples arrive).
+        framebuffer.begin_reset()
         # view_update(engine, context, depsgraph, changes)  # Disabled, see comment on force_session_restart()
         force_session_restart(engine)
+        framebuffer.draw()
         return
     elif changes & (export.Change.CAMERA | export.Change.MATERIAL):
         # Only update in view_draw if it is a camera update,
@@ -296,6 +311,9 @@ def view_draw(engine, context, depsgraph):
             depsgraph, context, engine.session, changes
         )
         engine.viewport_start_time = time()
+        # Film was reset by the edit: hold the last frame until the new
+        # render has produced visible samples (no black flash on orbit).
+        framebuffer.begin_reset()
         framebuffer.reset_denoiser()
 
     if utils.in_material_shading_mode(context):
@@ -360,7 +378,21 @@ def view_draw(engine, context, depsgraph):
         # because of tag_redraw() below).
         try:
             engine.session.UpdateStats()
-            framebuffer.update(engine.session)
+            vp = scene.luxcore.viewport
+            interactive = (
+                vp.denoise_interactive
+                and vp.get_denoiser(context) == "OIDN"
+                and not utils.in_material_shading_mode(context)
+            )
+            handled = (
+                framebuffer.interactive_denoise_tick(engine, vp.min_samples)
+                if interactive
+                else False
+            )
+            if not handled:
+                # Async film readback: the device-queue drain runs on a
+                # worker thread, the finished frame is consumed here.
+                framebuffer.update_async(engine.session)
         except RuntimeError:
             # Session not started yet / no film available: keep showing the
             # last framebuffer contents instead of flashing black

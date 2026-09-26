@@ -281,7 +281,10 @@ def convert(exporter, scene, context=None, engine=None):
 
         # Manual clamping wins; otherwise auto-clamp applies the value
         # suggested by a previous unclamped render (see
-        # utils/render.find_suggested_clamp_value).
+        # utils/render.find_suggested_clamp_value) - but only while the
+        # scene's light/emission content still matches the signature that
+        # was stamped when the value was measured, so a stale suggestion
+        # can never silently clamp a changed scene.
         use_clamping = config.path.use_clamping
         clamping_value = config.path.clamping
         if (
@@ -289,8 +292,11 @@ def convert(exporter, scene, context=None, engine=None):
             and config.path.auto_clamping
             and config.path.suggested_clamping_value > 0
         ):
-            use_clamping = True
-            clamping_value = config.path.suggested_clamping_value
+            from ..utils.render import compute_clamp_signature
+            sig_now = compute_clamp_signature(scene)
+            if sig_now and sig_now == config.path.suggested_clamping_sig:
+                use_clamping = True
+                clamping_value = config.path.suggested_clamping_value
 
         if (
             use_clamping

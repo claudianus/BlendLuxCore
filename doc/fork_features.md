@@ -237,7 +237,15 @@ gradients on CPU and Metal/OpenCL.
 - Production defaults on new scenes: denoiser enabled, halt conditions
   enabled with a convergence stop (noise threshold) plus a 1024-spp cap.
 - Viewport: black-flash and UI-freeze fixes; engine-teardown hardening; an
-  error-log file for fatal errors.
+  error-log file for fatal errors. Interactivity pass (P0-1): hold-last-frame
+  after film resets (empty frames are never uploaded — the previous image
+  stays up until new samples land, bounded to 0.5 s so black scenes still
+  display), the last frame is also drawn while a restarted session boots,
+  film readback runs on a worker thread (pyluxcore releases the GIL in
+  `Film.GetOutputFloat`/`ApplyOIDN`, so the device-queue drain no longer
+  stalls the UI), and "Interactive Denoise" runs OIDN periodically during
+  rendering instead of only after pause (denoised frames own the display to
+  avoid raw/denoised alternation; a fresh denoise still runs on pause).
 - Backend options: **Metal GPU** (Apple silicon) and a **spectral render**
   toggle.
 

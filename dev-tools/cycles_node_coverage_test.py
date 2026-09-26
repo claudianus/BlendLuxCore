@@ -520,6 +520,243 @@ def test_gabor_3d_warns():
           f"warns={msgs} types={emitted_texture_types(props)}")
 
 
+# ---------------------------------------------------------------------------
+# Principled BSDF (Blender 5.x) -> LuxCore disney/glossycoating/archglass
+# ---------------------------------------------------------------------------
+
+def _warnings_text():
+    return " | ".join(w.message if hasattr(w, "message") else str(w)
+                      for w in LuxCoreErrorLog.warnings)
+
+
+def _principled(nt, out, **inputs):
+    """Principled BSDF -> Surface; `inputs` are constant socket values."""
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+    for name, value in inputs.items():
+        bsdf.inputs[name].default_value = value
+    return bsdf
+
+
+def _prop_float(props, name):
+    raw = prop_str(props, name)
+    try:
+        return float(raw.split()[0])
+    except (AttributeError, TypeError, ValueError, IndexError):
+        return None
+
+
+def _prop_vec3(props, name):
+    raw = prop_str(props, name)
+    if raw is None:
+        return None
+    try:
+        return [float(x) for x in raw.split()]
+    except ValueError:
+        return None
+
+
+def _prop_defined(props, name):
+    try:
+        return bool(props.IsDefined(name))
+    except AttributeError:
+        return name in all_prop_names(props)
+
+
+def test_principled_default_disney():
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out)
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    check("principled default -> disney", mt == "disney", f"type={mt}")
+    check("principled default -> no warnings",
+          "Principled" not in _warnings_text(), _warnings_text()[:200])
+
+
+def test_principled_coat_simple_stays_disney():
+    """Default coat (white, IOR 1.5, no coat normal) -> disney clearcoat."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Coat Weight": 0.5})
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    cc = _prop_float(props, "scene.materials.covmat.clearcoat")
+    check("principled plain coat -> disney clearcoat",
+          mt == "disney" and cc == 0.5, f"type={mt} clearcoat={cc}")
+
+
+def test_principled_coat_ior_wraps():
+    """Non-default Coat IOR -> base wrapped in glossycoating (index)."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Coat Weight": 1.0, "Coat IOR": 2.0})
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    base = prop_str(props, "scene.materials.covmat.base")
+    index = _prop_float(props, "scene.materials.covmat.index")
+    ks = _prop_float(props, "scene.materials.covmat.ks")
+    base_type = prop_str(props, "scene.materials.covmat_coatbase.type")
+    base_cc = _prop_float(props, "scene.materials.covmat_coatbase.clearcoat")
+    check("principled coat IOR -> glossycoating",
+          mt == "glossycoating" and base == "covmat_coatbase"
+          and index == 2.0 and ks == 1.0,
+          f"type={mt} base={base} index={index} ks={ks}")
+    check("principled coat wrap -> disney base, clearcoat off",
+          base_type == "disney" and base_cc == 0.0,
+          f"base={base_type} clearcoat={base_cc}")
+
+
+def test_principled_coat_tint_absorption():
+    """Coat Tint -> layer absorption ka = -ln(tint), d = weight/2."""
+    import math as _m
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Coat Weight": 1.0,
+                            "Coat Tint": (0.5, 0.8, 1.0, 1.0)})
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    ka = _prop_vec3(props, "scene.materials.covmat.ka")
+    d = _prop_float(props, "scene.materials.covmat.d")
+    expected = (-_m.log(0.5), -_m.log(0.8), -_m.log(1.0))
+    ok = (mt == "glossycoating" and ka is not None and len(ka) >= 3
+          and all(abs(a - e) < 1e-3 for a, e in zip(ka, expected))
+          and d == 0.5)
+    check("principled coat tint -> ka=-ln(tint), d=w/2", ok,
+          f"type={mt} ka={ka} d={d}")
+
+
+def test_principled_coat_normal_bumptex():
+    """Linked Coat Normal -> glossycoating gets its own bumptex."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    bsdf = _principled(nt, out, **{"Coat Weight": 1.0})
+    nm = nt.nodes.new("ShaderNodeNormalMap")
+    nm.inputs["Color"].default_value = (0.5, 0.5, 1.0, 1.0)
+    nt.links.new(nm.outputs["Normal"], bsdf.inputs["Coat Normal"])
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    bump = prop_str(props, "scene.materials.covmat.bumptex")
+    check("principled coat normal -> glossycoating bumptex",
+          mt == "glossycoating" and bump is not None and
+          "normalmap" in emitted_texture_types(props),
+          f"type={mt} bumptex={bump} types={emitted_texture_types(props)}")
+
+
+def test_principled_coat_on_glass_wraps():
+    """Full transmission + any coat -> glossycoating around glass."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Transmission Weight": 1.0, "Roughness": 0.0,
+                            "Coat Weight": 1.0})
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    base_type = prop_str(props, "scene.materials.covmat_coatbase.type")
+    check("principled glass + coat -> glossycoating(glass)",
+          mt == "glossycoating" and base_type == "glass",
+          f"type={mt} base={base_type}")
+
+
+def test_principled_thinwall_archglass():
+    """Thin Wall + sharp full transmission -> archglass."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    bsdf = _principled(nt, out, **{"Transmission Weight": 1.0,
+                                   "Roughness": 0.0})
+    bsdf.inputs["Thin Wall"].default_value = True
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    check("principled thin wall + transmission -> archglass",
+          mt == "archglass", f"type={mt}")
+    check("principled thin wall archglass -> no warning",
+          "Thin Wall" not in _warnings_text(), _warnings_text()[:200])
+
+
+def test_principled_thinwall_partial_warns():
+    """Thin Wall + partial transmission -> disney + honest warning."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    bsdf = _principled(nt, out, **{"Transmission Weight": 0.5})
+    bsdf.inputs["Thin Wall"].default_value = True
+    props = convert(mat)
+    mt = prop_str(props, "scene.materials.covmat.type")
+    check("principled thin wall partial -> disney + warn",
+          mt == "disney" and "Thin Wall" in _warnings_text(),
+          f"type={mt} warns={_warnings_text()[:200]}")
+
+
+def test_principled_sheen_roughness_warns():
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Sheen Weight": 1.0, "Sheen Roughness": 0.8})
+    props = convert(mat)
+    check("principled sheen roughness -> warn",
+          "Sheen Roughness" in _warnings_text(),
+          f"warns={_warnings_text()[:200]}")
+
+
+def test_principled_sheen_inactive_no_warn():
+    """Sheen Roughness non-default but weight 0 -> no warning."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Sheen Roughness": 0.8})
+    convert(mat)
+    check("principled sheen roughness inert -> silent",
+          "Sheen Roughness" not in _warnings_text(),
+          f"warns={_warnings_text()[:200]}")
+
+
+def test_principled_sss_randomwalk_warns():
+    """Default method (random walk) + subsurface weight -> SSS warning."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Subsurface Weight": 0.5})
+    props = convert(mat)
+    sss = _prop_float(props, "scene.materials.covmat.subsurface")
+    check("principled sss random-walk -> warn + weight kept",
+          "subsurface" in _warnings_text() and sss == 0.5,
+          f"sss={sss} warns={_warnings_text()[:200]}")
+
+
+def test_principled_aniso_rotation_warns():
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Anisotropic": 0.5, "Anisotropic Rotation": 0.3})
+    props = convert(mat)
+    aniso = _prop_float(props, "scene.materials.covmat.anisotropic")
+    check("principled aniso rotation -> warn + anisotropic kept",
+          "anisotropy direction" in _warnings_text() and aniso == 0.5,
+          f"aniso={aniso} warns={_warnings_text()[:200]}")
+
+
+def test_principled_emission_scale():
+    """Emission Color * Strength -> scale texture on the material."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Emission Color": (1.0, 0.0, 0.0, 1.0),
+                            "Emission Strength": 2.0})
+    props = convert(mat)
+    em = prop_str(props, "scene.materials.covmat.emission")
+    check("principled emission -> scale tex",
+          em is not None and em != "0" and
+          has_vec3_texture(props, (1.0, 0.0, 0.0)),
+          f"emission={em}")
+
+
+def test_principled_thinfilm_on_glass():
+    """Thin Film on the glass path emits filmthickness/filmior."""
+    LuxCoreErrorLog.clear(force_ui_update=False)
+    mat, nt, out = new_tree()
+    _principled(nt, out, **{"Transmission Weight": 1.0,
+                            "Thin Film Thickness": 500.0,
+                            "Thin Film IOR": 1.4})
+    props = convert(mat)
+    thick = _prop_float(props, "scene.materials.covmat.filmthickness")
+    fior = _prop_float(props, "scene.materials.covmat.filmior")
+    check("principled thin film on glass -> filmthickness",
+          thick == 500.0 and fior == 1.4, f"thickness={thick} ior={fior}")
+
+
 def main():
     for fn in [v for k, v in sorted(globals().items())
                if k.startswith("test_")]:
