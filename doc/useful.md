@@ -42,3 +42,17 @@ The VRay addon uses this to create hidden helper textures, for example to use th
 It is possible to attach a listener function to an existing property via `bpy.msgbus`:
 * https://devtalk.blender.org/t/addon-development-question-attaching-callback-to-buttons/8677/2
 * https://developer.blender.org/P563
+
+#### Blender 5.2: disabled node sockets are excluded from `inputs[name]` lookup
+
+In Blender 5.2, `node.inputs["Name"]` raises `KeyError` for sockets with
+`enabled == False`, while iteration and `inputs.find("Name")` still see
+them. Toggle optional sockets by index:
+
+```python
+idx = node.inputs.find("Transmission Weight")   # works for disabled sockets
+node.inputs[idx].enabled = True                 # not node.inputs["..."]
+```
+
+First hit in `LuxCoreNodeMatOpenPBR` lobe toggles (dev-tools
+e32_openpbr_node_test.py exercises this).

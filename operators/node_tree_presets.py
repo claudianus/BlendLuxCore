@@ -21,6 +21,7 @@ class LUXCORE_OT_preset_material(bpy.types.Operator):
 
     basic_mapping = OrderedDict([
         ("Disney", "LuxCoreNodeMatDisney"),
+        ("OpenPBR", "LuxCoreNodeMatOpenPBR"),
         ("Mix", "LuxCoreNodeMatMix"),
         ("Matte", "LuxCoreNodeMatMatte"),
         ("Glossy", "LuxCoreNodeMatGlossy2"),

@@ -98,6 +98,9 @@ class LUXCORE_PT_context_material(MaterialButtonsPanel, Panel):
 
             if mat.use_nodes and mat.node_tree:
                 layout.prop(mat.luxcore, "use_cycles_nodes")
+                # Principled BSDF -> material target also applies to the
+                # automatic Blender-first conversion (no LuxCore node tree)
+                layout.prop(mat.luxcore, "principled_target")
 
 
 class LUXCORE_PT_material_presets(MaterialButtonsPanel, Panel):

@@ -76,6 +76,7 @@ luxcore_node_categories_material = [
         "Material",
         items=[
             NodeItem("LuxCoreNodeMatDisney", label="Disney"),
+            NodeItem("LuxCoreNodeMatOpenPBR", label="OpenPBR"),
             NodeItem("LuxCoreNodeMatMix", label="Mix"),
             NodeItem("LuxCoreNodeMatMatte", label="Matte"),
             NodeItem(

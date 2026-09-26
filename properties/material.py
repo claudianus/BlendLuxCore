@@ -1,6 +1,6 @@
 import bpy
 from bpy.types import PropertyGroup
-from bpy.props import PointerProperty, FloatProperty, BoolProperty
+from bpy.props import PointerProperty, FloatProperty, BoolProperty, EnumProperty
 from ..utils import node as utils_node
 # from ..operators.material import show_nodetree
 from ..utils.node import show_nodetree
@@ -54,6 +54,20 @@ class LuxCoreMaterialProps(PropertyGroup):
         update=update_use_cycles_nodes,
         description="Use the Cycles nodes of this material instead of the LuxCore node tree "
         "(WARNING: This option is not fully implemented yet, only very few nodes work)",
+    )
+
+    principled_target: EnumProperty(
+        name="Principled Target",
+        items=(
+            ("openpbr", "OpenPBR",
+             "Map Principled BSDF onto the OpenPBR material (ASWF standard, "
+             "native coat/fuzz/thin-film/dispersion lobes)"),
+            ("disney", "Disney (legacy)",
+             "Map Principled BSDF onto the legacy Disney material"),
+        ),
+        default="openpbr",
+        description="Material used when converting Blender's Principled BSDF "
+        "nodes (Cycles node reader and Blender-first materials)",
     )
 
     @classmethod

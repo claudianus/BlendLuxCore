@@ -745,6 +745,105 @@ def _socket(socket, props, material, obj_name, group_node, luxcore_name=None):
         return socket.default_value
 
 
+def _principled_openpbr(node, base_color, metallic, transmission,
+                        coat_weight, props, material, luxcore_name,
+                        obj_name, group_node_stack):
+    """
+    Principled v2 -> OpenPBR material definitions. Principled is OpenPBR's
+    parameterization already (Blender 4.5+), so most sockets map 1:1;
+    only weight/tint conventions need conversion. All openpbr params are
+    clamped in the material, so out-of-range intermediate values are safe.
+    """
+    s = lambda name, default=None: _socket(
+        node.inputs.get(name), props, material, obj_name, group_node_stack) \
+        if node.inputs.get(name) is not None else default
+
+    definitions = {
+        "type": "openpbr",
+        "basecolor": base_color,
+        "basemetalness": metallic,
+        "specularroughness": s("Roughness"),
+        "specularior": s("IOR"),
+        "specularanisotropy": s("Anisotropic"),
+        "specularrotation": s("Anisotropic Rotation", 0.0),
+        "transmissionweight": transmission,
+        # Cycles tints transmission by the base color
+        "transmissioncolor": base_color,
+    }
+
+    diffuse_roughness = s("Diffuse Roughness")
+    if diffuse_roughness is not None:
+        definitions["basediffuseroughness"] = diffuse_roughness
+
+    # Specular IOR Level: Cycles level 0.5 == full dielectric F0, which is
+    # OpenPBR specular_weight 1.0 -> weight = 2*level (clamped by the material)
+    level = s("Specular IOR Level", 0.5)
+    if _is_textured(level) or abs(float(level) - 0.5) > 1e-4:
+        definitions["specularweight"] = _tex_binary(
+            "scale", level, 2.0, luxcore_name + "_speclvl", props)
+
+    # Specular Tint (v2 color socket, default white = no tint): maps
+    # directly onto OpenPBR's specular_color F0 tint
+    tint = s("Specular Tint", [1.0, 1.0, 1.0])
+    if _is_textured(tint) or not _color_is_gray(tint) or \
+            (isinstance(tint, (list, tuple)) and
+             any(abs(v - 1.0) > 1e-4 for v in tint)):
+        definitions["specularcolor"] = tint
+
+    # Subsurface: Principled radius is a per-channel vector scaled by
+    # Subsurface Scale -> openpbr radius (scalar) * radiusscale (color)
+    sss_weight = s("Subsurface Weight", 0.0)
+    if _is_textured(sss_weight) or float(sss_weight) != 0.0:
+        definitions["subsurfaceweight"] = sss_weight
+        definitions["subsurfacecolor"] = base_color
+        definitions["subsurfaceradiusscale"] = s("Subsurface Radius",
+                                                 [1.0, 1.0, 1.0])
+        definitions["subsurfaceradius"] = s("Subsurface Scale", 1.0)
+        sss_aniso = s("Subsurface Anisotropy", 0.0)
+        if sss_aniso is not None:
+            definitions["subsurfaceanisotropy"] = sss_aniso
+
+    # Coat: direct 1:1 (Coat Tint approximates OpenPBR coat_color)
+    if _is_textured(coat_weight) or float(coat_weight) != 0.0:
+        definitions["coatweight"] = coat_weight
+        definitions["coatcolor"] = s("Coat Tint", [1.0, 1.0, 1.0])
+        definitions["coatroughness"] = s("Coat Roughness", 0.0)
+        definitions["coatior"] = s("Coat IOR", 1.5)
+
+    # Fuzz (sheen): v2 Sheen Tint is a color socket -> direct fuzzcolor
+    sheen_weight = s("Sheen Weight", 0.0)
+    if _is_textured(sheen_weight) or float(sheen_weight) != 0.0:
+        definitions["fuzzweight"] = sheen_weight
+        definitions["fuzzroughness"] = s("Sheen Roughness", 0.5)
+        sheen_tint = s("Sheen Tint", [1.0, 1.0, 1.0])
+        if sheen_tint is not None:
+            definitions["fuzzcolor"] = sheen_tint
+
+    # Thin film: Principled thickness is nm, openpbr wants micrometers
+    tf_thickness = s("Thin Film Thickness", 0.0)
+    if _is_textured(tf_thickness) or float(tf_thickness) != 0.0:
+        definitions["filmweight"] = 1.0
+        definitions["filmthickness"] = _tex_binary(
+            "scale", tf_thickness, 0.001, luxcore_name + "_filmum", props)
+        definitions["filmior"] = s("Thin Film IOR", 1.33)
+
+    # Honest warnings for inputs openpbr cannot express
+    if _socket_active(node.inputs.get("Coat Normal")) and \
+            _socket_nondefault(node.inputs.get("Coat Normal"),
+                               (0.0, 0.0, 0.0)):
+        _warn_unsupported(
+            node, "Coat Normal is not supported by the OpenPBR material "
+            "(the coat shares the shading normal); ignored", None, obj_name)
+    if _socket_active(node.inputs.get("Transmission Weight")) and \
+            _socket_nondefault(node.inputs.get("Transmission Roughness"), 0.0):
+        _warn_unsupported(
+            node, "Transmission Roughness is not supported by the OpenPBR "
+            "material (transmission shares specular roughness); ignored",
+            None, obj_name)
+
+    return definitions
+
+
 def _principled_thin_film(node, definitions, props, material, obj_name,
                           group_node_stack, with_amount):
     """
@@ -947,6 +1046,13 @@ def _node(node, output_socket, props, material, luxcore_name=None, obj_name="", 
             # filmthickness > 0; there is no filmamount on these materials)
             _principled_thin_film(node, definitions, props, material, obj_name,
                                   group_node_stack, with_amount=False)
+        elif getattr(material.luxcore, "principled_target", "openpbr") == "openpbr":
+            # OpenPBR is Principled's native model: direct mapping, and the
+            # coat is a built-in lobe so no glossycoating wrap is needed.
+            use_coating = False
+            definitions = _principled_openpbr(
+                node, base_color, metallic, transmission, coat_weight,
+                props, material, luxcore_name, obj_name, group_node_stack)
         else:
             use_coating = coat_active and coat_extra
             definitions = {
