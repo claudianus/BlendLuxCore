@@ -79,8 +79,40 @@ gradients on CPU and Metal/OpenCL.
   across shutter steps by `(instancer, persistent_id)`; steps where an
   instance has no evaluated transform (particle born/died mid-shutter)
   reuse its center-frame matrix, and a dupli object whose ids collide
-  falls back to static duplication. Transform interpolation only —
-  vertex-level deformation blur is not supported by the engine.
+  falls back to static duplication.
+- **Deformation (vertex) motion blur** (E9): objects with
+  `enable_motion_blur` get their evaluated mesh re-sampled at every
+  shutter step during the same `frame_set` pass that collects transform
+  motion, and the per-step loop-expanded vertex buffers are attached to
+  the exported base shapes via `Scene.SetMeshVertexMotion` — the same
+  `motion.N.time` schedule drives transform and deformation motion.
+  Shape keys, armature, Geometry Nodes and other deforming modifiers
+  are all covered because sampling uses `to_mesh()` on the evaluated
+  object. Guard rails: an export-time topology signature (vertex count
+  + loop vertex map) is re-checked per step, so a mid-shutter topology
+  change falls back to static with a notice; meshes whose final shape
+  is a wrapper (subdiv/displacement) are skipped since wrapper meshes
+  cannot carry the base mesh's series; identical step buffers skip the
+  call entirely.
+  Regression: `dev-tools/e9_vertex_motion_e2e_test.py` renders an
+  animated shape-key quad in Blender headless and asserts the blurred
+  emissive footprint widens while a non-opted-in object stays sharp.
+- **Strand (hair/curve) motion blur** (E9 Ph5b): hair-curves objects
+  and particle hair with `enable_motion_blur` get their raw strand
+  control points re-read on the evaluated object at every shutter step
+  and passed to `Scene.SetStrandsVertexMotion`, which re-tessellates
+  them through the recipe recorded at export time (the bindings store a
+  raw→filtered source-index map, so step buffers use the *unfiltered*
+  Blender layout). On Metal the series also drives native motion-curve
+  primitives; CPU/OCL paths shade re-tessellated motion triangles.
+  Particle hair with the motion-blur opt-in now exports strands
+  unbaked (object transform on the LuxCore object) so transform and
+  deformation motion compose. Guard rails: a mid-shutter change in
+  strand layout (curve counts / particle counts) or a shape wrapper
+  falls back to static with a notice.
+  Regression: `dev-tools/e9_strand_motion_e2e_test.py` renders a
+  keyframed hair comb headless and asserts the blurred strands smear
+  into a continuous band while non-opted-in strands stay sharp.
 - **Point-cloud motion blur** (A5 follow-up): POINTCLOUD objects with
   `enable_motion_blur` re-evaluate point positions/radii at every shutter
   step and export per-point transform time series — point 0 rides the

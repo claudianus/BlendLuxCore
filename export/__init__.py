@@ -510,6 +510,7 @@ class Exporter(object):
                     scene,
                     depsgraph,
                     self.object_cache2.exported_objects,
+                    luxcore_scene,
                     instances,
                 )
 

@@ -772,7 +772,7 @@ class ObjectCache2:
                                 and obj.luxcore.enable_motion_blur
                             )
                         )
-                        lux_shape = convert_hair_curves(
+                        curve_res = convert_hair_curves(
                             exporter,
                             depsgraph,
                             obj,
@@ -780,6 +780,9 @@ class ObjectCache2:
                             luxcore_scene,
                             is_for_duplication,
                             dg_obj_instance.matrix_world,
+                        )
+                        lux_shape, strand_sig = (
+                            curve_res if curve_res else (None, None)
                         )
                         if lux_shape:
                             # Curves data may have no material slots at all
@@ -799,7 +802,10 @@ class ObjectCache2:
                                         scene_props,
                                     )
 
-                            self.exported_hair[obj_key] = lux_shape
+                            self.exported_hair[obj_key] = (
+                                lux_shape,
+                                strand_sig,
+                            )
 
                             lux_mat, mat_props, node_tree = export_material(
                                 obj, 0, exporter, depsgraph, is_viewport_render
@@ -823,6 +829,23 @@ class ObjectCache2:
                             )
                             exported_stuff.parts.append(
                                 ExportedPart(lux_shape, lux_shape, lux_mat)
+                            )
+                            # Strand motion blur (E9): record the strand
+                            # mesh and its raw layout so the per-step
+                            # sampler can feed SetStrandsVertexMotion.
+                            # Shape wrappers (subdiv etc.) build a new
+                            # mesh off the base strands and would
+                            # silently drop the motion series.
+                            exported_stuff.strand_recs.append(
+                                {
+                                    "mesh": obj_key,
+                                    "kind": strand_sig["kind"],
+                                    "sig": strand_sig,
+                                    "space_matrix": strand_sig[
+                                        "space_matrix"
+                                    ],
+                                    "wrapped": lux_shape != obj_key,
+                                }
                             )
                 else:
 
@@ -893,8 +916,16 @@ class ObjectCache2:
             ):
                 # Can't use the memory address of the psys as key because it changes
                 # when the psys is updated (e.g. because some hair moves)
+                # Motion-blur opt-in needs the transform on the LuxCore
+                # object (not baked into the strand points) so object
+                # motion and strand deformation compose correctly.
                 is_for_duplication = (
-                    is_viewport_render or dg_obj_instance.is_instance
+                    is_viewport_render
+                    or dg_obj_instance.is_instance
+                    or (
+                        exporter.motion_blur_enabled
+                        and obj.luxcore.enable_motion_blur
+                    )
                 )
                 psys_key = make_psys_key(obj, psys, is_for_duplication)
                 lux_obj = make_hair_shape_name(obj_key, psys)
@@ -903,10 +934,11 @@ class ObjectCache2:
                 )
                 mat_index = get_hair_material_index(psys)
 
+                strand_sig = None
                 try:
-                    lux_shape = self.exported_hair[psys_key]
+                    lux_shape, strand_sig = self.exported_hair[psys_key]
                 except KeyError:
-                    lux_shape = convert_hair(
+                    hair_res = convert_hair(
                         exporter,
                         obj,
                         obj_key,
@@ -919,6 +951,9 @@ class ObjectCache2:
                         dg_obj_instance.matrix_world,
                         visible_to_cam,
                         engine,
+                    )
+                    lux_shape, strand_sig = (
+                        hair_res if hair_res else (None, None)
                     )
                     if lux_shape:
                         mat = get_material(obj, mat_index, depsgraph)
@@ -933,7 +968,10 @@ class ObjectCache2:
                                     scene_props,
                                 )
 
-                        self.exported_hair[psys_key] = lux_shape
+                        self.exported_hair[psys_key] = (
+                            lux_shape,
+                            strand_sig,
+                        )
 
                 if lux_shape:
                     lux_mat, mat_props, node_tree = export_material(
@@ -959,6 +997,20 @@ class ObjectCache2:
                     exported_stuff.parts.append(
                         ExportedPart(lux_obj, lux_shape, lux_mat)
                     )
+                    # Strand motion blur (E9): record the raw strand
+                    # layout for the per-step sampler.
+                    if strand_sig is not None:
+                        exported_stuff.strand_recs.append(
+                            {
+                                "mesh": lux_obj,
+                                "kind": strand_sig["kind"],
+                                "sig": strand_sig,
+                                "space_matrix": strand_sig[
+                                    "space_matrix"
+                                ],
+                                "wrapped": lux_shape != lux_obj,
+                            }
+                        )
 
         if exported_stuff:
             scene_props.Set(props)
@@ -1075,6 +1127,17 @@ class ObjectCache2:
             # replacement cannot rewire.
             base_list = list(exported_mesh.mesh_definitions)
             base_names = {name for name, _m in base_list}
+            # Deformation motion blur (E9): let motion_blur.convert()
+            # re-evaluate this object's mesh per shutter step and attach
+            # a vertex series to the base shapes. Objects whose final
+            # shape is a wrapper (subdiv etc.) are excluded — the wrapper
+            # mesh is a new mesh that would drop the base series anyway.
+            exported_obj.exported_mesh = exported_mesh
+            exported_obj.vert_mesh_key = mesh_key
+            exported_obj.has_shape_wrapper = any(
+                part.lux_shape not in base_names
+                for part in exported_obj.parts
+            )
             self.obj_geo_meta[obj_key] = (
                 obj.original.data.as_pointer() if obj.original.data else 0,
                 mesh_key,

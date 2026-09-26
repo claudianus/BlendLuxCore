@@ -171,7 +171,20 @@ def convert(
         print(f"[BLC] Export duration: {duration:.3f}s")
         print("[BLC]")
 
-        return caches.exported_data.ExportedMesh(mesh_definitions)
+        # Deformation motion blur (E9): the vertex series is exported in
+        # the same loop-expanded domain as `points` — remember vertex
+        # count and loop mapping so motion_blur.py can validate each
+        # shutter step's topology against the exported mesh. Only kept
+        # for meshes that may actually collect a vertex series.
+        vert_sig = None
+        if (
+            exporter is not None
+            and getattr(exporter, "motion_blur_enabled", False)
+            and getattr(obj.luxcore, "enable_motion_blur", False)
+        ):
+            vert_sig = (len(mesh.vertices), loop_vertices.copy())
+
+        return caches.exported_data.ExportedMesh(mesh_definitions, vert_sig)
 
 
 @contextmanager
