@@ -86,7 +86,6 @@ classes = (
     general.SUPERLUXCORE_OT_switch_space_data_context,
     general.SUPERLUXCORE_OT_switch_to_camera_settings,
     general.SUPERLUXCORE_OT_set_suggested_clamping_value,
-    general.SUPERLUXCORE_OT_set_quality_preset,
     general.SUPERLUXCORE_OT_update_opencl_devices,
     general.SUPERLUXCORE_OT_add_node,
     general.SUPERLUXCORE_OT_attach_sun_to_sky,

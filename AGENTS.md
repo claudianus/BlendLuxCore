@@ -95,8 +95,8 @@
   masks) + aligned raw sections: verts, tris, normals?, uv/col/alpha/
   vertAOV/triAOV layers. Same-build portability only (raw POD dump);
   load-time validation covers truncation, bad magic, and crafted
-  element counts. Windows MapFileCopyOnWrite not implemented yet
-  (fails gracefully).
+  element counts. Windows read-only path maps via FILE_MAP_READ
+  fallback (MapFileCopyOnWrite is implemented — see below).
 - Regression: `dev-tools/lxm_proxy_test.py` (byte-exact round-trip +
   720p render compare + error paths).
 
@@ -170,20 +170,3 @@
 - World > HDRI > `cdfdim` caps env importance CDF (block-summed,
   unbiased; default 4096, 0=unlimited).
 
-## Quick Setup (config.simple) — post-restore trap
-
-- `export/config.convert()` snapshots the user's properties, applies the
-  quality-map writes, converts, then RESTORES — so property mutations
-  only reach values read inside `convert()` itself (path.*, sampler,
-  denoiser.enabled, spectral). Converters that run LATER never see them:
-  - `export/halt.convert()` maps `batch.halt*` straight from
-    `simple.quality_map()`/`simple.time_limit` (writing halt.* earlier
-    was dead — it exported the user's defaults).
-  - `imagepipeline`/`aovs` use `utils.scene_analysis.wants_temporal_denoise`.
-  - `object_cache._auto_proxy_applies` uses `wants_mesh_proxy`.
-- Rule: new Quick Setup features consumed outside convert() must expose
-  a `wants_*` predicate in `utils/scene_analysis.py` and be read at the
-  consumer — never rely on mutated scene properties.
-- Auto Scene Settings intentionally does NOT touch pre-pass caches
-  (PhotonGI, env-light cache, light tracing) — the unbiased path
-  covers what they accelerated.

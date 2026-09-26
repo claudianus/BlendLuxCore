@@ -278,11 +278,7 @@ def get_denoiser_imgpipeline_props(context, scene, pipeline_index):
     definitions = OrderedDict()
     index = 0
 
-    if scene.superluxcore.denoiser.temporal_enabled or (
-        context is None
-        and utils.scene_analysis.wants_temporal_denoise(
-            scene.superluxcore.config.simple, scene)
-    ):
+    if scene.superluxcore.denoiser.temporal_enabled:
         index = add_temporal_accumulate(definitions, index, scene)
 
     if scene.superluxcore.denoiser.type == "BCD":

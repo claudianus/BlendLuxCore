@@ -80,7 +80,7 @@ class SuperLuxCoreImagepipelineTonemapper(
     # Settings for TONEMAP_LINEAR
     use_autolinear: BoolProperty(
         name="Auto Brightness",
-        default=True,
+        default=False,
         description="Auto-detect the optimal image brightness",
     )
     linear_scale: FloatProperty(

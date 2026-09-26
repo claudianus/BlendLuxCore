@@ -77,8 +77,6 @@ def _collect_light_portals(scene):
 
 
 def convert(exporter, scene, context=None, engine=None):
-    config = scene.superluxcore.config
-    simple_token = None
     try:
         prefix = ""
         # We collect the properties in this dictionary (ordered because we sometimes
@@ -111,21 +109,6 @@ def convert(exporter, scene, context=None, engine=None):
                         "Disable compositing or add a Composite node")
         except Exception:
             pass
-
-        # Quick Setup: map the single quality slider onto the underlying
-        # settings before the regular conversion picks them up.
-        # Snapshot/restore: the mapping writes into the live Blender
-        # properties, so without this every (re-)export — viewports
-        # re-export constantly — would silently eat the user's own values.
-        simple_token = None
-        if config.simple.enabled:
-            simple_token = config.simple.snapshot(scene)
-            config.simple.apply(config)
-            config.simple.apply_halt(scene)
-            # Scene-aware auto configuration (needs the scene, not just
-            # config) — final renders only
-            if not is_viewport_render:
-                config.simple.apply_scene_scan(scene)
 
         width, height = utils.calc_filmsize(scene, context)
         in_material_shading_mode = utils.in_material_shading_mode(context)
@@ -394,8 +377,6 @@ def convert(exporter, scene, context=None, engine=None):
         aov_props = aovs.convert(exporter, scene, context, engine)
         config_props.Set(aov_props)
 
-        if simple_token is not None:
-            config.simple.restore(simple_token)
         return config_props
     except Exception as error:
         msg = "Config: %s" % error
@@ -404,11 +385,6 @@ def convert(exporter, scene, context=None, engine=None):
         import traceback
 
         traceback.print_exc()
-        try:
-            if simple_token is not None:
-                config.simple.restore(simple_token)
-        except Exception:
-            pass
         return pysuperluxcore.Properties()
 
 

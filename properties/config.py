@@ -10,7 +10,7 @@ from .. import utils
 
 
 PATH_DESC = (
-    'Traces rays from the camera (and from lights, if Light Tracing or the caustics cache are used).\n'
+    'Traces rays from the camera (and from lights, if "Add Light Tracing" or caustics cache are used).\n'
     'Suited for almost all scene types and lighting scenarios.\n'
     'Can run on the CPU, GPU or both.\n'
     'Supports several caches to accelerate indirect light, environment light sampling and many-light sampling.\n'
@@ -35,8 +35,8 @@ RANDOM_DESC = (
 )
 
 TILED_DESCRIPTION = (
-    'Render in tiles with the special "Tiled Path" engine: slower than the regular Path engine, but uses much less memory. '
-    'Does not support Light Tracing'
+    'Use the special "Tiled Path" engine, which is slower than the regular Path engine, but uses less memory. '
+    'Does not support the "Add Light Tracing" option'
 )
 TILE_SIZE_DESC = (
     "Note that OpenCL devices will automatically render multiple tiles if it increases performance"
@@ -90,7 +90,7 @@ POWER_DESC = (
 UNIFORM_DESC = "Sample all lights equally, not according to their brightness"
 
 AUTO_LIGHT_STRATEGY_DESC = (
-    "(Default) Pick the light strategy from the scene's emitter count: "
+    "Pick the light strategy from the scene's emitter count: "
     "ReSTIR DI when the scene has many emitters, log-power sampling otherwise. "
     "Mesh lights are weighted by their polygon count since every triangle "
     "becomes a separate light"
@@ -295,183 +295,6 @@ FIXED_DESC = (
 )
 
 
-class SuperLuxCoreConfigSimple(PropertyGroup):
-    """Corona-style simplified settings.
-
-    A single quality slider that maps to a curated set of engine
-    parameters, plus a denoiser switch. When enabled, the advanced
-    render panels are hidden (see ui/render panels' poll()).
-    """
-    enabled: BoolProperty(
-        name="Quick Setup",
-        default=True,
-        description="Show a simplified interface with a single quality slider. "
-                    "Hide the advanced render settings panels",
-    )
-    quality: FloatProperty(
-        name="Quality",
-        default=0.6,
-        min=0.0, max=1.0,
-        soft_min=0.0, soft_max=1.0,
-        subtype="FACTOR",
-        description="Draft (fast, noisy) to Production (slow, clean). "
-                    "Adjusts path depths, clamping and sample counts at once",
-    )
-    denoise: BoolProperty(
-        name="Denoise",
-        default=True,
-        description="Automatically denoise the result when rendering finishes",
-    )
-    time_limit: IntProperty(
-        name="Time Limit (min)",
-        default=0, min=0, soft_max=60,
-        description="Stop the render after this many minutes of sampling "
-                    "(0 = off — stop by samples/noise instead). Kernel "
-                    "compilation does not count against the budget",
-    )
-    detect_features: BoolProperty(
-        name="Auto Scene Settings",
-        default=True,
-        description="Analyze the scene at render time and enable the engine "
-                    "features it needs (spectral dispersion, temporal denoise "
-                    "for animation, mesh proxies for heavy geometry)",
-    )
-    show_advanced: BoolProperty(
-        name="Show Advanced Settings",
-        default=False,
-        description="Temporarily show the advanced render settings panels",
-    )
-
-    @staticmethod
-    def _lerp(q, keys):
-        """Piecewise-linear interpolation over sorted (q, value) keyframes."""
-        for (qa, va), (qb, vb) in zip(keys, keys[1:]):
-            if q <= qb:
-                return va + (vb - va) * (q - qa) / (qb - qa)
-        return keys[-1][1]
-
-    def quality_map(self):
-        """Pure mapping quality -> effective values (no writes).
-
-        Used by apply() and by the UI summary labels, so the panel always
-        shows exactly what a render will use. Values interpolate smoothly
-        so the slider feels continuous, not stepped.
-        """
-        q = self.quality
-        samples = round(self._lerp(q, [
-            (0.0, 8), (0.2, 24), (0.4, 64), (0.6, 192),
-            (0.8, 512), (0.9, 1024), (1.0, 1536),
-        ]) / 4) * 4
-        return {
-            "depth_total": round(self._lerp(q, [(0, 4), (0.7, 8), (1, 12)])),
-            "depth_diffuse": round(self._lerp(q, [(0, 2), (0.7, 4), (1, 6)])),
-            "depth_glossy": round(self._lerp(q, [(0, 2), (0.7, 4), (1, 5)])),
-            "depth_specular": round(self._lerp(q, [(0, 3), (0.7, 6), (1, 8)])),
-            "use_clamping": q < 0.75,
-            "clamping": 1.0 if q < 0.3 else
-                round(self._lerp(q, [(0.3, 1.0), (0.7, 5.0)]), 2),
-            "adaptive": round(self._lerp(q, [(0, 0.5), (0.4, 0.7), (1, 0.95)]), 2),
-            "halt_samples": samples,
-            # Stricter convergence stop as quality rises (units of 1/256)
-            "noise_thresh": 8 if q < 0.4 else (5 if q < 0.8 else 3),
-            # Path guiding pays off once the field can warm up (mid quality
-            # and above); below that it only dilutes against BSDF sampling.
-            "guiding": q >= 0.5,
-        }
-
-    def snapshot(self, scene):
-        """Remember every Blender property Quick Setup is about to overwrite,
-        so export can restore the user's values afterwards (non-destructive).
-        Returns an opaque token for restore().
-        """
-        config = scene.superluxcore.config
-        denoiser = scene.superluxcore.denoiser
-        targets = [
-            (config.path, "depth_total"), (config.path, "depth_diffuse"),
-            (config.path, "depth_glossy"), (config.path, "depth_specular"),
-            (config.path, "use_clamping"), (config.path, "clamping"),
-            (config, "sobol_adaptive_strength"), (config, "guiding_enable"),
-            (denoiser, "enabled"),
-            (config, "spectral_enable"),
-        ]
-        return [(obj, name, getattr(obj, name)) for obj, name in targets]
-
-    @staticmethod
-    def restore(token):
-        for obj, name, value in token:
-            try:
-                setattr(obj, name, value)
-            except Exception:
-                pass
-
-    def apply(self, config):
-        """Map the quality value onto the underlying SuperLuxCore config.
-
-        Called by export/config.convert() when Quick Setup is enabled,
-        before the regular conversion. The caller snapshots first and
-        restores afterwards (see snapshot()/restore()), so the user's
-        own values are never lost.
-        """
-        m = self.quality_map()
-
-        # Path depths: shallow and fast at draft, deep for production
-        config.path.depth_total = m["depth_total"]
-        config.path.depth_diffuse = m["depth_diffuse"]
-        config.path.depth_glossy = m["depth_glossy"]
-        config.path.depth_specular = m["depth_specular"]
-
-        # Clamping: aggressive at draft (kills fireflies), off at high
-        # quality. A measured auto-clamp suggestion outranks the generic
-        # map — it was tuned for this exact scene.
-        has_suggestion = (config.path.auto_clamping
-                          and config.path.suggested_clamping_value > 0)
-        if not has_suggestion:
-            config.path.use_clamping = m["use_clamping"]
-            config.path.clamping = m["clamping"]
-
-        # Adaptive sampling strength (sobol): more adaptivity at high quality
-        config.sobol_adaptive_strength = m["adaptive"]
-        # Path guiding from mid quality up (field needs passes to warm up)
-        config.guiding_enable = m["guiding"]
-
-    def apply_scene_scan(self, scene):
-        """Auto-configure the engine features this scene actually needs.
-
-        Profiles the scene (both Cycles and SuperLuxCore node trees) and
-        enables:
-
-        - Spectral rendering when dispersive glass is used (plain RGB
-          smears dispersion away — this is a correctness feature)
-        - Temporal denoise accumulation for animated scenes (consumed
-          by the imagepipeline/AOV exporters via
-          scene_analysis.wants_temporal_denoise)
-        - Automatic mesh proxies for very heavy geometry (consumed by
-          the object cache via scene_analysis.wants_mesh_proxy)
-
-        Pre-pass caches (PhotonGI, env-light cache, light tracing) are
-        intentionally NOT touched: the engine's unbiased path handles
-        what they accelerated. Runs only when "Auto Scene Settings" is
-        on; every write is covered by snapshot()/restore().
-        """
-        if not self.detect_features:
-            return
-
-        config = scene.superluxcore.config
-        prof = utils.scene_analysis.analyze_scene(scene)
-
-        # Dispersion needs a spectral engine, plain RGB smears it away
-        if prof["dispersion"]:
-            config.spectral_enable = True
-
-    def apply_halt(self, scene):
-        """Wire the Denoise toggle onto the final denoiser.
-
-        Halt values are NOT written here: export/halt.convert() runs
-        after the snapshot is restored, so it reads the quality map
-        directly instead."""
-        scene.superluxcore.denoiser.enabled = self.denoise
-
-
 class SuperLuxCoreConfigPath(PropertyGroup):
     """
     path.*
@@ -479,8 +302,7 @@ class SuperLuxCoreConfigPath(PropertyGroup):
     """
     # TODO: helpful descriptions
     # path.pathdepth.total
-    depth_total: IntProperty(name="Total", default=12, min=1, soft_max=128,
-                             description="Maximum number of bounces a light path can take")
+    depth_total: IntProperty(name="Total Path Depth", default=12, min=1, soft_max=128)
     # path.pathdepth.diffuse
     depth_diffuse: IntProperty(name="Diffuse", default=4, min=1, soft_max=128)
     # path.pathdepth.glossy
@@ -488,13 +310,13 @@ class SuperLuxCoreConfigPath(PropertyGroup):
     # path.pathdepth.specular
     depth_specular: IntProperty(name="Specular", default=12, min=1, soft_max=128)
 
-    hybridbackforward_enable: BoolProperty(name="Light Tracing", default=False,
+    hybridbackforward_enable: BoolProperty(name="Add Light Tracing", default=False,
                                            description=HYBRID_BACKFORWARD_DESC)
-    hybridbackforward_lightpartition: FloatProperty(name="Light Ray Share", default=20, min=0, max=100,
+    hybridbackforward_lightpartition: FloatProperty(name="Light Rays", default=20, min=0, max=100,
                                                     subtype="PERCENTAGE",
                                                     description=HYBRID_BACKFORWARD_LIGHTPART_DESC)
     # Separate property so we can use a different default that makes more sense for OpenCL
-    hybridbackforward_lightpartition_opencl: FloatProperty(name="Light Ray Share", default=25, min=0, max=100,
+    hybridbackforward_lightpartition_opencl: FloatProperty(name="Light Rays", default=25, min=0, max=100,
                                                     subtype="PERCENTAGE",
                                                     description=HYBRID_BACKFORWARD_LIGHTPART_OPENCL_DESC)
     hybridbackforward_glossinessthresh: FloatProperty(name="Glossiness Threshold", default=0.049, min=0, max=1,
@@ -542,7 +364,7 @@ class SuperLuxCoreConfigPath(PropertyGroup):
     use_clamping: BoolProperty(name="Clamp Output", default=False, description=CLAMPING_DESC)
     auto_clamping: BoolProperty(
         name="Auto Clamp",
-        default=True,
+        default=False,
         description="Once a render has produced a suggested clamp value, "
                     "apply it automatically on subsequent renders. Manual "
                     "clamping (Clamp Output) takes precedence when enabled. "
@@ -764,13 +586,13 @@ class SuperLuxCoreConfigNoiseEstimation(PropertyGroup):
 
 
 class SuperLuxCoreConfigImageResizePolicy(PropertyGroup):
-    enabled: BoolProperty(name="Use Image Resizing", default=True, description="")
+    enabled: BoolProperty(name="Use Image Resizing", default=False, description="")
     types = [
         ("MIPMAPMEM", "Auto-Scale to MipMaps", MIPMAPMEM_DESC, 0),
         ("MINMEM", "Auto-Scale to Lowest Size", MINMEM_DESC, 1),
         ("FIXED", "Uniform Scale", FIXED_DESC, 2),
     ]
-    type: EnumProperty(name="Type", items=types, default="MINMEM", description="How to resize images")
+    type: EnumProperty(name="Type", items=types, default="MIPMAPMEM", description="How to resize images")
     scale: FloatProperty(name="Scale", default=100, min=0, soft_max=100, precision=1, subtype="PERCENTAGE",
                          description="Scale factor. For example, with scale = 50%, a 3000x2000 pixel image is scaled to 1500x1000. "
                                      "When using auto-scaling, this value acts as a multiplier for the automatic scale")
@@ -803,7 +625,7 @@ class SuperLuxCoreConfig(PropertyGroup):
         ("PATH", "Pathtracing", PATH_DESC, 0),
         ("BIDIR", "Bidirectional", BIDIR_DESC, 1),
     ]
-    engine: EnumProperty(name="Integrator", items=engines, default="PATH")
+    engine: EnumProperty(name="Lighting integrator", items=engines, default="PATH")
 
     # Only available when tiled rendering is off (because it uses a special tiled sampler)
     samplers = [
@@ -933,11 +755,6 @@ class SuperLuxCoreConfig(PropertyGroup):
                                           "variance-driven adaptive sampling: lower values sample "
                                           "converged pixels more conservatively")
 
-    # Quick Setup (Corona-style simplified interface)
-    simple: PointerProperty(type=SuperLuxCoreConfigSimple)
-    # Adaptive strength mapping for Quick Setup (draft = less adaptive)
-    simple_adaptive_strength: FloatProperty(name="Adaptive Strength (Simple)", default=0.9, min=0, max=0.95)
-
     # Noise estimation (used by adaptive samplers like SOBOL and RANDOM)
     noise_estimation: PointerProperty(type=SuperLuxCoreConfigNoiseEstimation)
     
@@ -962,7 +779,7 @@ class SuperLuxCoreConfig(PropertyGroup):
         ("EVERYTHING", "Everything", "The film, image textures, meshes and other data are stored in CPU RAM if GPU RAM is not sufficient", 1),
     ]
     out_of_core_mode: EnumProperty(name="Mode", items=out_of_core_modes, default="EVERYTHING")
-    out_of_core: BoolProperty(name="Out-of-Core Memory", default=False,
+    out_of_core: BoolProperty(name="Out of Core", default=False, 
                               description="Enable storage of image pixels, meshes and other data in CPU RAM if GPU RAM is not sufficient. "
                                           "Enabling this option causes the scene to use more CPU RAM")
     free_blender_image_buffers: BoolProperty(
@@ -987,7 +804,7 @@ class SuperLuxCoreConfig(PropertyGroup):
     )
     spill_geometry: BoolProperty(
         name="Spill Geometry",
-        default=True,
+        default=False,
         description="Out-of-core geometry: mesh buffers larger than the threshold "
                     "are written to disk and accessed through file mappings, so the "
                     "OS can evict cold pages under memory pressure instead of "
@@ -1066,12 +883,12 @@ class SuperLuxCoreConfig(PropertyGroup):
                        "is chosen in the addon preferences. "
                        "You can enable/disable each device in the Devices panel below", 2),
     ]
-    device: EnumProperty(name="Device", items=devices, default="AUTO")
+    device: EnumProperty(name="Device", items=devices, default="CPU")
     # A trick so we can show the user that bidir can only be used on the CPU (see UI code)
     bidir_device: EnumProperty(name="Device", items=devices, default="CPU",
                                description="Bidir is only available on CPU. Switch to the Path engine if you want to render on the GPU")
 
-    use_tiles: BoolProperty(name="Tiled Rendering", default=False, description=TILED_DESCRIPTION)
+    use_tiles: BoolProperty(name="Use Tiled Path (slower)", default=False, description=TILED_DESCRIPTION)
     
     def using_tiled_path(self):
         return self.engine == "PATH" and self.use_tiles
@@ -1088,7 +905,7 @@ class SuperLuxCoreConfig(PropertyGroup):
     bidir_path_maxdepth: IntProperty(name="Eye Depth", default=10, min=1, soft_max=16)
 
     # Pixel filter
-    filter_enabled: BoolProperty(name="Enable Pixel Filtering", default=True, description=FILTER_DESC)
+    filter_enabled: BoolProperty(name="Enable Pixel Filtering", default=False, description=FILTER_DESC)
     filters = [
         ("BLACKMANHARRIS", "Blackman-Harris", "Default, usually the best option", 0),
         ("MITCHELL_SS", "Mitchell", "Sharp, but can produce black ringing artifacts around bright pixels", 1),
@@ -1114,7 +931,7 @@ class SuperLuxCoreConfig(PropertyGroup):
         ("RESTIR_DI", "ReSTIR DI (reservoir)", RESTIR_DI_DESC, 4),
         ("LIGHT_BVH", "Light BVH", LIGHT_BVH_DESC, 5),
     ]
-    light_strategy: EnumProperty(name="Light Strategy", items=light_strategy_items, default="AUTO",
+    light_strategy: EnumProperty(name="Light Strategy", items=light_strategy_items, default="LOG_POWER",
                                   description="Decides how the lights in the scene are sampled")
 
     # ReSTIR DI options
@@ -1148,7 +965,7 @@ class SuperLuxCoreConfig(PropertyGroup):
                                               "with reconnection shift + visibility test")
 
     # MNEE (specular chain direct light sampling)
-    mnee_enable: BoolProperty(name="Specular Caustics (MNEE)", default=False,
+    mnee_enable: BoolProperty(name="MNEE Specular Caustics", default=False,
                                   description="Direct light through delta specular surfaces (mirrors, glass) via manifold next event estimation. Fix dark caustics from point/spot lights behind mirrors or glass")
     mnee_maxspecular: IntProperty(name="Max Specular Vertices", default=1, min=1, max=4,
                                   description="Chain length for multi-specular transport (closed glass slabs need 2+). "
@@ -1164,7 +981,7 @@ class SuperLuxCoreConfig(PropertyGroup):
                                               "result and only adds recovered caustic energy")
 
     # Path guiding (P1-3): learned incident-radiance field steers glossy bounces
-    guiding_enable: BoolProperty(name="Path Guiding", default=True,
+    guiding_enable: BoolProperty(name="Path Guiding", default=False,
                                  description="Learn where the light comes from while rendering and steer "
                                              "glossy bounces toward it (one-sample MIS vs BSDF, unbiased). "
                                              "Helps indirect and glossy transport; needs some passes to warm up")
@@ -1276,22 +1093,17 @@ class SuperLuxCoreConfig(PropertyGroup):
     envlight_cache: PointerProperty(type=SuperLuxCoreConfigEnvLightCache)
 
     # FILESAVER options
-    use_filesaver: BoolProperty(
-        name="Export Scene Only",
-        default=False,
-        description="Only write the exported SuperLuxCore scene to disk "
-                    "(.scn/.cfg text or .bcf binary) instead of rendering",
-    )
+    use_filesaver: BoolProperty(name="Only write SuperLuxCore scene", default=False)
     filesaver_format_items = [
         ("TXT", "Text", "Save as .scn and .cfg text files", 0),
         ("BIN", "Binary", "Save as .bcf binary file", 1),
     ]
-    filesaver_format: EnumProperty(name="", items=filesaver_format_items, default="BIN")
+    filesaver_format: EnumProperty(name="", items=filesaver_format_items, default="TXT")
     filesaver_path: StringProperty(name="", subtype="DIR_PATH", description="Output path where the scene is saved")
 
     # Seed
     seed: IntProperty(name="Seed", default=1, min=1, description=SEED_DESC)
-    use_animated_seed: BoolProperty(name="Animated Seed", default=True, description=ANIM_SEED_DESC)
+    use_animated_seed: BoolProperty(name="Animated Seed", default=False, description=ANIM_SEED_DESC)
 
     # Min. epsilon settings (drawn in ui/units.py)
     show_min_epsilon: BoolProperty(name="Advanced SuperLuxCore Settings", default=False,

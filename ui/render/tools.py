@@ -4,18 +4,16 @@ from ... import icons
 from ...icons import icon_manager
 
 class SUPERLUXCORE_RENDER_PT_tools(Panel, RenderButtonsPanel):
-    bl_label = "Utilities"
+    bl_label = "SuperLuxCore Tools"
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_options = {"DEFAULT_CLOSED"}
-    bl_order = 60
+    bl_order = 999
 
     @classmethod
     def poll(cls, context):
         if context.scene.render.engine != "SUPERLUXCORE":
             return False
-        # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.superluxcore.config.simple
-        return (not simple.enabled) or simple.show_advanced
+        return True
 
     def draw(self, context):
         layout = self.layout
@@ -38,7 +36,7 @@ class SUPERLUXCORE_RENDER_PT_tools(Panel, RenderButtonsPanel):
 
 class SUPERLUXCORE_RENDER_PT_filesaver(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
-    bl_label = "Scene Export (Filesaver)"
+    bl_label = "SuperLuxCore Filesaver"
     bl_options = {"DEFAULT_CLOSED"}
     bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
 
@@ -55,7 +53,7 @@ class SUPERLUXCORE_RENDER_PT_filesaver(RenderButtonsPanel, Panel):
         layout.use_property_decorate = False
 
         layout.enabled = config.use_filesaver
-        layout.label(text="Only export the scene to disk, do not render", icon=icons.INFO)
+        layout.label(text="Only write SuperLuxCore scene to disk", icon=icons.INFO)
 
         col = layout.column(align=True)
         col.prop(config, "filesaver_format")
@@ -99,7 +97,7 @@ class SUPERLUXCORE_RENDER_PT_geospill(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Out-of-Core Spilling"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "SUPERLUXCORE_RENDER_PT_devices"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
 
     def draw_header(self, context):
         layout = self.layout
@@ -126,7 +124,7 @@ class SUPERLUXCORE_RENDER_PT_autoproxy(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Automatic Mesh Proxy"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "SUPERLUXCORE_RENDER_PT_devices"
+    bl_parent_id = "SUPERLUXCORE_RENDER_PT_tools"
 
     def draw_header(self, context):
         layout = self.layout

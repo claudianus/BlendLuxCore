@@ -22,7 +22,7 @@ class SuperLuxCoreMotionBlur(PropertyGroup):
     enable: BoolProperty(name="Enable Motion Blur", default=False)
     object_blur: BoolProperty(name="Object", default=True, description="Blur moving objects")
     camera_blur: BoolProperty(name="Camera", default=False, description="Blur if camera moves")
-    shutter: FloatProperty(name="Shutter (frames)", default=0.5, min=0, soft_max=2, description=SHUTTER_TIME_DESC)
+    shutter: FloatProperty(name="Shutter (frames)", default=0.1, min=0, soft_max=2, description=SHUTTER_TIME_DESC)
     # Note: Embree allows a maximum of 129 motion steps
     steps: IntProperty(name="Steps", default=2, min=2, soft_max=20, max=129, description="Number of substeps")
 

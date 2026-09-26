@@ -33,7 +33,6 @@ def check(name, ok, detail=""):
 def fresh_scene():
     # bpy.ops.scene.new copies the active scene's addon properties even
     # for type="EMPTY" - bpy.data.scenes.new gives real defaults
-    # (same workaround as e15_auto_config_test.py)
     scene = bpy.data.scenes.new("e37")
     scene.render.engine = "SUPERLUXCORE"
     return scene

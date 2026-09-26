@@ -9,9 +9,11 @@ validated.
 
 **What/why.** Blender scenes use Cycles shader nodes; to render them SuperLuxCore
 must translate each node to an equivalent SuperLuxCore texture/material. Coverage
-grew from **36 to 71 of the ~101 Blender 5.2 shader nodes** by auto-routing
-unmapped node trees through the Cycles reader (`Blender-first materials:
-auto-route Blender node trees to the Cycles reader`).
+grew from 36 to **42 mapped + 32 approx of the 102 `ShaderNode*` types registered
+by Blender 5.2.1** (remaining warn-tier nodes emit a warning + neutral fallback)
+by auto-routing unmapped node trees through the Cycles reader. The authoritative,
+type-by-type audit — including the denominator definition — is
+`doc/cycles_node_coverage.md`.
 
 **Added mappings** (commit `Cycles node reader: ...` and follow-ups):
 
@@ -32,7 +34,10 @@ auto-route Blender node trees to the Cycles reader`).
 | Subsurface Scattering | Disney `subsurface` | approximation (no BSSRDF) |
 | Attribute (generic/named) | `hitpointvertexaov` / `hitpointtriangleaov` / `hitpointcolor` | GN "Store Named Attribute" output and hand-authored `mesh.attributes`: scalar float/int/bool → vertex or triangle AOV, vector/float2 → extra color layer. Fac/Color/Vector outputs resolved; edge-domain and string attributes warn |
 
-**Validation:** exported SDL parses + renders; coverage measured at 71/101.
+**Validation:** exported SDL parses + renders; coverage measured at
+42 mapped + 32 approx + 8 warn-fallback of 102 registered node types
+(`dev-tools/cycles_node_coverage_test.py` non-rendering audit +
+`dev-tools/e23_cycles_compat_e2e_test.py` headless render).
 Remaining unmapped: Sky/Environment (material context), PointDensity,
 RayPortal — tracked on the roadmap. VectorRotate/VectorTransform are
 mapped for constant transforms; texture-driven axes warn.
@@ -198,27 +203,23 @@ gradients on CPU and Metal/OpenCL.
   deltas at ~30% of full-export time (measured on export-stage
   timings, not render wall time).
 
-## UX — Quick Setup + viewport stability
+## UX — viewport stability
 
-- Corona-style **Quick Setup**: a quality slider + denoise toggle; caustics
-  auto-enabled when the scene has glass; progressive caustics refinement.
-- **Automatic light strategy** (`light_strategy = "AUTO"`, the default):
+- **Automatic light strategy** (`light_strategy = "AUTO"`, opt-in):
   counts scene emitters — light objects, the world background, and
   emissive meshes weighted by polygon count — and picks ReSTIR DI above
   `AUTO_LIGHT_STRATEGY_EMITTER_THRESHOLD` (16) on engines that support it,
   log-power sampling otherwise. Explicit strategy choices always win.
-- **Auto clamp**: once an unclamped render has produced a suggested clamp
-  value, subsequent renders apply it automatically. Manual "Clamp Output"
-  takes precedence.
-- **Auto device selection** (`config.device = "AUTO"`, the default): uses
+- **Auto clamp** (`auto_clamping`, opt-in): once an unclamped render has
+  produced a suggested clamp value, subsequent renders apply it
+  automatically. Manual "Clamp Output" takes precedence.
+- **Auto device selection** (`config.device = "AUTO"`, opt-in): uses
   the GPU(s) when an enabled device of the backend selected in the addon
   preferences exists, falls back to CPU otherwise. Enabled GPUs below
   4 GiB automatically run out-of-core so large scenes still fit, and get
   a capped wavefront task count (`opencl.task.count = 131072` vs the
   512K default) so the per-task buffers fit and leave headroom for the
   driver/compositor.
-- **Quality presets**: Draft / Standard / Final buttons on top of the
-  Quick Setup quality slider.
 - **ReSTIR DI visibility weighting** (`restir_visibility_enable`): exposes
   SuperLuxCore's `lightstrategy.restir.visibility.enable` — candidates' shadow
   rays steer the reservoir target. Opt-in; honest description in the

@@ -1109,10 +1109,7 @@ class ObjectCache2:
         persistent-scene delta to veto in-place DefineMesh patching
         (a proxied object must re-export through _convert_mesh_obj)."""
         config = getattr(getattr(scene, "superluxcore", None), "config", None)
-        if not getattr(config, "proxy_auto", False) and not (
-            utils.scene_analysis.wants_mesh_proxy(
-                getattr(config, "simple", None), scene)
-        ):
+        if not getattr(config, "proxy_auto", False):
             return False
         if (
             obj.type != "MESH"

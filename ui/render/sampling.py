@@ -6,7 +6,6 @@ from ...export.config import SamplingOverlap
 from bpy.types import Panel
 from bl_ui.properties_render import RenderButtonsPanel
 
-
 def calc_samples_per_pass(config):
     if config.using_tiled_path():
         return config.tile.path_sampling_aa_size**2
@@ -20,104 +19,77 @@ def calc_samples_per_pass(config):
                 return SamplingOverlap.CACHE_FRIENDLY
     return -1
 
-
-def draw_limited_prop(layout, pg, check_prop, value_prop, label, enabled=True):
-    """Cycles-style `[x] Label [value]` row aligned with property-split layouts.
-
-    The checkbox toggles the limit; the row is greyed out entirely when the
-    master switch (`enabled`, e.g. halt.enable) is off.
-    """
-    split = layout.split(factor=0.4, align=True)
-    split.active = enabled
-    row = split.row(align=True)
-    row.prop(pg, check_prop, text="")
-    row.label(text=label)
-    sub = split.row(align=True)
-    sub.active = enabled and getattr(pg, check_prop)
-    sub.prop(pg, value_prop, text="")
-
-
 class SUPERLUXCORE_RENDER_PT_sampling(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_label = "Sampling"
-    bl_order = 10
-
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 25
+    
     def draw_header(self, context):
         layout = self.layout
-        layout.label(text="", icon_value=icon_manager.get_icon_id("logotype"))
+        layout.label(text="", icon_value= icon_manager.get_icon_id("logotype"))
 
     def draw(self, context):
         layout = self.layout
 
         config = context.scene.superluxcore.config
-        halt = context.scene.superluxcore.halt
         sampler = config.get_sampler()
         denoiser = context.scene.superluxcore.denoiser
 
         layout.use_property_split = True
         layout.use_property_decorate = False
-
-        # Render length controls (Cycles-style: the numbers artists reach
-        # for first). Details live in the "Stop Conditions" subpanel.
-        col = layout.column(align=True)
-        draw_limited_prop(col, halt, "use_samples", "samples",
-                         "Render Samples", enabled=halt.enable)
-        draw_limited_prop(col, halt, "use_noise_thresh", "noise_thresh",
-                         "Noise Threshold", enabled=halt.enable)
-        draw_limited_prop(col, halt, "use_time", "time",
-                         "Time Limit (s)", enabled=halt.enable)
-        if not halt.enable:
-            layout.label(
-                text="Renders until stopped (enable Stop Conditions below)",
-                icon=icons.INFO,
-            )
-
+        
         # Tiled path
         if config.engine == "PATH":
             layout.prop(config, "use_tiles")
-
+            
         if config.using_tiled_path():
-            layout.label(text="Tiled path uses its own sampler", icon=icons.INFO)
-
+            row = layout.row()
+            row.label(text="Tiled path uses special sampler", icon=icons.INFO)
+            
             col = layout.column(align=True)
             col.prop(config.tile, "size")
             col.prop(config.tile, "path_sampling_aa_size")
 
             if utils.use_two_tiled_passes(context.scene):
-                layout.label(
-                    text="(Doubling amount of samples because of denoiser)",
-                    icon=icons.INFO,
-                )
+                layout.label(text="(Doubling amount of samples because of denoiser)")
         else:
             # Not tiled, regular sampling
+            row = layout.row()
+            
             if config.effective_device() == "OCL" and config.engine == "PATH":
-                layout.prop(config, "sampler_gpu")
+                row.prop(config, "sampler_gpu")
             else:
-                layout.prop(config, "sampler")
+                row.prop(config, "sampler")
 
             if sampler in ["SOBOL", "RANDOM", "PMJ02"]:
                 col = layout.column()
                 col.active = not config.using_out_of_core()
                 col.prop(config, "sampler_pattern")
+                
+                if config.effective_device() == "OCL":
+                    col = layout.column()
+                    col.prop(config, "out_of_core")
+                    if config.out_of_core:
+                        col.prop(config, "out_of_core_mode")
+                    if config.using_out_of_core():
+                        col.prop(config, "out_of_core_supersampling")
             elif sampler == "METROPOLIS":
                 if denoiser.enabled and denoiser.type == "BCD":
-                    layout.label(
-                        text="Can lead to artifacts in the denoiser!",
-                        icon=icons.WARNING,
-                    )
+                    layout.label(text="Can lead to artifacts in the denoiser!", icon=icons.WARNING)
 
                 col = layout.column(align=True)
                 col.prop(config, "metropolis_largesteprate", slider=True)
                 col.prop(config, "metropolis_maxconsecutivereject")
                 col.prop(config, "metropolis_imagemutationrate", slider=True)
-
+        
         # Samples (per pixel) per pass info
+        
         samples_per_pass = calc_samples_per_pass(config)
         if samples_per_pass != -1:
             row = layout.row()
             row.alignment = "RIGHT"
             row.label(text=f"Samples per Pass: {samples_per_pass}")
-
 
 class SUPERLUXCORE_RENDER_PT_sampling_tiled_multipass(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
@@ -127,9 +99,6 @@ class SUPERLUXCORE_RENDER_PT_sampling_tiled_multipass(RenderButtonsPanel, Panel)
 
     @classmethod
     def poll(cls, context):
-        simple = context.scene.superluxcore.config.simple
-        if simple.enabled and not simple.show_advanced:
-            return False
         config = context.scene.superluxcore.config
         return config.using_tiled_path()
 
@@ -152,18 +121,14 @@ class SUPERLUXCORE_RENDER_PT_sampling_tiled_multipass(RenderButtonsPanel, Panel)
         col.prop(config.tile, "multipass_convtest_threshold_reduction")
         col.prop(config.tile, "multipass_convtest_warmup")
 
-
 class SUPERLUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_parent_id = "SUPERLUXCORE_RENDER_PT_sampling"
     bl_label = "Adaptive Sampling"
     bl_options = {'DEFAULT_CLOSED'}
-
+    
     @classmethod
     def poll(cls, context):
-        simple = context.scene.superluxcore.config.simple
-        if simple.enabled and not simple.show_advanced:
-            return False
         config = context.scene.superluxcore.config
         return config.get_sampler() in {"SOBOL", "RANDOM", "PMJ02"} and not config.using_tiled_path()
 
@@ -173,7 +138,7 @@ class SUPERLUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
 
         layout.use_property_split = True
         layout.use_property_decorate = False
-
+        
         col = layout.column(align=True)
         col.prop(config, "sobol_adaptive_strength", slider=True)
 
@@ -192,7 +157,6 @@ class SUPERLUXCORE_RENDER_PT_sampling_adaptivity(RenderButtonsPanel, Panel):
                 sub.prop(config, "sobol_adaptive_relerr", slider=True)
             col.prop(config.noise_estimation, "warmup")
             col.prop(config.noise_estimation, "step")
-
 
 class SUPERLUXCORE_RENDER_PT_sampling_pixel_filtering(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
@@ -237,7 +201,6 @@ class SUPERLUXCORE_RENDER_PT_sampling_pixel_filtering(RenderButtonsPanel, Panel)
         elif config.filter == "SINC":
             layout.prop(config, "sinc_tau")
 
-
 class SUPERLUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_parent_id = "SUPERLUXCORE_RENDER_PT_sampling"
@@ -250,9 +213,68 @@ class SUPERLUXCORE_RENDER_PT_sampling_advanced(RenderButtonsPanel, Panel):
 
         layout.use_property_split = True
         layout.use_property_decorate = False
-
+        
         # Seed settings
-        row = layout.row(align=True)
+        row = layout.row(align=True)      
         row.active = not config.use_animated_seed
         row.prop(config, "seed")
         row.prop(config, "use_animated_seed", text="", icon="TIME", toggle=True)
+        
+        # Light strategy
+        col = layout.column()
+        if config.dls_cache.enabled:
+            col.label(text="Using direct light sampling cache", icon=icons.INFO)
+            col = layout.column()
+            col.active = False
+        
+        col.prop(config, "light_strategy")
+
+        if config.light_strategy == "RESTIR_DI":
+            col.prop(config, "restir_temporal_enable")
+            col.prop(config, "restir_spatial_enable")
+            col.prop(config, "restir_visibility_enable")
+            col.prop(config, "restir_candidates")
+
+        col.prop(config, "restir_gi_enable")
+        if config.restir_gi_enable:
+            col.prop(config, "restir_gi_temporal_enable")
+            col.prop(config, "restir_gi_spatial_enable")
+            col.prop(config, "restir_gi_candidates")
+
+        col.prop(config, "mnee_enable")
+        if config.mnee_enable:
+            col.prop(config, "mnee_maxspecular")
+            col.prop(config, "mnee_maxiterations")
+            col.prop(config, "mnee_seedcache")
+
+        col.prop(config, "guiding_enable")
+        if config.guiding_enable:
+            # Optional warm-start table; empty trains inline (GPU engines
+            # refine it through the record drain loop)
+            col.prop(config, "guiding_tablefile")
+            col.prop(config, "guiding_savetable")
+            col.prop(config, "guiding_strength")
+            # RIS product guiding: resample K mixture candidates against
+            # f*cos*Lhat (0 = plain one-sample mixture)
+            col.prop(config, "guiding_ris_k")
+            # P5 gates: which bounces the guide may steer
+            col.prop(config, "guiding_min_depth")
+            col.prop(config, "guiding_glossy_threshold")
+            col.prop(config, "guiding_diffuse")
+            # P5 tree/fit knobs: field granularity and training cadence
+            col.prop(config, "guiding_warmup")
+            col.prop(config, "guiding_components")
+            col.prop(config, "guiding_split")
+            col.prop(config, "guiding_max_depth")
+            col.prop(config, "guiding_max_leaves")
+            col.prop(config, "guiding_swaprecords")
+            col.prop(config, "guiding_freeze")
+            col.prop(config, "guiding_debug")
+
+        if config.engine == "PATH":
+            # Light portals (M5): caps the aperture-proposal share; only
+            # takes effect when a mesh object is flagged "Light Portal"
+            # (object properties). Works with or without guiding - the
+            # adaptive share falls back to this fixed value.
+            col.prop(config, "portal_weight")
+            col.prop(config, "spectral_enable")

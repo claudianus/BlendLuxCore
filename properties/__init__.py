@@ -90,7 +90,6 @@ classes = (
     config.SuperLuxCoreConfigEnvLightCache,
     config.SuperLuxCoreConfigNoiseEstimation,
     config.SuperLuxCoreConfigImageResizePolicy,
-    config.SuperLuxCoreConfigSimple,
     config.SuperLuxCoreConfig,
     debug.SuperLuxCoreDebugSettings,
     denoiser.SuperLuxCoreDenoiser,

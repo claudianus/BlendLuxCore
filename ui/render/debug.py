@@ -12,9 +12,7 @@ class SUPERLUXCORE_RENDER_PT_debug_settings(RenderButtonsPanel, Panel):
     def poll(cls, context):
         if context.scene.render.engine != "SUPERLUXCORE":
             return False
-        # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.superluxcore.config.simple
-        return (not simple.enabled) or simple.show_advanced and context.scene.superluxcore.debug.show
+        return context.scene.superluxcore.debug.show
 
     def draw_header(self, context):
         self.layout.label(text="", icon="CONSOLE")

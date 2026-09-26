@@ -10,26 +10,10 @@ def convert(scene):
 
     halt = utils.get_halt_conditions(scene)
     config = scene.superluxcore.config
-    simple = config.simple
     using_hybridbackforward = utils.using_hybridbackforward(scene)
     using_only_lighttracing = config.using_only_lighttracing()
 
-    if simple.enabled:
-        # Quick Setup derives the stop conditions from the quality
-        # slider. Read the mapping directly here: the temporary property
-        # writes of config.convert() are already restored by the time
-        # this converter runs, so mutating halt.* there never lands.
-        m = simple.quality_map()
-        halt_time = simple.time_limit * 60 if simple.time_limit > 0 else 0
-        halt_spp_eye = m["halt_samples"]
-        halt_spp_light = 0
-        noise_thresh = max(m["noise_thresh"] / 256, SMALLEST_NOISE_THRESH)
-        definitions["batch.haltthreshold"] = noise_thresh
-        definitions["batch.haltthreshold.warmup"] = halt.noise_thresh_warmup
-        definitions["batch.haltthreshold.step"] = halt.noise_thresh_step
-        definitions["batch.haltthreshold.filter.enable"] = True
-        definitions["batch.haltthreshold.stoprendering.enable"] = True
-    elif halt.enable:
+    if halt.enable:
         halt_time = halt.time if halt.use_time else 0
         halt_spp_eye = halt.samples if halt.use_samples else 0
         halt_spp_light = halt.light_samples if (halt.use_light_samples

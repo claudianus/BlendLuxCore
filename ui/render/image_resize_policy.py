@@ -3,18 +3,16 @@ from bl_ui.properties_render import RenderButtonsPanel
 from bpy.types import Panel
 
 class SUPERLUXCORE_RENDER_PT_image_resize_policy(Panel, RenderButtonsPanel):
-    bl_label = "Image Resolution"
+    bl_label = "Image Scaling"
     COMPAT_ENGINES = {"SUPERLUXCORE"}
     bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "SUPERLUXCORE_RENDER_PT_devices"
+    bl_order = 75
 
     @classmethod
     def poll(cls, context):
         if context.scene.render.engine != "SUPERLUXCORE":
             return False
-        # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.superluxcore.config.simple
-        return (not simple.enabled) or simple.show_advanced
+        return True
 
     def draw_header(self, context):
         layout = self.layout
@@ -33,3 +31,10 @@ class SUPERLUXCORE_RENDER_PT_image_resize_policy(Panel, RenderButtonsPanel):
         layout.prop(resize_policy, "type")
         layout.prop(resize_policy, "scale")
         layout.prop(resize_policy, "min_size")
+
+        layout.separator()
+        mem_col = layout.column()
+        mem_col.active = True
+        mem_col.prop(
+            context.scene.superluxcore.config, "free_blender_image_buffers"
+        )

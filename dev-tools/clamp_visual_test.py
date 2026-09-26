@@ -158,7 +158,6 @@ def build_scene():
     scene.superluxcore.config.engine = "PATH"
     scene.superluxcore.config.sampler = "SOBOL"
     # Fixed sample budget so both images are directly comparable
-    scene.superluxcore.config.simple.enabled = False
     halt = scene.superluxcore.halt
     halt.enable = True
     halt.use_time = False

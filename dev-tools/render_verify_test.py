@@ -101,8 +101,8 @@ def main():
     b1.rotation_euler[2] = 0.4
     cube("box2", (0.7, 1.1, 0.35), (0.35, 0.35, 0.35), glossy)
 
-    # Glass sphere: Quick Setup's scene scan must auto-enable the
-    # caustics cache for the refractive caustic under it.
+    # Glass sphere: exercises the refractive caustic path (caustics
+    # cache can be enabled via Render > Caches if needed).
     bpy.ops.mesh.primitive_uv_sphere_add(radius=0.45,
                                          location=(-0.55, 0.35, 0.45))
     sphere = bpy.context.active_object
@@ -122,6 +122,8 @@ def main():
     direction = mathutils.Vector((0, 1.6, 1.0)) - cam.location
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
+    # Fixed exposure for a dim emission light: auto-brightness is opt-in
+    cam.data.superluxcore.imagepipeline.tonemapper.use_autolinear = True
 
     # Render settings: SuperLuxCore, 720p
     scene.render.engine = "SUPERLUXCORE"
@@ -133,19 +135,17 @@ def main():
 
     scene.superluxcore.config.engine = "PATH"
     scene.superluxcore.config.sampler = "SOBOL"
-    # Drive the render through the Quick Setup controls themselves:
-    # quality 0.8 -> ~512spp cap, noise 3/256, clamp off (keeps caustic
-    # brightness), guiding on; 2-minute sampling budget (kernel compile
-    # and photon passes don't count against it).
-    simple = scene.superluxcore.config.simple
-    simple.quality = 0.8
-    simple.time_limit = 2
+    # ~512spp cap plus a convergence stop and a 2-minute sampling
+    # budget (kernel compile and photon passes don't count against it)
+    halt = scene.superluxcore.halt
+    halt.enable = True
+    halt.use_samples = True
+    halt.samples = 512
+    halt.use_time = True
+    halt.time = 120
+    halt.use_noise_thresh = True
+    halt.noise_thresh = 3
 
-    from bl_ext.user_default.superluxcore.utils import scene_analysis
-    print("[Verify] profile:", scene_analysis.analyze_scene(scene))
-    simple = scene.superluxcore.config.simple
-    print("[Verify] simple:", {k: getattr(simple, k) for k in
-          ("enabled", "quality", "denoise", "detect_features")})
     print("[Verify] Rendering 1280x720 ...")
     bpy.ops.render.render(write_still=True)
     print("[Verify] Saved:", OUT)

@@ -8,17 +8,15 @@ from ...properties.denoiser import SuperLuxCoreDenoiser
 
 class SUPERLUXCORE_RENDER_PT_denoiser(RenderButtonsPanel, Panel):
     COMPAT_ENGINES = {"SUPERLUXCORE"}
-    bl_label = "Denoise"
+    bl_label = "Denoiser"
     bl_options = {'DEFAULT_CLOSED'}
-    bl_parent_id = "SUPERLUXCORE_RENDER_PT_sampling"
+    bl_order = 60
 
     @classmethod
     def poll(cls, context):
         if context.scene.render.engine != "SUPERLUXCORE":
             return False
-        # Quick Setup: hide advanced panels unless explicitly shown
-        simple = context.scene.superluxcore.config.simple
-        return (not simple.enabled) or simple.show_advanced
+        return True
 
     def draw_header(self, context):
         layout = self.layout

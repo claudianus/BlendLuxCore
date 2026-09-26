@@ -14,23 +14,23 @@ This addon integrates the SuperLuxCore render engine into Blender. It offers adv
 
 ## Supported Blender Versions
 
-* SuperLuxCore v2.10.x supports Blender versions 4.2LTS and 4.3.
-* Support for Blender 4.4+ is experimental and not recommended for production use!
+* This fork targets **Blender 5.2.x LTS** (developed/tested on 5.2.1, Python 3.13).
 * Supported platforms are Windows, Linux, MacOS Intel, MacOS ARM
 
-**Previous SuperLuxCore releases:**
-* Blender 2.93 is supported by SuperLuxCore v2.6.
-* Blender 2.83-2.92 are supported by SuperLuxCore v2.5.
-* Blender 2.83 is supported by SuperLuxCore v2.4.
-* Blender 2.80, 2.81 and 2.82 are supported by SuperLuxCore v2.2 and v2.3.  
-* Blender 2.79 is supported by SuperLuxCore v2.0, v2.1 and v2.2.
+**Previous upstream (BlendLuxCore) releases:**
+* Blender 4.2 LTS/4.3 by v2.10.x (4.4+ was experimental upstream)
+* Blender 2.93 is supported by BlendLuxCore v2.6.
+* Blender 2.83-2.92 are supported by BlendLuxCore v2.5.
+* Blender 2.83 is supported by BlendLuxCore v2.4.
+* Blender 2.80, 2.81 and 2.82 are supported by BlendLuxCore v2.2 and v2.3.  
+* Blender 2.79 is supported by BlendLuxCore v2.0, v2.1 and v2.2.
 Supported platforms are Windows, Linux, MacOS Intel
 
 ## Installation
 
 ### From latest release (recommended)
 
-- Find the latest suitable release of BlendLuxCrore on the release page:  
+- Find the latest suitable release of SuperBlendLuxCore on the release page:  
 https://github.com/claudianus/SuperBlendLuxCore/releases
 - Note: the release labelled "Latest" is a nightly build and may be particularly unstable even compared to alpha or beta release versions!
 - From the release assets, download extension `SuperLuxCore-*.zip`
