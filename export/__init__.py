@@ -1636,6 +1636,27 @@ class Exporter(object):
         if changes & Change.HALT:
             session.Parse(self.halt_cache.props)
 
+    def get_restart_config_props(self):
+        """Complete config props for a session restart on the exported scene.
+
+        The caches split change granularity: config_cache alone lacks the
+        film.imagepipelines.* and batch.halt* props merged into the
+        original session's RenderConfig. Restarting from config_cache
+        alone creates a film with an empty imagepipeline, so the
+        RGB_IMAGEPIPELINE output is raw HDR radiance - a solid white
+        viewport (no tonemapping) until the next full re-export.
+        """
+        base = self.config_cache.props
+        if base is None or isinstance(base, str):
+            # No usable props yet (export never ran or the last diff was
+            # string-only): let the caller's error path rebuild instead.
+            return base
+        props = pysuperluxcore.Properties(base)
+        for cache in (self.imagepipeline_cache, self.halt_cache):
+            if cache.props is not None:
+                props.Set(cache.props)
+        return props
+
     def _update_scene(self, depsgraph, context, changes, superluxcore_scene):
         props = pysuperluxcore.Properties()
 

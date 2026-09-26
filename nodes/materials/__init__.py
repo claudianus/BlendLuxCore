@@ -7,6 +7,7 @@ from ... import utils
 from . import (
     carpaint,
     cloth,
+    diffraction,
     disney,
     emission,
     frontbackopacity,
@@ -38,6 +39,7 @@ if _needs_reload:
     modules = (
         carpaint,
         cloth,
+        diffraction,
         disney,
         emission,
         frontbackopacity,
@@ -67,6 +69,7 @@ classes = (
     cloth.SuperLuxCoreSocketRepeatU,
     cloth.SuperLuxCoreSocketRepeatV,
     cloth.SuperLuxCoreNodeMatCloth,
+    diffraction.SuperLuxCoreNodeMatDiffraction,
     disney.SuperLuxCoreNodeMatDisney,
     frontbackopacity.SuperLuxCoreNodeMatFrontBackOpacity,
     glass.SuperLuxCoreSocketCauchyC,

@@ -7,7 +7,7 @@ class SuperLuxCoreDisplaySettings(bpy.types.PropertyGroup):
     paused = False
     stop_requested = False
 
-    interval: IntProperty(name="Refresh Interval (s)", default=10, min=5,
+    interval: IntProperty(name="Refresh Interval (s)", default=10, min=1,
                            description="Time between film refreshes, in seconds")
 
     show_converged: BoolProperty(name="Highlight Converged Tiles", default=True,

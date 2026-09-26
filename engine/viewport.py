@@ -250,7 +250,7 @@ def view_update(engine, context, depsgraph, changes=None):
     # no scene re-export. Runs on the worker; the framebuffer keeps the
     # last frame until the new session produces samples (begin_reset).
     if changes & export.Change.CONFIG:
-        worker.submit_config(engine.exporter.config_cache.props)
+        worker.submit_config(engine.exporter.get_restart_config_props())
         changes &= ~export.Change.CONFIG
         if engine.framebuffer:
             engine.framebuffer.begin_reset(engine=engine)
@@ -377,7 +377,7 @@ def view_draw(engine, context, depsgraph):
         # the worker rebuilds the RenderConfig on the existing scene. The
         # framebuffer keeps the last image on screen (begin_reset), so the
         # user sees the resized old frame instead of a black flash.
-        worker.submit_config(engine.exporter.config_cache.props)
+        worker.submit_config(engine.exporter.get_restart_config_props())
         changes &= ~export.Change.CONFIG
         engine.viewport_start_time = time()
         framebuffer.begin_reset(engine=engine)

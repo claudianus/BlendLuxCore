@@ -59,7 +59,11 @@ def _fetch_pixels(output_type, width, height, transparent,
     FrameBuffer alive: GL objects must die on the main thread."""
     bufferdepth = 4 if transparent else 3
     size = width * height * bufferdepth
-    data = np.empty(size, dtype=np.float32)
+    # Zeros, not np.empty: GetOutputFloat early-returns without touching
+    # the buffer when the channel does not exist (e.g. a restarted film
+    # without imagepipelines). Garbage here would bypass the empty-film
+    # gate in _accept_pixels and upload as a white viewport.
+    data = np.zeros(size, dtype=np.float32)
     seq = None
     if lock is None:
         superluxcore_session.GetFilm().GetOutputFloat(
@@ -124,8 +128,15 @@ class FrameBuffer:
             else pysuperluxcore.FilmOutputType.RGB_IMAGEPIPELINE
         )
 
+        # Explicit zero init: an uninitialized FLOAT buffer reads as
+        # garbage (often white) when drawn before the first film upload.
         self.buffer = gpu.types.Buffer(
-            "FLOAT", [self._width * self._height * bufferdepth]
+            "FLOAT",
+            [self._width * self._height * bufferdepth],
+            np.zeros(
+                self._width * self._height * bufferdepth,
+                dtype=np.float32,
+            ),
         )
         self._init_opengl()
 

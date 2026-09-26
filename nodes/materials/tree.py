@@ -84,6 +84,7 @@ superluxcore_node_categories_material = [
             ),
             NodeItem("SuperLuxCoreNodeMatMetal", label="Metal"),
             NodeItem("SuperLuxCoreNodeMatMirror", label="Mirror"),
+            NodeItem("SuperLuxCoreNodeMatDiffraction", label="Diffraction (CD)"),
             NodeItem("SuperLuxCoreNodeMatGlossy2", label="Glossy"),
             NodeItem(
                 "SuperLuxCoreNodeMatGlossyTranslucent", label="Glossy Translucent"
