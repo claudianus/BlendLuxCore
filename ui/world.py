@@ -93,6 +93,7 @@ class SUPERLUXCORE_PT_context_world(WorldButtonsPanel, Panel):
             col.prop_search(world.superluxcore, "lightgroup",
                             lightgroups, "custom",
                             icon=icons.LIGHTGROUP, text="")
+            col.prop(world.superluxcore, "link_groups", icon=icons.LIGHTGROUP)
 
 
 class SUPERLUXCORE_WORLD_PT_sky2(WorldButtonsPanel, Panel):

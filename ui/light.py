@@ -222,6 +222,7 @@ class SUPERLUXCORE_LIGHT_PT_context_light(DataButtonsPanel, Panel):
         col.prop_search(light.superluxcore, "lightgroup",
                         lightgroups, "custom",
                         icon=icons.LIGHTGROUP, text="")
+        col.prop(light.superluxcore, "link_groups", icon=icons.LIGHTGROUP)
 
 
 def draw_envlight_cache_ui(layout, scene, light_or_world):

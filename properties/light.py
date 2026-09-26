@@ -54,6 +54,15 @@ class SuperLuxCoreLightProps(bpy.types.PropertyGroup):
                                    description=RGB_GAIN_DESC)
     importance: FloatProperty(name="Importance", default=1, min=0, description=IMPORTANCE_DESCRIPTION)
     lightgroup: StringProperty(name="Light Group", description=LIGHTGROUP_DESC)
+    link_groups: StringProperty(
+        name="Light Link Groups",
+        default="",
+        description=(
+            "Comma-separated light link group names (e.g. 'key,fill'). This light "
+            "only illuminates objects sharing at least one group. Leave empty for "
+            "a global light that illuminates everything. Direct illumination only"
+        ),
+    )
     temperature: FloatProperty(name="Temperature", default=6500, min=0, soft_max=13000, step=100, precision=0,
                                description="Blackbody Temperature in Kelvin")
     color_modes = [

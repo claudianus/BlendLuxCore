@@ -34,11 +34,14 @@ class ExportedData:
 
 
 class ExportedObject(ExportedData):
-    def __init__(self, lux_name_base, mesh_definitions, mat_names, transform, visible_to_camera, obj_id=-1):
+    def __init__(self, lux_name_base, mesh_definitions, mat_names, transform, visible_to_camera, obj_id=-1,
+                 link_groups="", link_mode="include"):
         self.transform = transform
         self.parts = []
         self.visible_to_camera = visible_to_camera
         self.obj_id = obj_id
+        self.link_groups = link_groups
+        self.link_mode = link_mode
         # Number of "dupli" objects spawned per part (point cloud instancing)
         self.duplicate_count = 0
         # Point cloud records: per-step matrices/motion buffers collected by
@@ -70,6 +73,12 @@ class ExportedObject(ExportedData):
         # entry is a dict {"mesh", "kind", "sig", "space_matrix",
         # "wrapped"} consumed by motion_blur's per-step strand sampler.
         self.strand_recs = []
+        # link_groups accepts either the manual UI string (emitted
+        # verbatim with link_mode) or a Cycles-plan tuple of accept-group
+        # names (emitted comma-joined, linkmode=include). The Cycles plan
+        # is authoritative for receiver members; objects it does not
+        # cover keep the manual UI values. See
+        # cycles_compat.light_link_plan.
 
         for (shape_name, mat_index), mat_name in zip(mesh_definitions, mat_names):
             obj_name = lux_name_base + str(mat_index)
@@ -92,6 +101,15 @@ class ExportedObject(ExportedData):
             definitions[part.lux_obj + ".camerainvisible"] = not self.visible_to_camera
             if self.obj_id != -1:
                 definitions[part.lux_obj + ".id"] = self.obj_id
+            if self.link_groups:
+                if isinstance(self.link_groups, str):
+                    definitions[part.lux_obj + ".linkgroups"] = self.link_groups
+                    if self.link_mode == "exclude":
+                        definitions[part.lux_obj + ".linkmode"] = "exclude"
+                else:
+                    definitions[part.lux_obj + ".linkgroups"] = \
+                        ",".join(self.link_groups)
+                    definitions[part.lux_obj + ".linkmode"] = "include"
 
             if self.transform:
                 definitions[part.lux_obj + ".transformation"] = utils.luxutils.matrix_to_list(self.transform)

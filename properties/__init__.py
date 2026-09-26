@@ -98,6 +98,7 @@ classes = (
     display.SuperLuxCoreDisplaySettings,
     hair.SuperLuxCoreParticlesProps,
     halt.SuperLuxCoreHaltConditions,
+    halt.SuperLuxCoreViewLayerHaltConditions,
     ies.SuperLuxCoreIESProps,
     light.SuperLuxCoreLightProps,
     lightgroups.SuperLuxCoreLightGroup,

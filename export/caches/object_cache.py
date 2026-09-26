@@ -21,7 +21,9 @@ from ..hair import (
     convert_hair_curves,
 )
 from .exported_data import ExportedMesh, ExportedObject, ExportedPart
-from .. import light, material, pointcloud, volume, cycles_node_reader
+from .. import (
+    light, material, pointcloud, volume, cycles_node_reader, cycles_compat,
+)
 from ...utils.errorlog import SuperLuxCoreErrorLog
 from ...utils import node as utils_node
 from ...utils import MESH_OBJECTS
@@ -362,9 +364,16 @@ def export_material(
             exporter, depsgraph, mat, is_viewport_render, obj.name
         )
         node_tree = mat.superluxcore.node_tree
+        # Per-object Cycles shading flags (ray visibility, shadow
+        # catcher, holdout) live on the object, not the material - a
+        # cloned material variant carries them (see cycles_compat).
+        lux_mat_name = cycles_compat.apply_object_shading_flags(
+            obj, lux_mat_name, mat_props, exporter)
         return lux_mat_name, mat_props, node_tree
     else:
         lux_mat_name, mat_props = material.fallback()
+        lux_mat_name = cycles_compat.apply_object_shading_flags(
+            obj, lux_mat_name, mat_props, exporter)
         return lux_mat_name, mat_props, None
 
 
@@ -888,6 +897,8 @@ class ObjectCache2:
                                 else None,
                                 visible_to_cam,
                                 utils.make_object_id(dg_obj_instance),
+                                obj.superluxcore.link_groups,
+                                obj.superluxcore.link_mode,
                             )
                             exported_stuff.parts.append(
                                 ExportedPart(lux_shape, lux_shape, lux_mat)
@@ -1342,7 +1353,15 @@ class ObjectCache2:
                     dg_obj_instance, is_viewport_render, view_layer
                 ),
                 obj_id,
+                obj.superluxcore.link_groups,
+                obj.superluxcore.link_mode,
             )
+            # Cycles light linking: emitter groups this object accepts
+            # (see cycles_compat.light_link_plan).
+            exported_obj.link_groups = tuple(
+                cycles_compat.object_link_groups(
+                    obj, depsgraph, cycles_compat._warned_set(exporter))
+                or ())
             # Geometry-delta metadata (A6-III): the ordered base shape
             # list lets the persistent-scene delta re-DefineMesh in
             # place and the shape signature replay the wrapper chain,

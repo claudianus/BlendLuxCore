@@ -275,6 +275,77 @@ if path.bl_rna.properties["hybridbackforward_enable"].name != "Light Tracing":
     fail("hybridbackforward_enable label changed unexpectedly")
 
 
+# --- 3b) optimal defaults (artist-first: good renders out of the box) ---------
+def _pg_default(pg, prop_name):
+    prop = pg.bl_rna.properties.get(prop_name)
+    if prop is None:
+        fail(f"{type(pg).__name__}.{prop_name} not in RNA")
+        return None
+    return prop.default
+
+
+cam = bpy.data.cameras.new("UXTestCam") if not bpy.data.cameras \
+    else bpy.data.cameras[0]
+light_data = bpy.data.lights.new("UXTestLight", type="POINT")
+world = scene.world if scene.world else bpy.data.worlds.new("UXTestWorld")
+view_layer_0 = scene.view_layers[0]
+
+DEFAULT_CHECKS = [
+    # Quick Setup is the front door (Corona-style quality slider)
+    (sl.config.simple, "enabled", True),
+    (sl.config.simple, "denoise", True),
+    # Pixel filtering: Blackman-Harris AA costs nothing
+    (config, "filter_enabled", True),
+    (config, "filter", "BLACKMANHARRIS"),
+    # Path guiding on by default (matches Quick Setup Standard profile)
+    (config, "guiding_enable", True),
+    # Per-frame seeds: independent noise for animation/temporal denoise
+    (config, "use_animated_seed", True),
+    # Filesaver: single binary .bcf beats multi-file text
+    (config, "filesaver_format", "BIN"),
+    # Memory safety nets: no-op on small scenes, save big ones from OOM
+    (config, "spill_geometry", True),
+    (config, "spill_images", True),
+    (config.image_resize_policy, "enabled", True),
+    (config.image_resize_policy, "type", "MINMEM"),
+    # Viewport: fast RT path engine by default
+    (sl.viewport, "use_bidir", False),
+    (sl.viewport, "add_light_tracing", False),
+    (sl.viewport, "use_denoiser", True),
+    (sl.viewport, "denoise_interactive", True),
+    # First render looks right: auto exposure
+    (cam.superluxcore.imagepipeline.tonemapper, "use_autolinear", True),
+    # Cycles-compatible authoring surfaces by default
+    (world.superluxcore, "use_cycles_settings", True),
+    (light_data.superluxcore, "use_cycles_settings", True),
+    # Standard 180-degree shutter when motion blur is enabled
+    (cam.superluxcore.motion_blur, "shutter", 0.5),
+    # Stop conditions: scene on (renders terminate), view-layer
+    # override off (opt-in; a default-on layer halt silently replaced
+    # every global setting, e.g. batch.halttime never reached the engine)
+    (sl.halt, "enable", True),
+    (view_layer_0.superluxcore.halt, "enable", False),
+]
+for pg, prop_name, want in DEFAULT_CHECKS:
+    got = _pg_default(pg, prop_name)
+    if got is not None and got != want:
+        fail(f"default {type(pg).__name__}.{prop_name} = {got!r}, "
+             f"expected {want!r}")
+
+
+# --- 3c) halt source selection: layer override is opt-in ----------------------
+import importlib
+slx = importlib.import_module(EXT_MODULE)
+slx.utils.view_layer.State.active_view_layer = view_layer_0.name
+if slx.utils.get_halt_conditions(scene) != sl.halt:
+    fail("get_halt_conditions ignored scene halt despite override off")
+view_layer_0.superluxcore.halt.enable = True
+if slx.utils.get_halt_conditions(scene) != view_layer_0.superluxcore.halt:
+    fail("get_halt_conditions ignored enabled view-layer override")
+view_layer_0.superluxcore.halt.enable = False
+slx.utils.view_layer.State.active_view_layer = ""
+
+
 # --- 4) poll() smoke on the reorganised panels -------------------------------
 ctx = bpy.context
 for name in EXPECTED_RENDER_PANELS:

@@ -37,6 +37,13 @@ class SUPERLUXCORE_OBJECT_PT_object(ObjectButtonsPanel, Panel):
         if obj.type == "MESH":
             col.prop(obj.superluxcore, "is_light_portal")
 
+        # Light linking: restrict which grouped lights illuminate this object
+        box = layout.box()
+        box.label(text="Light Linking", icon=icons.LIGHTGROUP)
+        box.prop(obj.superluxcore, "link_groups")
+        if obj.superluxcore.link_groups:
+            box.prop(obj.superluxcore, "link_mode")
+
         # Motion blur settings
         cam = context.scene.camera
         if cam:

@@ -4,7 +4,7 @@ from . import aovs, halt
 
 class SuperLuxCoreViewLayer(bpy.types.PropertyGroup):
     aovs: PointerProperty(type=aovs.SuperLuxCoreAOVSettings)
-    halt: PointerProperty(type=halt.SuperLuxCoreHaltConditions)
+    halt: PointerProperty(type=halt.SuperLuxCoreViewLayerHaltConditions)
 
     @classmethod
     def register(cls):

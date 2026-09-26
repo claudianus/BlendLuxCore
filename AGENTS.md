@@ -34,6 +34,20 @@
 - `opencl.devices.select` is stripped before serializing: the child
   enumerates devices itself and a mismatched-length selection aborts.
 
+## Stop conditions (halt)
+
+- `utils.get_halt_conditions(scene)` returns the halt of the view layer
+  named by `utils.view_layer.State.active_view_layer` ONLY when that
+  layer's `halt.enable` is set; outside an export (state `""`) it always
+  returns the scene halt. Layer overrides are opt-in:
+  `SuperLuxCoreViewLayerHaltConditions` (halt.py) subclasses the shared
+  group with `enable=False` — the shared class's `enable=True` default
+  once made every layer silently override global stop conditions.
+- `batch.halttime` is SAMPLING time: the engine restarts the film clock
+  after kernel compilation/thread (re)start (`RestartSampleClock()` in
+  RenderEngine::Start/EndSceneEdit), so a first-time ~100 s Metal
+  compile does not consume the user's time limit.
+
 ## Out-of-core spilling (scene.spill.*)
 
 - `config.spill_geometry` + `spill_geometry_minmb` + `spill_images`

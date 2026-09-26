@@ -114,7 +114,9 @@ def main():
     scene.superluxcore.config.sampler = "SOBOL"
     scene.superluxcore.halt.enable = True
     scene.superluxcore.halt.use_time = True
-    scene.superluxcore.halt.time = 25  # seconds cap
+    # batch.halttime measures sampling time only (the engine restarts
+    # the clock after kernel compilation), so this is a real budget
+    scene.superluxcore.halt.time = 60
 
     print("[Verify] Rendering 1280x720 ...")
     bpy.ops.render.render(write_still=True)

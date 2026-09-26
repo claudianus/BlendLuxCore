@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import PointerProperty, BoolProperty, FloatProperty, IntProperty, StringProperty
+from bpy.props import PointerProperty, BoolProperty, FloatProperty, IntProperty, StringProperty, EnumProperty
 from bpy.types import PropertyGroup
 from .hair import SuperLuxCoreHair
 
@@ -33,6 +33,16 @@ DESC_LIGHT_PORTAL = (
     "without blocking light. Requires Path Guiding enabled (the learned field decides "
     "how much each bounce trusts the portal). CPU engines only"
 )
+DESC_LINK_GROUPS = (
+    "Comma-separated light link group names (e.g. 'key,fill'). A light with at "
+    "least one matching group illuminates this object; lights without groups "
+    "always illuminate everything. Direct illumination only - indirect bounces "
+    "are not filtered. Leave empty to accept all lights"
+)
+DESC_LINK_MODE = (
+    "Include: the object is lit by lights sharing a listed group. "
+    "Exclude: the object is lit by everything EXCEPT lights sharing a listed group"
+)
 
 
 class SuperLuxCoreObjectProps(PropertyGroup):
@@ -62,6 +72,20 @@ class SuperLuxCoreObjectProps(PropertyGroup):
         default="",
         subtype="FILE_PATH",
         description=DESC_MESH_PROXY,
+    )
+    link_groups: StringProperty(
+        name="Light Link Groups",
+        default="",
+        description=DESC_LINK_GROUPS,
+    )
+    link_mode: EnumProperty(
+        name="Link Mode",
+        items=[
+            ("include", "Include", "Lit by lights sharing a listed group"),
+            ("exclude", "Exclude", "Lit by everything except lights sharing a listed group"),
+        ],
+        default="include",
+        description=DESC_LINK_MODE,
     )
     hair: PointerProperty(
         name="SuperLuxCore Hair Curve Settings",

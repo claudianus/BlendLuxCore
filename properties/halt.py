@@ -71,3 +71,12 @@ class SuperLuxCoreHaltConditions(bpy.types.PropertyGroup):
 
     def is_enabled(self):
         return self.enable and (self.use_time or self.use_samples or self.use_noise_thresh)
+
+
+class SuperLuxCoreViewLayerHaltConditions(SuperLuxCoreHaltConditions):
+    # Per-view-layer override: opt-in only. When this shared the scene
+    # class's enable=True default, every view layer silently overrode
+    # the global stop conditions with stock values (e.g. a global
+    # 25 s time limit never reached the engine because the layer's
+    # use_time=False won). Off by default = layers inherit the scene.
+    enable: BoolProperty(name="Enable", default=False)

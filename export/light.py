@@ -47,11 +47,23 @@ def convert_light(exporter, obj, obj_key, depsgraph, superluxcore_scene, transfo
         prefix = "scene.lights." + superluxcore_name + "."
 
         if obj.data.superluxcore.use_cycles_settings:
-            return _convert_cycles_light(exporter, obj, depsgraph, superluxcore_scene, transform, is_viewport_render,
-                                         superluxcore_name, scene, prefix)
+            props, exported = _convert_cycles_light(
+                exporter, obj, depsgraph, superluxcore_scene, transform,
+                is_viewport_render, superluxcore_name, scene, prefix)
         else:
-            return _convert_superluxcore_light(exporter, obj, depsgraph, superluxcore_scene, transform, is_viewport_render,
-                                          superluxcore_name, scene, prefix)
+            props, exported = _convert_superluxcore_light(
+                exporter, obj, depsgraph, superluxcore_scene, transform,
+                is_viewport_render, superluxcore_name, scene, prefix)
+
+        # Cycles light linking (receiver collection) -> linkgroups mask.
+        # Engine-level property, so it applies to both light modes.
+        from . import cycles_compat
+        link_group = cycles_compat.light_linking_link_group(
+            obj, depsgraph, cycles_compat._warned_set(exporter))
+        if link_group:
+            props.Set(pysuperluxcore.Property(
+                prefix + "linkgroups", link_group))
+        return props, exported
     except Exception as error:
         msg = 'Light "%s": %s' % (obj.name, error)
         SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
@@ -224,6 +236,9 @@ def _convert_cycles_light(exporter, obj, depsgraph, superluxcore_scene, transfor
     # Cycles light settings in Blender 4.2+ no longer expose cast_shadow
     if not getattr(light.cycles, "cast_shadow", True):
         SuperLuxCoreErrorLog.add_warning("Cast Shadow is disabled, but unsupported by SuperLuxCore", obj.name)
+
+    if light.superluxcore.link_groups:
+        definitions["linkgroups"] = light.superluxcore.link_groups
 
     props = utils.luxutils.create_props(prefix, definitions)
     return props, ExportedLight(superluxcore_name)
@@ -405,6 +420,10 @@ def _convert_superluxcore_light(exporter, obj, depsgraph, superluxcore_scene, tr
             msg = f'Light "{obj.name}": {error}'
             SuperLuxCoreErrorLog.add_warning(msg, obj_name=obj.name)
 
+    if light.superluxcore.link_groups:
+        props.Set(pysuperluxcore.Property(prefix + "linkgroups",
+                                          light.superluxcore.link_groups))
+
     return props, ExportedLight(superluxcore_name)
 
 
@@ -420,6 +439,8 @@ def convert_world(exporter, world, scene, is_viewport_render):
             definitions = _convert_superluxcore_world(exporter, scene, world, is_viewport_render)
 
         if definitions:
+            if world.superluxcore.link_groups:
+                definitions["linkgroups"] = world.superluxcore.link_groups
             return utils.luxutils.create_props(prefix, definitions)
         else:
             return None
@@ -769,7 +790,8 @@ def _create_superluxcore_meshlight(obj, transform, use_instancing, superluxcore_
 
     mesh_definition = [superluxcore_name, fake_material_index]
     exported_obj = ExportedObject(superluxcore_name, [mesh_definition], ["fake_mat_name"],
-                                  transform.copy(), visible_to_camera)
+                                  transform.copy(), visible_to_camera,
+                                  link_groups=obj.data.superluxcore.link_groups)
     return obj_props, exported_obj
 
 
