@@ -1,6 +1,6 @@
 import math
 import bpy
-from bpy.props import IntProperty, BoolProperty, FloatProperty, PointerProperty, StringProperty
+from bpy.props import IntProperty, BoolProperty, FloatProperty, PointerProperty, StringProperty, EnumProperty
 from .clear import VOLUME_PRIORITY_DESC
 from ..base import LuxCoreNodeVolume, COLORDEPTH_DESC
 from ... import utils
@@ -19,6 +19,24 @@ MULTISCATTERING_DESC = (
     "Simulate multiple scattering events per ray. "
     "Makes volumes with high scattering scale appear more realistic, "
     "but leads to slower rendering performance"
+)
+
+TRACKING_DESC = (
+    "Volume integration method. Delta tracking (null-collision) is unbiased, "
+    "does not need a step size and skips empty space - faster in most scenes. "
+    "Ray marching is the legacy fixed-step method"
+)
+
+MAJORANT_RES_DESC = (
+    "Resolution of the majorant grid used to accelerate delta tracking. "
+    "Higher values bound the density field more tightly (fewer wasted "
+    "samples) at the cost of a slightly longer scene preparation"
+)
+
+PHASE_DESC = (
+    "Scattering phase function. Henyey-Greenstein is the physically exact "
+    "model for the asymmetry parameter. Schlick is a fast approximation "
+    "(legacy default) with nearly identical cost"
 )
 
 
@@ -54,6 +72,22 @@ class LuxCoreNodeVolHeterogeneous(LuxCoreNodeVolume, bpy.types.Node):
     multiscattering: BoolProperty(update=utils_node.force_viewport_update, name="Multiscattering", default=False,
                                    description=MULTISCATTERING_DESC)
 
+    tracking: EnumProperty(update=utils_node.force_viewport_update, name="Tracking", default="delta",
+                            items=[
+                                ("delta", "Delta Tracking", TRACKING_DESC),
+                                ("march", "Ray Marching (Legacy)", TRACKING_DESC),
+                            ],
+                            description=TRACKING_DESC)
+    majorant_res: IntProperty(update=utils_node.force_viewport_update, name="Majorant Resolution", default=32,
+                               min=1, soft_max=256,
+                               description=MAJORANT_RES_DESC)
+    phase: EnumProperty(update=utils_node.force_viewport_update, name="Phase Function", default="schlick",
+                         items=[
+                             ("schlick", "Schlick (Fast)", PHASE_DESC),
+                             ("hg", "Henyey-Greenstein (Exact)", PHASE_DESC),
+                         ],
+                         description=PHASE_DESC)
+
     def init(self, context):
         self.add_common_inputs()
         self.add_input("LuxCoreSocketColor", "Scattering", (1, 1, 1))
@@ -64,18 +98,23 @@ class LuxCoreNodeVolHeterogeneous(LuxCoreNodeVolume, bpy.types.Node):
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "multiscattering")
+        layout.prop(self, "phase")
 
-        layout.prop(self, "auto_step_settings")
-        if self.auto_step_settings:
-            layout.prop(self, "domain")
-
-            if self.domain and not utils.find_smoke_domain_modifier(self.domain):
-                layout.label(text="Not a smoke domain!", icon=icons.WARNING)
-            elif self.domain is None:
-                layout.label(text="Select the smoke domain object", icon=icons.WARNING)
+        layout.prop(self, "tracking")
+        if self.tracking == "delta":
+            layout.prop(self, "majorant_res")
         else:
-            layout.prop(self, "step_size")
-            layout.prop(self, "maxcount")
+            layout.prop(self, "auto_step_settings")
+            if self.auto_step_settings:
+                layout.prop(self, "domain")
+
+                if self.domain and not utils.find_smoke_domain_modifier(self.domain):
+                    layout.label(text="Not a smoke domain!", icon=icons.WARNING)
+                elif self.domain is None:
+                    layout.label(text="Select the smoke domain object", icon=icons.WARNING)
+            else:
+                layout.prop(self, "step_size")
+                layout.prop(self, "maxcount")
 
         self.draw_common_buttons(context, layout)
 
@@ -84,7 +123,15 @@ class LuxCoreNodeVolHeterogeneous(LuxCoreNodeVolume, bpy.types.Node):
             "type": "heterogeneous",
             "asymmetry": self.inputs["Asymmetry"].export(exporter, depsgraph, props),
             "multiscattering": self.multiscattering,
+            "phase": self.phase,
+            "tracking": self.tracking,
+            "majorantres": self.majorant_res,
         }
+
+        if self.tracking == "delta":
+            # Step settings are unused by delta tracking
+            self.export_common_inputs(exporter, depsgraph, props, definitions)
+            return self.create_props(props, definitions, luxcore_name)
 
         if self.auto_step_settings and self.domain:
             # Search smoke domain target for smoke modifiers
