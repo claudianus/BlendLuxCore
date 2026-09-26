@@ -59,6 +59,19 @@ class LUXCORE_OBJECT_PT_object(ObjectButtonsPanel, Panel):
         if utils.use_obj_motion_blur(obj, context.scene):
             col.label(text="Object will be exported as instance", icon=icons.INFO)
 
+        # .lxm mesh proxy (memory-mapped geometry for heavy static assets)
+        if obj.type == "MESH":
+            box = layout.box()
+            box.label(text="Mesh Proxy", icon=icons.INFO)
+            row = box.row(align=True)
+            row.prop(obj.luxcore, "proxy_filepath", text="")
+            row.operator("luxcore.bake_lxm_proxy", text="", icon="EXPORT")
+            if obj.luxcore.proxy_filepath:
+                box.label(text="Mesh data stays on disk (mmap, out-of-core)",
+                          icon=icons.INFO)
+                box.label(text="First material slot only; no displacement "
+                          "or motion blur", icon=icons.INFO)
+
 
 def compatible_panels():
     panels = [

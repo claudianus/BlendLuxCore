@@ -1,4 +1,8 @@
 import bpy
+import hashlib
+import os
+import re
+import tempfile
 from array import array
 from contextlib import contextmanager
 from functools import lru_cache
@@ -16,7 +20,7 @@ from ..hair import (
     get_hair_material_index,
     convert_hair_curves,
 )
-from .exported_data import ExportedObject, ExportedPart
+from .exported_data import ExportedMesh, ExportedObject, ExportedPart
 from .. import light, material, pointcloud, volume, cycles_node_reader
 from ...utils.errorlog import LuxCoreErrorLog
 from ...utils import node as utils_node
@@ -30,6 +34,19 @@ class TriAOVDataIndices:
 
 
 MAX_PARTICLES_FOR_LIVE_TRANSFORM = 2000
+
+# Shared per-Blender-session so auto-proxy bakes survive ObjectCache
+# re-creation between renders (module state lives as long as bpy does).
+# {signature: (mesh_key, {mat_index: path})}
+_auto_proxy_dir = None
+_auto_proxies = {}
+
+
+def _get_auto_proxy_dir():
+    global _auto_proxy_dir
+    if _auto_proxy_dir is None:
+        _auto_proxy_dir = tempfile.mkdtemp(prefix="luxcore_autoproxy_")
+    return _auto_proxy_dir
 
 
 def _instance_key(dg_obj_instance):
@@ -1057,6 +1074,109 @@ class ObjectCache2:
 
         return exported_stuff
 
+    def _auto_proxy_applies(self, obj, scene, motion_blur_enabled=False):
+        """True when "Auto Mesh Proxy" is enabled and this object is a
+        heavy static mesh eligible for .lxm baking. Also used by the
+        persistent-scene delta to veto in-place DefineMesh patching
+        (a proxied object must re-export through _convert_mesh_obj)."""
+        config = getattr(getattr(scene, "luxcore", None), "config", None)
+        if not getattr(config, "proxy_auto", False):
+            return False
+        if (
+            obj.type != "MESH"
+            or uses_displacement(obj)
+            or (motion_blur_enabled and obj.luxcore.enable_motion_blur)
+        ):
+            return False
+        # Gate on the evaluated mesh — modifiers can raise the tri
+        # count orders of magnitude above the base data-block.
+        data = obj.data or (obj.original.data if obj.original else None)
+        if data is None:
+            return False
+        data.calc_loop_triangles()
+        return len(data.loop_triangles) >= config.proxy_auto_mintris
+
+    def _try_auto_proxy(self, obj, dg_obj_instance, depsgraph, exporter, scene):
+        """Bake a heavy mesh to session-temp .lxm files when
+        "Auto Mesh Proxy" is enabled. Returns (mesh_key,
+        {mat_index: path}) or None. Files live in a per-session temp
+        dir keyed by a data+modifier signature, so duplicates share
+        bakes and count-preserving edits are the only stale case.
+        """
+        if not self._auto_proxy_applies(
+            obj, scene, getattr(exporter, "motion_blur_enabled", False)
+        ):
+            return None
+        data = obj.data or (obj.original.data if obj.original else None)
+        # Vertex-position sample: catches count-preserving edits
+        # (moved verts) that counts alone miss. 64 scalar accesses.
+        nv = len(data.vertices)
+        sample = (
+            tuple(
+                c for i in range(64) for c in data.vertices[i * nv // 64].co
+            )
+            if nv
+            else ()
+        )
+        sig_src = "{}:{}:{}:{}:{}".format(
+            data.name,
+            nv,
+            len(data.polygons),
+            len(data.loop_triangles),
+            ",".join(m.type + m.name for m in obj.modifiers),
+        )
+        sig = hashlib.blake2b(
+            sig_src.encode() + repr(sample).encode(), digest_size=8
+        ).hexdigest()
+        entry = _auto_proxies.get(sig)
+        if entry and all(os.path.isfile(p) for p in entry[1].values()):
+            return entry
+
+        proxy_dir = _get_auto_proxy_dir()
+
+        # use_instancing=True keeps the mesh in local space; the
+        # object's own transform is applied at render time.
+        bake_scene = pyluxcore.Scene()
+        exported = mesh_converter.convert(
+            obj, "autoproxy_" + sig, depsgraph, bake_scene,
+            False, True, None, exporter,
+        )
+        if exported is None:
+            return None
+
+        safe = re.sub(r"[^\w.-]", "_", obj.name)[:32]
+        paths = {}
+        for shape_name, mat_index in exported.mesh_definitions:
+            path = os.path.join(
+                proxy_dir, f"ap_{safe}_{sig}_s{mat_index}.lxm"
+            )
+            if not os.path.isfile(path):
+                bake_scene.SaveMesh(shape_name, path)
+            paths[mat_index] = path
+        # Drop superseded bakes of this object (older signatures)
+        prefix = f"ap_{safe}_"
+        for f in os.listdir(proxy_dir):
+            if f.startswith(prefix) and sig not in f:
+                try:
+                    os.remove(os.path.join(proxy_dir, f))
+                except OSError:
+                    pass
+
+        mesh_key = "lxmproxy_" + hashlib.blake2b(
+            ";".join(
+                f"{p}:{os.stat(p).st_mtime_ns}:{os.stat(p).st_size}"
+                for p in paths.values()
+            ).encode(),
+            digest_size=8,
+        ).hexdigest()
+        entry = (mesh_key, paths)
+        _auto_proxies[sig] = entry
+        print(
+            f"[BLC] Auto-proxy: {obj.name} "
+            f"({len(data.loop_triangles)} tris) -> {len(paths)} .lxm file(s)"
+        )
+        return entry
+
     def _convert_mesh_obj(
         self,
         exporter,
@@ -1082,24 +1202,69 @@ class ObjectCache2:
             or uses_displacement(obj)
         )
 
-        mesh_key = self._get_mesh_key(obj, use_instancing, is_viewport_render)
+        # .lxm mesh proxy: the geometry lives in a file that LuxCore
+        # maps copy-on-write at render time — the Blender mesh is never
+        # read at all. The file identity (path + mtime + size) is part
+        # of the mesh key so a re-baked proxy re-exports automatically.
+        # proxy_paths maps material slot index -> absolute .lxm path.
+        proxy_path = ""
+        if obj.type == "MESH":
+            proxy_path = bpy.path.abspath(
+                getattr(obj.luxcore, "proxy_filepath", "") or ""
+            )
+            if proxy_path and not os.path.isfile(proxy_path):
+                print(f"[BLC] Proxy file missing, converting mesh: {proxy_path}")
+                proxy_path = ""
 
-        if use_instancing and mesh_key in self.exported_meshes:
-            exported_mesh = self.exported_meshes[mesh_key]
+        auto_paths = None
+        if not proxy_path:
+            auto_paths = self._try_auto_proxy(
+                obj,
+                dg_obj_instance,
+                depsgraph,
+                exporter,
+                view_layer.id_data if view_layer else None,
+            )
+
+        if proxy_path:
+            st = os.stat(proxy_path)
+            mesh_key = "lxmproxy_" + hashlib.blake2b(
+                f"{proxy_path}:{st.st_mtime_ns}:{st.st_size}".encode(),
+                digest_size=8,
+            ).hexdigest()
+            exported_mesh = ExportedMesh([(mesh_key, 0)])
+            exported_mesh.proxy_paths = {0: proxy_path}
+            self.exported_meshes[mesh_key] = exported_mesh
+            loaded_from_cache = True  # shape wrappers cannot wrap a file
+        elif auto_paths:
+            # Auto-proxy: heavy static meshes are baked to session-temp
+            # .lxm files (one per material slot) and referenced by path.
+            mesh_key, proxy_paths = auto_paths
+            exported_mesh = ExportedMesh(
+                [(f"{mesh_key}_{mi}", mi) for mi in sorted(proxy_paths)]
+            )
+            exported_mesh.proxy_paths = proxy_paths
+            self.exported_meshes[mesh_key] = exported_mesh
             loaded_from_cache = True
         else:
-            exported_mesh = mesh_converter.convert(
-                obj,
-                mesh_key,
-                depsgraph,
-                luxcore_scene,
-                is_viewport_render,
-                use_instancing,
-                transform,
-                exporter,
-            )
-            self.exported_meshes[mesh_key] = exported_mesh
-            loaded_from_cache = False
+            mesh_key = self._get_mesh_key(obj, use_instancing, is_viewport_render)
+
+            if use_instancing and mesh_key in self.exported_meshes:
+                exported_mesh = self.exported_meshes[mesh_key]
+                loaded_from_cache = True
+            else:
+                exported_mesh = mesh_converter.convert(
+                    obj,
+                    mesh_key,
+                    depsgraph,
+                    luxcore_scene,
+                    is_viewport_render,
+                    use_instancing,
+                    transform,
+                    exporter,
+                )
+                self.exported_meshes[mesh_key] = exported_mesh
+                loaded_from_cache = False
 
         if exported_mesh:
             mat_names = []
@@ -1137,7 +1302,12 @@ class ObjectCache2:
 
                 mesh_definitions[idx] = [shape, mat_index]
 
-            obj_transform = transform.copy() if use_instancing else None
+            # Proxies always carry the transform on the object — a file
+            # reference cannot bake it into vertices.
+            has_proxy = bool(proxy_path or auto_paths)
+            obj_transform = (
+                transform.copy() if (use_instancing or has_proxy) else None
+            )
             obj_id = utils.make_object_id(dg_obj_instance)
 
             # mesh_definitions here is the local working copy (the mesh
@@ -1168,7 +1338,16 @@ class ObjectCache2:
             # mesh is a new mesh that would drop the base series anyway.
             exported_obj.exported_mesh = exported_mesh
             exported_obj.vert_mesh_key = mesh_key
-            exported_obj.has_shape_wrapper = any(
+            if exported_mesh.proxy_paths:
+                exported_obj.proxy_paths = {
+                    obj_key + str(mi): path
+                    for (mi, path) in exported_mesh.proxy_paths.items()
+                }
+            # .lxm proxies are file-backed, not DefineMesh-able: mark
+            # them as wrapper-shaped so the persistent-scene delta
+            # re-exports (re-parses the .ply ref) instead of trying an
+            # in-place mesh replacement.
+            exported_obj.has_shape_wrapper = has_proxy or any(
                 part.lux_shape not in base_names
                 for part in exported_obj.parts
             )
@@ -1271,6 +1450,15 @@ class ObjectCache2:
                                     or k.startswith(obj_key + "_")
                                 ]:
                                     del self.exported_objects[key]
+                        elif getattr(
+                            obj.luxcore, "proxy_filepath", ""
+                        ) and os.path.isfile(
+                            bpy.path.abspath(obj.luxcore.proxy_filepath)
+                        ):
+                            # .lxm proxy objects never read their mesh
+                            # datablock — a mesh-edit flag changes
+                            # nothing (the proxy file is the source).
+                            mesh_key = None
                         else:
                             mesh_key = self._get_mesh_key(obj, use_instancing)
 

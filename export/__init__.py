@@ -981,7 +981,14 @@ class Exporter(object):
                 and obj.luxcore.enable_motion_blur
             )
         )
-        return cur_instancing == use_instancing
+        if cur_instancing != use_instancing:
+            return False
+        # Auto mesh proxy: heavy meshes baked to .lxm files are not
+        # DefineMesh-able — force the delete+re-export path, where
+        # _convert_mesh_obj bakes or reuses the proxy files.
+        return not self.object_cache2._auto_proxy_applies(
+            obj, self.scene, self.motion_blur_enabled
+        )
 
     def _apply_geometry_deltas(
         self,

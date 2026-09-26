@@ -120,3 +120,29 @@ class LUXCORE_RENDER_PT_geospill(RenderButtonsPanel, Panel):
         layout.label(text="pages under memory pressure.")
         layout.prop(config, "spill_geometry_minmb")
         layout.prop(config, "spill_images")
+
+
+class LUXCORE_RENDER_PT_autoproxy(RenderButtonsPanel, Panel):
+    COMPAT_ENGINES = {"LUXCORE"}
+    bl_label = "Automatic Mesh Proxy"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_parent_id = "LUXCORE_RENDER_PT_tools"
+
+    def draw_header(self, context):
+        layout = self.layout
+        config = context.scene.luxcore.config
+        layout.prop(config, "proxy_auto", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        config = context.scene.luxcore.config
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        layout.enabled = config.proxy_auto
+
+        layout.label(
+            text="Heavy meshes are baked to .lxm files and rendered", icon=icons.INFO
+        )
+        layout.label(text="via memory mapping — never re-converted.")
+        layout.prop(config, "proxy_auto_mintris")

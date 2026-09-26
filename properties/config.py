@@ -895,6 +895,24 @@ class LuxCoreConfig(PropertyGroup):
         description="Also file-back large texture/image-map pixel storage "
                     "(applies after resizing and color conversion)",
     )
+    proxy_auto: BoolProperty(
+        name="Auto Mesh Proxy",
+        default=False,
+        description="Automatically bake heavy meshes to .lxm proxy files in a "
+                    "session-temp directory and render them via memory mapping. "
+                    "LuxCore keeps the geometry file-backed (demand-paged, "
+                    "reclaimable by the OS) and the Blender mesh is never "
+                    "converted again. Excluded: instanced-duplicate sources, "
+                    "displacement and deformation motion blur. Count-preserving "
+                    "mesh edits between renders may not trigger a re-bake — "
+                    "restart Blender or disable the option to force it",
+    )
+    proxy_auto_mintris: IntProperty(
+        name="Proxy Threshold (tris)",
+        default=250000, min=1000, soft_max=10000000,
+        description="Meshes with at least this many triangles (evaluated on the "
+                    "base data-block, before modifiers) are auto-proxied",
+    )
 
     def using_out_of_core(self):
         if self.effective_device() != "OCL":

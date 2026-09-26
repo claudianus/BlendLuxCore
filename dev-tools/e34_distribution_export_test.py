@@ -60,6 +60,16 @@ if not (get_str(props, pre + "type") == "metal2"
         and get_str(props, pre + "distribution") == "ggx"):
     fails.append("metal2 distribution export failed")
 
+def cfg_metal_mb(n):
+    n.distribution = "ggx"
+    n.multibounce = True
+
+n, name, props = export_node("LuxCoreNodeMatMetal", cfg_metal_mb)
+pre = f"scene.materials.{name}."
+if get_str(props, pre + "multibounce") != "1":
+    fails.append("metal2 multibounce export failed: "
+                 f"{get_str(props, pre + 'multibounce')}")
+
 # --- roughglass (glass node, rough mode) -----------------------------------
 def cfg_glass(n):
     n.rough = True

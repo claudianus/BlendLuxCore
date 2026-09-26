@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import PointerProperty, BoolProperty, FloatProperty, IntProperty
+from bpy.props import PointerProperty, BoolProperty, FloatProperty, IntProperty, StringProperty
 from bpy.types import PropertyGroup
 from .hair import LuxCoreHair
 
@@ -17,6 +17,14 @@ DESC_OBJECT_ID = (
 DESC_EXCLUDE_FROM_RENDER = (
     "The object will be excluded from render. "
     "Useful if you need objects to render for other engines, but not for LuxCore"
+)
+DESC_MESH_PROXY = (
+    "Render from an .lxm proxy file instead of this object's mesh data: the "
+    "geometry stays on disk and is memory-mapped at render time (no parse, no "
+    "heap copy, pages evictable under memory pressure — for heavy static "
+    "assets). Bake one with the 'Bake .lxm Proxy' button. Limits: a proxy uses "
+    "the object's first material slot only, and shape wrappers (displacement, "
+    "pointiness), motion blur and live mesh edits do not apply"
 )
 DESC_LIGHT_PORTAL = (
     "Use this mesh's quad faces as light portals: aperture guides that tell the path "
@@ -48,6 +56,12 @@ class LuxCoreObjectProps(PropertyGroup):
         min=-1,
         soft_max=32767,
         description=DESC_OBJECT_ID,
+    )
+    proxy_filepath: StringProperty(
+        name=".lxm Proxy File",
+        default="",
+        subtype="FILE_PATH",
+        description=DESC_MESH_PROXY,
     )
     hair: PointerProperty(
         name="LuxCore Hair Curve Settings",

@@ -4,7 +4,8 @@ from ..base import LuxCoreNodeMaterial
 from ... import utils
 from ...utils import node as utils_node
 from ...utils.node import Roughness
-from .glossy2 import DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION
+from .glossytranslucent import (DISTRIBUTION_ITEMS, DISTRIBUTION_DESCRIPTION,
+                              MULTIBOUNCE_DESCRIPTION)
 
 class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
     """metal material node"""
@@ -49,6 +50,10 @@ class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
                                default="schlick",
                                description=DISTRIBUTION_DESCRIPTION,
                                update=utils_node.force_viewport_update)
+    multibounce: BoolProperty(update=utils_node.force_viewport_update,
+                              name="Multibounce",
+                              default=False,
+                              description=MULTIBOUNCE_DESCRIPTION)
 
     def init(self, context):
         self.add_input("LuxCoreSocketColor", "Color", (0.7, 0.7, 0.7))
@@ -63,12 +68,15 @@ class LuxCoreNodeMatMetal(LuxCoreNodeMaterial, bpy.types.Node):
     def draw_buttons(self, context, layout):
         layout.prop(self, "input_type", expand=True)
         layout.prop(self, "distribution")
+        if self.distribution == "ggx":
+            layout.prop(self, "multibounce")
         Roughness.draw(self, context, layout)
 
     def sub_export(self, exporter, depsgraph, props, luxcore_name=None, output_socket=None):
         definitions = {
             "type": "metal2",
             "distribution": self.distribution,
+            "multibounce": self.multibounce,
         }
 
         if self.input_type == "fresnel":

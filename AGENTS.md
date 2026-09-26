@@ -75,3 +75,52 @@
   CompileGeometry rebuilds the SpillableArrays (mutating ops pull them
   back to heap), the upload then re-spills — verified by a second
   "Host staging spilled" log line after EndSceneEdit.
+
+## .lxm mesh proxy
+
+- `scene.objects.X.ply = file.lxm` loads a raw-section mesh proxy:
+  `ExtTriangleMesh::LoadProxy` mmaps the file MAP_PRIVATE and adopts
+  each 64-byte-aligned section in place — no PLY parse, no heap copy,
+  pages evictable (out-of-core by construction). Convert with
+  `scene.SaveMesh(meshName, "x.lxm")`.
+- Format: 128-byte header (magic "LXM1", version, counts, layer
+  masks) + aligned raw sections: verts, tris, normals?, uv/col/alpha/
+  vertAOV/triAOV layers. Same-build portability only (raw POD dump);
+  load-time validation covers truncation, bad magic, and crafted
+  element counts. Windows MapFileCopyOnWrite not implemented yet
+  (fails gracefully).
+- Regression: `dev-tools/lxm_proxy_test.py` (byte-exact round-trip +
+  720p render compare + error paths).
+
+## Image map decode peak (resize policies)
+
+- `scene.images.resizepolicy` FIXED/MINMEM now probe size via
+  `ImageMap::GetSize()` (header only) and construct the ImageMap
+  directly at the target resolution. `ImageMap::Init()` then either
+  picks the smallest covering mip level (.tx) or, for non-mipped
+  files, streams decode+downscale through a lazy tile-cached
+  `ImageBuf` + `ImageBufAlgo::resize` — the full-resolution pixels
+  never materialize in heap. Measured: 8192x8192 PNG → persistent
+  MALLOC_LARGE 195MB -> 3MB.
+- `ImageMap::Resize()` (post-hoc path) still holds source+dest
+  buffers; only used for upscale (FIXED scale>1) now.
+- Instrumentation (MINMEM) may still decide UINT_MAX = "keep
+  original" and reload at full res — that reload is the classic
+  full-decode path by design.
+- macOS note: `ps rss`/`ru_maxrss` lag/miss allocator-cached regions;
+  use `vmmap -summary` MALLOC_LARGE for real heap attribution.
+- Windows: `MapFileCopyOnWrite` now implemented
+  (CreateFileMapping/PAGE_WRITECOPY + FILE_MAP_COPY); read-only files
+  fall back to FILE_MAP_READ. `SpillToFile` uses
+  FILE_FLAG_DELETE_ON_CLOSE as the unlink-after-mmap equivalent.
+
+## Test
+
+- `.lxm` sections are stored spatially ordered (header flag bit1):
+  triangles Morton-sorted by centroid, vertices first-use-renumbered,
+  unreferenced vertices dropped — page-local reads under memory
+  pressure. The loader is order-agnostic; tests verify geometry as
+  multisets / via implied permutations, not raw byte order.
+- `dev-tools/imagemap_stream_test.py` — standalone pyluxcore test:
+  8192x8192 non-mipped PNG, NONE vs FIXED-256 vs MINMEM; checks the
+  "streaming resize" path fires and renders correctly at 1280x720.

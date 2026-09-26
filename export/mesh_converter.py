@@ -49,6 +49,7 @@ def convert(
     use_instancing,
     transform,
     exporter=None,
+    single_mesh=False,
 ):
     start_time = time()
 
@@ -227,8 +228,16 @@ def convert(
         vert_count = len(exp_points)
         used_mask = np.zeros(vert_count, dtype=bool)
         remap = np.empty(vert_count, dtype=np.uint32)
+        if single_mesh:
+            # Proxy bake: one submesh spanning all triangles, bound to
+            # material slot 0 — an .lxm proxy is a single-material mesh.
+            unique_mats = [0]
         for mat in unique_mats:
-            mat_tri_ids = np.flatnonzero(loop_triangle_materials == mat)
+            mat_tri_ids = (
+                np.arange(exp_tris.shape[0], dtype=np.uint32)
+                if single_mesh
+                else np.flatnonzero(loop_triangle_materials == mat)
+            )
             mat_triangles = exp_tris[mat_tri_ids]
             name = f"{str(mesh_key)}{mat:03d}"
 
